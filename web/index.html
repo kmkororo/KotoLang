@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#5b8def">
+<meta name="description" content="あなたが実際に使う英語だけを、毎日20秒から。">
+<title>Frequency</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">本文へスキップ</a>
+
+<div id="boot" class="boot">
+  <div class="boot-inner">
+    <div class="boot-mark" aria-hidden="true">🎧</div>
+    <p>読み込んでいます…</p>
+  </div>
+</div>
+
+<div id="app" class="app" hidden>
+
+  <header class="topbar">
+    <button class="brand" id="brand-home" type="button" aria-label="ホームへ">
+      <span class="brand-mark" aria-hidden="true">🎧</span>
+      <span class="brand-name">Frequency</span>
+    </button>
+    <div class="topstats" id="topstats" role="status" aria-live="polite"></div>
+  </header>
+
+  <main id="main" class="main">
+
+    <!-- ============================ ONBOARDING ============================ -->
+    <section class="view" id="view-welcome" hidden>
+      <div class="hero">
+        <p class="eyebrow">はじめまして</p>
+        <h1>あなたが実際に使う英語だけを、<br>毎日20秒から。</h1>
+        <p class="lede">
+          教科書の英語ではなく、あなたの仕事・趣味・生活の英語を教材にします。
+          あなたを一番よく知っているAIに教材を作ってもらい、ここに貼り付けるだけです。
+        </p>
+      </div>
+
+      <ol class="steps">
+        <li><span class="step-n">1</span><div><strong>プロンプトをコピー</strong><p>普段お使いのAIに貼り付けます</p></div></li>
+        <li><span class="step-n">2</span><div><strong>AIの回答を貼り付け</strong><p>あなたの学習分野が決まります</p></div></li>
+        <li><span class="step-n">3</span><div><strong>教材を作る</strong><p>分野ごとに追加できます</p></div></li>
+      </ol>
+
+      <div class="card">
+        <h2>あなたを一番よく知っているAIを使ってください</h2>
+        <p class="hint">ChatGPT、Claude、Geminiなど、普段使っているAIでOKです。</p>
+        <button class="btn btn-primary" data-copy="profile">プロンプトをコピー</button>
+        <button class="btn btn-ghost" id="go-paste-profile">次へ：AIの回答を貼り付ける</button>
+      </div>
+
+      <p class="privacy">
+        学習データはこの端末に保存され、アプリから外部サーバーへ送信されません。
+        AIに入力した内容の扱いは、そのAIサービスのポリシーに従います。
+      </p>
+      <button class="btn btn-quiet" id="go-restore">バックアップから復元する</button>
+    </section>
+
+    <section class="view" id="view-paste-profile" hidden>
+      <button class="back" data-nav="welcome" type="button">← 戻る</button>
+      <h1>AIの回答を貼り付けてください</h1>
+      <p class="hint">AIが返した内容をそのまま貼り付けて構いません。前後に説明文があっても読み取れます。</p>
+      <textarea id="profile-input" class="paste" rows="12"
+        placeholder="AIの回答をここに貼り付けてください" aria-label="AIの回答"></textarea>
+      <div id="profile-error" class="alert" hidden></div>
+      <button class="btn btn-primary" id="btn-load-profile">プロフィールを読み込む</button>
+      <button class="btn btn-ghost" data-copy="profile">プロンプトをもう一度コピー</button>
+    </section>
+
+    <section class="view" id="view-domains" hidden>
+      <h1>あなたの学習分野</h1>
+      <p class="hint">まずは最も重要な1〜2分野から始めるのがおすすめです。分野は後からいつでも追加できます。</p>
+      <div id="domain-list" class="domain-list"></div>
+      <button class="btn btn-primary" id="btn-domains-next">次へ</button>
+    </section>
+
+    <section class="view" id="view-material" hidden>
+      <button class="back" data-nav="home" type="button">← 戻る</button>
+      <h1>この分野の教材を作ります</h1>
+      <div class="field">
+        <label for="material-domain">分野</label>
+        <select id="material-domain"></select>
+      </div>
+      <p class="hint" id="material-hint"></p>
+      <button class="btn btn-primary" data-copy="material">プロンプトをコピー</button>
+      <textarea id="material-input" class="paste" rows="10"
+        placeholder="AIの回答をここに貼り付けてください" aria-label="AIの回答"></textarea>
+      <div id="material-error" class="alert" hidden></div>
+      <button class="btn btn-primary" id="btn-load-material">問題を追加</button>
+      <div id="material-result" class="result" hidden></div>
+    </section>
+
+    <section class="view" id="view-ready" hidden>
+      <div class="celebrate" aria-hidden="true">🎉</div>
+      <h1>準備完了！</h1>
+      <div id="ready-stats" class="ready-stats"></div>
+      <button class="btn btn-primary" id="btn-ready-start">今日の1問を始める</button>
+      <button class="btn btn-ghost" data-nav="home">ホームへ</button>
+    </section>
+
+    <!-- =============================== HOME ============================== -->
+    <section class="view" id="view-home" hidden>
+      <div class="streak-banner" id="streak-banner" hidden></div>
+
+      <div class="today">
+        <div class="today-head">
+          <p class="eyebrow">今日</p>
+          <select id="home-domain" class="domain-select" aria-label="学習する分野"></select>
+        </div>
+        <div class="today-grid">
+          <div class="metric metric-due">
+            <span class="metric-n" id="m-due">0</span>
+            <span class="metric-l">今日の復習</span>
+          </div>
+          <div class="metric">
+            <span class="metric-n" id="m-new">0</span>
+            <span class="metric-l">新しい問題</span>
+          </div>
+          <div class="metric">
+            <span class="metric-n" id="m-xp">0</span>
+            <span class="metric-l">XP</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="home-empty" class="card" hidden>
+        <h2>まだ教材がありません</h2>
+        <p class="hint">分野を選んで、AIに教材を作ってもらいましょう。</p>
+        <button class="btn btn-primary" data-nav="material">教材を作る</button>
+      </div>
+
+      <div id="home-actions">
+        <button class="btn btn-primary btn-lg" id="btn-start">今日の学習を始める</button>
+        <button class="btn btn-secondary" id="btn-start-one">今日は1問だけ（20秒）</button>
+      </div>
+
+      <div class="mini" id="home-mini"></div>
+    </section>
+
+    <!-- ============================= QUESTION ============================ -->
+    <section class="view view-quiz" id="view-quiz" hidden>
+      <div class="quiz-top">
+        <button class="quit" id="btn-quit" type="button" aria-label="学習をやめる">×</button>
+        <div class="dots" id="quiz-dots" role="progressbar" aria-label="進捗"></div>
+      </div>
+
+      <div class="qmeta">
+        <span class="chip" id="q-type"></span>
+        <span class="chip chip-quiet" id="q-domain"></span>
+        <span class="chip chip-due" id="q-due" hidden>🔁 復習</span>
+      </div>
+
+      <p class="qprompt" id="q-prompt"></p>
+
+      <button class="play" id="btn-play" type="button" aria-label="音声を再生">
+        <span class="play-icon" aria-hidden="true">▶</span>
+        <span class="play-label">もう一度聞く</span>
+        <span class="play-count" id="play-count" hidden></span>
+      </button>
+      <div class="alert alert-quiet" id="audio-warn" hidden></div>
+
+      <div id="q-body" class="qbody"></div>
+
+      <div id="q-feedback" class="feedback" hidden></div>
+
+      <button class="btn btn-primary" id="btn-submit" disabled>こたえる</button>
+    </section>
+
+    <!-- ============================= SUMMARY ============================= -->
+    <section class="view" id="view-summary" hidden>
+      <p class="eyebrow">セッション完了</p>
+      <h1>お疲れさま！</h1>
+      <div class="summary-grid" id="summary-grid"></div>
+      <div class="chest">
+        <p class="hint">タップして報酬をあける</p>
+        <button class="chest-btn" id="chest" type="button" aria-label="報酬をあける">🎁</button>
+        <p class="chest-result" id="chest-result" role="status" aria-live="polite"></p>
+      </div>
+      <button class="btn btn-primary" data-nav="home">ホームへ戻る</button>
+    </section>
+
+    <!-- ============================= LIBRARY ============================= -->
+    <section class="view" id="view-library" hidden>
+      <h1>ライブラリ</h1>
+      <div class="field">
+        <label for="lib-domain">分野</label>
+        <select id="lib-domain"></select>
+      </div>
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-lib="items" role="tab">表現</button>
+        <button class="tab" data-lib="sentences" role="tab">英文</button>
+      </div>
+      <input type="search" id="lib-search" class="search" placeholder="検索" aria-label="検索">
+      <div id="lib-list" class="lib-list"></div>
+      <button class="btn btn-ghost" data-nav="material">教材を追加する</button>
+    </section>
+
+    <!-- ============================== STATS ============================== -->
+    <section class="view" id="view-stats" hidden>
+      <h1>統計</h1>
+      <div id="stats-body"></div>
+    </section>
+
+    <!-- ============================ SETTINGS ============================= -->
+    <section class="view" id="view-settings" hidden>
+      <h1>設定</h1>
+
+      <div class="card">
+        <h2>音声</h2>
+        <div class="field">
+          <label for="set-voice">読み上げ音声</label>
+          <select id="set-voice"></select>
+        </div>
+        <div class="field">
+          <label for="set-rate">読み上げ速度 <span id="rate-val" class="hint"></span></label>
+          <input type="range" id="set-rate" min="0.6" max="1.2" step="0.05">
+          <button class="linkbtn" id="btn-rate-auto" type="button">難易度に合わせる</button>
+        </div>
+        <button class="btn btn-ghost" id="btn-test-voice">試し聞き</button>
+        <p class="hint" id="voice-help"></p>
+      </div>
+
+      <div class="card">
+        <h2>学習</h2>
+        <div class="field">
+          <label for="set-difficulty">難易度</label>
+          <select id="set-difficulty">
+            <option value="easy">やさしい</option>
+            <option value="normal">ふつう</option>
+            <option value="hard">むずかしい</option>
+          </select>
+          <p class="hint" id="difficulty-hint"></p>
+        </div>
+        <div class="field">
+          <label for="set-input">聞き取りの入力方法</label>
+          <select id="set-input">
+            <option value="tap">タップして組み立てる（スマホ向け）</option>
+            <option value="keyboard">キーボードで入力する</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="set-goal">1日の目標</label>
+          <select id="set-goal">
+            <option value="1">1問（おすすめ）</option>
+            <option value="5">5問</option>
+            <option value="10">10問</option>
+            <option value="20">20問</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>教材</h2>
+        <button class="btn btn-ghost" data-nav="material">教材を追加する</button>
+        <button class="btn btn-ghost" data-copy="domain">新しい分野を作るプロンプトをコピー</button>
+        <button class="btn btn-ghost" id="btn-audit">品質チェック（上級者向け）</button>
+        <div id="audit-panel" hidden>
+          <p class="hint">生成した英文を別のAIに検査させて、品質の低い文を除外できます。</p>
+          <button class="btn btn-ghost" data-copy="audit">監査プロンプトをコピー</button>
+          <textarea id="audit-input" class="paste" rows="6"
+            placeholder="AIの回答をここに貼り付けてください" aria-label="監査結果"></textarea>
+          <button class="btn btn-ghost" id="btn-load-audit">監査結果を読み込む</button>
+          <div id="audit-result" class="result" hidden></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>データ</h2>
+        <p class="hint" id="storage-note"></p>
+        <button class="btn btn-ghost" id="btn-export">データをエクスポート</button>
+        <button class="btn btn-ghost" id="btn-import">データをインポート</button>
+        <input type="file" id="import-file" accept="application/json,.json" hidden>
+        <div id="backup-result" class="result" hidden></div>
+      </div>
+
+      <div class="card">
+        <h2>取り込んだデータの初期化</h2>
+        <p class="hint">
+          AIから取り込んだ教材をやり直せます。消す範囲を選べるので、
+          学習の記録を残したまま教材だけを入れ替えることもできます。
+        </p>
+        <div id="reset-summary" class="reset-summary"></div>
+
+        <div class="field">
+          <label for="reset-domain">分野を選んで教材を削除</label>
+          <select id="reset-domain"></select>
+          <p class="hint" id="reset-domain-detail"></p>
+        </div>
+        <button class="btn btn-ghost" id="btn-reset-domain">この分野の教材を削除</button>
+        <button class="btn btn-ghost" id="btn-reset-domain-all">この分野ごと削除</button>
+        <button class="btn btn-ghost" id="btn-reset-material">教材をすべて削除（記録は残す）</button>
+
+        <hr class="rule">
+        <p class="group-label">プロフィール・分野</p>
+        <p class="hint">
+          最初にAIから取り込んだ、あなたの情報と学習分野です。
+        </p>
+        <button class="btn btn-ghost" id="btn-reprofile">プロフィールを取り込み直す</button>
+        <button class="btn btn-ghost" id="btn-reset-profile">プロフィールと分野を初期化</button>
+
+        <hr class="rule">
+        <p class="group-label">学習の記録</p>
+        <button class="btn btn-ghost" id="btn-reset-progress">学習記録だけリセット（教材は残す）</button>
+
+        <hr class="rule">
+        <p class="group-label">すべて</p>
+        <button class="btn btn-danger" id="btn-wipe">すべて初期化して最初からやり直す</button>
+        <div id="reset-result" class="result" hidden></div>
+      </div>
+
+      <p class="privacy">
+        学習データはこの端末に保存され、アプリから外部サーバーへ送信されません。
+        AIに入力した内容の扱いは、そのAIサービスのポリシーに従います。
+      </p>
+      <p class="hint" id="build-note"></p>
+    </section>
+
+  </main>
+
+  <nav class="tabbar" id="tabbar" aria-label="メインナビゲーション">
+    <button class="tabbtn" data-nav="home"><span aria-hidden="true">🏠</span>ホーム</button>
+    <button class="tabbtn" data-nav="library"><span aria-hidden="true">📚</span>ライブラリ</button>
+    <button class="tabbtn" data-nav="stats"><span aria-hidden="true">📊</span>統計</button>
+    <button class="tabbtn" data-nav="settings"><span aria-hidden="true">⚙️</span>設定</button>
+  </nav>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<dialog id="confirm" class="confirm">
+  <h2 id="confirm-title"></h2>
+  <p id="confirm-body"></p>
+  <div class="confirm-actions">
+    <button class="btn btn-ghost" id="confirm-no">キャンセル</button>
+    <button class="btn btn-danger" id="confirm-yes">実行する</button>
+  </div>
+</dialog>
+
+<script src="js/util.js"></script>
+<script src="js/db.js"></script>
+<script src="js/prompts.js"></script>
+<script src="js/questions.js"></script>
+<script src="js/importer.js"></script>
+<script src="js/srs.js"></script>
+<script src="js/progress.js"></script>
+<script src="js/speech.js"></script>
+<script src="js/session.js"></script>
+<script src="js/backup.js"></script>
+<script src="js/reset.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
