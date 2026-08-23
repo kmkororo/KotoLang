@@ -394,6 +394,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     showToast(context, s.t('deletedLabel'));
     ref.invalidate(_realmsProvider);
     await reload(ref);
+    if (!mounted) return;
+    // A reset can change which screen the app should be on entirely — a
+    // factory reset belongs back at the welcome screen, not on a home screen
+    // with nothing in it. Only the root decides that, so anything stacked on
+    // top of it has to come off.
+    Navigator.of(context).popUntil((r) => r.isFirst);
   }
 
   Future<void> _deleteRealm(List<Realm> realms, {required bool removeRealm}) async {
@@ -420,6 +426,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _resetRealmId = null);
     ref.invalidate(_realmsProvider);
     await reload(ref);
+    if (!mounted) return;
+    // Removing the last area leaves nothing to study, so let the root re-route.
+    Navigator.of(context).popUntil((r) => r.isFirst);
   }
 
   Future<void> _export() async {

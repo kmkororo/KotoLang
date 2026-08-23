@@ -29,7 +29,13 @@ class _Page extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
         appBar: back == null
             ? null
-            : AppBar(leading: const BackButton(), title: Text(back!)),
+            : AppBar(
+                // These screens are sometimes the first route, where a back
+                // arrow would sit there doing nothing.
+                leading: Navigator.canPop(context) ? const BackButton() : null,
+                automaticallyImplyLeading: false,
+                title: Text(back!),
+              ),
         body: SafeArea(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
@@ -343,7 +349,10 @@ class _PasteProfileScreenState extends ConsumerState<PasteProfileScreen> {
     );
     await reload(ref);
     if (!mounted) return;
-    Navigator.pushReplacement(
+    // Pushed, never `pushReplacement`. The root screen decides where the app
+    // belongs, and when the root is itself showing a setup step, replacing the
+    // route deletes that decision-maker for the rest of the session.
+    Navigator.push(
         context, MaterialPageRoute(builder: (_) => const RealmPickerScreen()));
   }
 
@@ -492,7 +501,7 @@ class _RealmPickerScreenState extends ConsumerState<RealmPickerScreen> {
       FilledButton(
         onPressed: _selected.isEmpty
             ? null
-            : () => Navigator.pushReplacement(context,
+            : () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => MaterialScreen(realmId: _selected.first))),
         child: Text(s.t('continueLabel')),
       ),
@@ -620,7 +629,7 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
     }
     await reload(ref);
     if (!mounted) return;
-    Navigator.pushReplacement(
+    Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ReadyScreen(
@@ -679,6 +688,19 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
       const SizedBox(height: 10),
       Text(hint,
           style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+
+      // With no area there is no prompt to build, so every control below is
+      // dead. Saying so without offering the way out is what left people
+      // stranded here after a reset.
+      if (realm == null) ...[
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          icon: const Icon(Icons.arrow_forward),
+          onPressed: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const PasteProfileScreen())),
+          label: Text(s.t('goToPaste')),
+        ),
+      ],
       const SizedBox(height: 14),
 
       // How much to ask for. Kept next to the copy button rather than buried in
@@ -812,11 +834,13 @@ class ReadyScreen extends ConsumerWidget {
       ]),
       const SizedBox(height: 24),
       FilledButton(
-        onPressed: () => Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const HomeShell()),
-          (_) => false,
-        ),
+        // Pops back to the root rather than pushing the home shell over it.
+        // `pushAndRemoveUntil(..., (_) => false)` used to drop every route
+        // including the root, and the root is the only thing that decides
+        // which screen the app should be on. Once it was gone, a later reset
+        // wiped the database but left the learner staring at a home screen
+        // with nothing in it and no way forward.
+        onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
         child: Text(s.t('goHome')),
       ),
     ]);

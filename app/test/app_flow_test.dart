@@ -17,6 +17,8 @@ import 'package:kotolang/core/l10n/strings.dart';
 import 'package:kotolang/data/database.dart';
 import 'package:kotolang/data/repository.dart';
 import 'package:kotolang/features/ai_links.dart';
+import 'package:kotolang/features/onboarding_screens.dart';
+import 'package:kotolang/features/paste_box.dart';
 import 'package:kotolang/features/quiz_screen.dart';
 
 import 'paste_test.dart' show materialReply;
@@ -347,6 +349,77 @@ void main() {
     expect(await repo.loadUiLanguage(), 'de');
     // The settings screen is now German.
     expect(find.text(S('de').t('settingsTitle')), findsWidgets);
+  });
+
+  testWidgets('a factory reset returns to the welcome screen, not a dead end',
+      (tester) async {
+    // The reported failure. Finishing setup used to replace every route with
+    // the home shell, root included — and the root is the only thing that
+    // decides which screen the app belongs on. A later reset then emptied the
+    // database while leaving the learner on a home screen with nothing in it,
+    // whose only button led to a material screen where every control was
+    // disabled. Nothing could be done short of force-quitting the app.
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+      await r.importProfile(profileJson(['Work']), uiLanguage: 'en');
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+
+    // Go through setup for real: it is the "you're all set" screen at the end
+    // of it that used to tear the root out of the navigator.
+    await tester.enterText(find.byType(TextField), materialReply(6));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.t('addQuestions')));
+    await tester.pumpAndSettle();
+
+    expect(find.text(s.t('readyTitle')), findsOneWidget);
+    await tester.tap(find.text(s.t('goHome')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('KotoLang'), findsOneWidget, reason: 'setup should end at home');
+
+    await tester.tap(find.text(s.t('settingsTitle')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.t('factoryReset')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.t('confirmLabel')));
+    await tester.pumpAndSettle();
+
+    expect((await repo.counts()).realms, 0, reason: 'the reset itself must work');
+
+    // The screen has to follow the data.
+    expect(find.text(s.t('welcomeTitle')), findsOneWidget);
+    expect(find.text(s.t('goToPaste')), findsOneWidget);
+    expect(find.text('KotoLang'), findsNothing);
+  });
+
+  testWidgets('the material screen offers a way out when no area exists',
+      (tester) async {
+    _tallScreen(tester);
+    final (db, _) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    // Reached the way the home screen's empty state reaches it.
+    await tester.tap(find.text(s.t('goToPaste')));
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.byType(PasteBox))).push(
+      MaterialPageRoute(builder: (_) => const MaterialScreen()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(s.t('materialHintNoRealm')), findsOneWidget);
+    // Every control that needs an area is dead, so there must be a live one
+    // that leads to making one.
+    expect(find.widgetWithText(FilledButton, s.t('goToPaste')), findsOneWidget);
+    final out = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, s.t('goToPaste')));
+    expect(out.onPressed, isNotNull);
   });
 
   testWidgets('a reply that could only be copied in halves still imports',
