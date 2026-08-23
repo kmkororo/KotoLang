@@ -206,6 +206,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   uiLanguage: lang,
                   existingRealms: realms.map((r) => r.name).toList(),
                   level: profile?.englishLevel ?? 'B1',
+                  batch: prompts.BatchSize.byName(settings.batchSize),
                 ),
                 s.t('copied'),
               );
@@ -226,9 +227,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             OutlinedButton(
               onPressed: () async {
                 final sentences = await ref.read(repositoryProvider).sentences();
+                // Capped so the reply stays inside one copyable block; run the
+                // audit twice rather than asking for a reply nobody can copy.
                 final list = sentences
                     .where((x) => !x.disabled)
-                    .take(120)
+                    .take(60)
                     .toList()
                     .asMap()
                     .entries

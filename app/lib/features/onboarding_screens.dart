@@ -15,6 +15,7 @@ import '../core/l10n/languages.dart';
 import '../core/l10n/strings.dart';
 import '../domain/models.dart';
 import '../domain/prompts.dart' as prompts;
+import 'paste_box.dart';
 
 // ------------------------------------------------------------ shared pieces
 
@@ -254,20 +255,30 @@ class WelcomeScreen extends ConsumerWidget {
 // -------------------------------------------------------- 3. paste profile
 
 class PasteProfileScreen extends ConsumerStatefulWidget {
-  const PasteProfileScreen({super.key});
+  /// Prefilled when the reply arrived through the share sheet rather than the
+  /// clipboard.
+  final String? initialText;
+  const PasteProfileScreen({super.key, this.initialText});
 
   @override
   ConsumerState<PasteProfileScreen> createState() => _PasteProfileScreenState();
 }
 
 class _PasteProfileScreenState extends ConsumerState<PasteProfileScreen> {
-  final _controller = TextEditingController();
+  final _paste = PasteController();
   String? _error;
   bool _busy = false;
 
   @override
+  void initState() {
+    super.initState();
+    final shared = widget.initialText;
+    if (shared != null) _paste.field.text = shared;
+  }
+
+  @override
   void dispose() {
-    _controller.dispose();
+    _paste.dispose();
     super.dispose();
   }
 
@@ -281,7 +292,7 @@ class _PasteProfileScreenState extends ConsumerState<PasteProfileScreen> {
 
     final res = await ref
         .read(repositoryProvider)
-        .importProfile(_controller.text, uiLanguage: lang);
+        .importProfile(_paste.text, uiLanguage: lang);
 
     if (!mounted) return;
     setState(() => _busy = false);
@@ -290,7 +301,12 @@ class _PasteProfileScreenState extends ConsumerState<PasteProfileScreen> {
       setState(() => _error = s.t('importFailedHint'));
       return;
     }
-    showToast(context, s.t('importedProfile', {'n': res.realms}));
+    showToast(
+      context,
+      res.partial
+          ? s.t('partialImported', {'n': res.realms})
+          : s.t('importedProfile', {'n': res.realms}),
+    );
     await reload(ref);
     if (!mounted) return;
     Navigator.pushReplacement(
@@ -309,12 +325,9 @@ class _PasteProfileScreenState extends ConsumerState<PasteProfileScreen> {
               .bodySmall
               ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
       const SizedBox(height: 12),
-      TextField(
-        controller: _controller,
-        maxLines: 12,
-        minLines: 8,
-        decoration: InputDecoration(hintText: s.t('pastePlaceholder')),
-      ),
+      CopyTip(s),
+      const SizedBox(height: 12),
+      PasteBox(controller: _paste, s: s, expecting: 'profile'),
       if (_error != null) ...[
         const SizedBox(height: 12),
         Card(
@@ -442,30 +455,43 @@ class _RealmPickerScreenState extends ConsumerState<RealmPickerScreen> {
 
 class MaterialScreen extends ConsumerStatefulWidget {
   final String? realmId;
-  const MaterialScreen({super.key, this.realmId});
+
+  /// Prefilled when the reply arrived through the share sheet rather than the
+  /// clipboard.
+  final String? initialText;
+  const MaterialScreen({super.key, this.realmId, this.initialText});
 
   @override
   ConsumerState<MaterialScreen> createState() => _MaterialScreenState();
 }
 
 class _MaterialScreenState extends ConsumerState<MaterialScreen> {
-  final _controller = TextEditingController();
+  final _paste = PasteController();
   List<Realm> _realms = const [];
   String? _realmId;
   String? _error;
   bool _busy = false;
   int _sentenceCount = 0;
 
+  prompts.BatchSize get _batch =>
+      prompts.BatchSize.byName(ref.read(settingsProvider).batchSize);
+
+  /// Purely informational, and derived rather than stored: it tells the AI
+  /// roughly where in the sequence this request sits.
+  int get _round => 1 + (_sentenceCount ~/ _batch.sentences);
+
   @override
   void initState() {
     super.initState();
     _realmId = widget.realmId;
+    final shared = widget.initialText;
+    if (shared != null) _paste.field.text = shared;
     _load();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _paste.dispose();
     super.dispose();
   }
 
@@ -509,6 +535,8 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
         priorities: profile?.learningPriorities ?? const [],
         contexts: realm.contexts,
         existingItems: existing,
+        batch: _batch,
+        round: _round,
       ),
       s.t('copied'),
     );
@@ -524,7 +552,7 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
 
     final res = await ref
         .read(repositoryProvider)
-        .importMaterial(_controller.text, uiLanguage: lang);
+        .importMaterial(_paste.text, uiLanguage: lang);
 
     if (!mounted) return;
     setState(() => _busy = false);
@@ -533,7 +561,10 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
       setState(() => _error = s.t('importFailedHint'));
       return;
     }
-    _controller.clear();
+    _paste.clear();
+    if (res.partial) {
+      showToast(context, s.t('partialImported', {'n': res.newSentences}));
+    }
     await reload(ref);
     if (!mounted) return;
     Navigator.pushReplacement(
@@ -552,6 +583,7 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
     final theme = Theme.of(context);
+    final settings = ref.watch(settingsProvider);
     final realm = _realm;
 
     final hint = realm == null
@@ -561,6 +593,23 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
             : s.t('materialHintEmpty', {'name': realm.label}));
 
     return _Page(back: s.t('materialTitle'), children: [
+      if (widget.initialText != null) ...[
+        Card(
+          color: theme.colorScheme.secondaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(children: [
+              Icon(Icons.ios_share, size: 18, color: theme.colorScheme.onSecondaryContainer),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(s.t('sharedTextTitle'),
+                    style: TextStyle(color: theme.colorScheme.onSecondaryContainer)),
+              ),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 10),
+      ],
       if (_realms.isNotEmpty)
         DropdownButtonFormField<String>(
           initialValue: _realmId,
@@ -578,18 +627,38 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
       Text(hint,
           style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
       const SizedBox(height: 14),
+
+      // How much to ask for. Kept next to the copy button rather than buried in
+      // settings, because this is the control that decides whether the reply
+      // can be copied at all on the device in the learner's hand.
+      DropdownButtonFormField<String>(
+        initialValue: settings.batchSize,
+        isExpanded: true,
+        decoration: InputDecoration(labelText: s.t('batchSizeLabel'), isDense: true),
+        items: [
+          DropdownMenuItem(value: 'small', child: Text(s.t('batchSmall'))),
+          DropdownMenuItem(value: 'standard', child: Text(s.t('batchStandard'))),
+          DropdownMenuItem(value: 'large', child: Text(s.t('batchLarge'))),
+        ],
+        onChanged: (v) async {
+          if (v == null) return;
+          await updateSettings(ref, settings.copyWith(batchSize: v));
+          if (mounted) setState(() {});
+        },
+      ),
+      const SizedBox(height: 6),
+      Text(s.t('batchNote'),
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+      const SizedBox(height: 12),
       FilledButton.icon(
         icon: const Icon(Icons.copy_all),
         onPressed: realm == null ? null : _copyPrompt,
         label: Text(s.t('copyPrompt')),
       ),
       const SizedBox(height: 16),
-      TextField(
-        controller: _controller,
-        maxLines: 10,
-        minLines: 6,
-        decoration: InputDecoration(hintText: s.t('pastePlaceholder')),
-      ),
+      CopyTip(s),
+      const SizedBox(height: 12),
+      PasteBox(controller: _paste, s: s),
       if (_error != null) ...[
         const SizedBox(height: 12),
         Card(

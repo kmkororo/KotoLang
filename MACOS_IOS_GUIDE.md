@@ -91,7 +91,7 @@ genuinely differs per device.
 ## 5. Run the tests
 
 ```bash
-flutter test                                   # 74 host tests, no device needed
+flutter test                                   # 96 host tests, no device needed
 flutter test integration_test/device_test.dart # on the connected iPhone
 ```
 
@@ -158,6 +158,21 @@ declaring "required reason" API usage. KotoLang collects nothing and makes no
 network requests, but the file must still exist and declare the APIs its
 dependencies touch — typically file timestamps (`C617.1`) and user defaults
 (`CA92.1`). Xcode will tell you at validation time if anything is missing.
+
+### Share target — Android only so far
+
+On Android, KotoLang registers as a `text/plain` share target so a long AI
+reply can be sent to it directly, without being copied by hand. That is an
+`intent-filter` plus a `MethodChannel` in `MainActivity.kt`, and it has no iOS
+equivalent: iOS would need a separate **Share Extension** target in Xcode with
+an app group to pass the text through.
+
+Nothing is broken by its absence — `lib/core/share_intake.dart` returns null on
+every platform but Android, and the clipboard path works as before. The
+piecewise paste box and the truncation rescue, which are the parts that matter
+most on a phone, are pure Dart and work identically on iOS.
+
+Worth adding later if iOS becomes the primary platform.
 
 ### Permissions
 

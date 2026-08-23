@@ -17,6 +17,7 @@ import 'package:kotolang/data/database.dart';
 import 'package:kotolang/data/repository.dart';
 import 'package:kotolang/features/quiz_screen.dart';
 
+import 'paste_test.dart' show materialReply;
 import 'repository_test.dart' show materialJson, profileJson;
 
 /// Pumps the app over a fresh in-memory database.
@@ -184,6 +185,11 @@ void main() {
     addTearDown(db.close);
 
     final s = S('en');
+    // The screen title is the anchor. The import button sits below the copy
+    // guidance and the paste box, so it has to be scrolled to.
+    expect(find.text(s.t('materialTitle')), findsOneWidget);
+    await tester.scrollUntilVisible(find.text(s.t('addQuestions')), 200,
+        scrollable: find.byType(Scrollable).last);
     expect(find.text(s.t('addQuestions')), findsOneWidget);
   });
 
@@ -243,4 +249,80 @@ void main() {
     // The settings screen is now German.
     expect(find.text(S('de').t('settingsTitle')), findsWidgets);
   });
+
+  testWidgets('a reply that could only be copied in halves still imports',
+      (tester) async {
+    // The reported failure: on a phone the whole AI answer cannot be selected
+    // at once. Two partial pastes must add up to the same material.
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+      await r.importProfile(profileJson(['Work']), uiLanguage: 'en');
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    final reply = materialReply(6);
+    final mid = reply.length ~/ 2;
+
+    final box = find.byType(TextField);
+    expect(box, findsOneWidget);
+
+    await tester.enterText(box, reply.substring(0, mid));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.t('addPiece')));
+    await tester.pumpAndSettle();
+
+    // Second half completes it.
+    await tester.enterText(box, reply.substring(mid));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.t('addPiece')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('6 sentences readable'), findsOneWidget,
+        reason: 'the readout must confirm the two pieces joined up');
+
+    await tester.tap(find.text(s.t('addQuestions')));
+    await tester.pumpAndSettle();
+
+    final counts = await repo.counts();
+    expect(counts.sentences, 6);
+    expect(counts.questions, greaterThan(0));
+  });
+
+  testWidgets('a truncated paste imports what arrived and says it is partial',
+      (tester) async {
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+      await r.importProfile(profileJson(['Work']), uiLanguage: 'en');
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    final reply = materialReply(10);
+
+    await tester.enterText(
+        find.byType(TextField), reply.substring(0, (reply.length * 0.7).round()));
+    await tester.pumpAndSettle();
+
+    expect(find.text(s.t('truncatedNotice')), findsOneWidget,
+        reason: 'a cut-off paste must be flagged before it is imported');
+
+    await tester.tap(find.text(s.t('addQuestions')));
+    await tester.pumpAndSettle();
+
+    final counts = await repo.counts();
+    expect(counts.sentences, greaterThan(0));
+    expect(counts.sentences, lessThan(10));
+  });
+}
+
+/// The material screen is a long form. A tall window lets these tests act on it
+/// without scrolling, which a text field holding ten thousand characters makes
+/// unreliable.
+void _tallScreen(WidgetTester tester) {
+  tester.view.physicalSize = const Size(1000, 3000);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
 }

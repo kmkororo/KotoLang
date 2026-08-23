@@ -10,9 +10,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/l10n/languages.dart';
 import 'core/l10n/strings.dart';
+import 'core/share_intake.dart';
 import 'core/speech.dart';
 import 'data/database.dart';
 import 'data/repository.dart';
+import 'domain/importer.dart' as imp;
 import 'domain/models.dart';
 import 'domain/progress_service.dart';
 import 'features/home_screen.dart';
@@ -136,14 +138,85 @@ ThemeData _theme(Brightness brightness) {
 
 // ------------------------------------------------------------------- shell
 
-class KotoLangApp extends ConsumerWidget {
+class KotoLangApp extends ConsumerStatefulWidget {
   const KotoLangApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<KotoLangApp> createState() => _KotoLangAppState();
+}
+
+class _KotoLangAppState extends ConsumerState<KotoLangApp>
+    with WidgetsBindingObserver {
+  final _navKey = GlobalKey<NavigatorState>();
+  final _intake = ShareIntake();
+  StreamSubscription<String>? _shareSub;
+
+  /// Text shared before the app was in a position to act on it. Held rather
+  /// than dropped: a share can arrive while the language picker is still up on
+  /// a brand-new install.
+  String? _pendingShare;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _shareSub = _intake.stream.listen(_offerShare);
+    _intake.start().then((text) {
+      if (text != null) _offerShare(text);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Catches a share that reached the platform before Dart was listening.
+    if (state == AppLifecycleState.resumed) {
+      _intake.take().then((text) {
+        if (text != null) _offerShare(text);
+      });
+    }
+  }
+
+  void _offerShare(String text) {
+    _pendingShare = text;
+    _drainShare();
+  }
+
+  /// Opens whichever screen matches what was shared. Retried from build, so a
+  /// share that arrives too early lands as soon as it can.
+  void _drainShare() {
+    final text = _pendingShare;
+    if (text == null) return;
+    final nav = _navKey.currentState;
+    // Nothing can be imported before a language exists: material has to be
+    // told which language its explanations are written in.
+    if (nav == null || ref.read(languageProvider) == null) return;
+
+    _pendingShare = null;
+    final kind = imp.previewImport(text).type;
+    nav.push(MaterialPageRoute(
+      builder: (_) => kind == 'profile'
+          ? PasteProfileScreen(initialText: text)
+          : MaterialScreen(initialText: text),
+    ));
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _shareSub?.cancel();
+    _intake.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final lang = ref.watch(languageProvider);
+    if (_pendingShare != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _drainShare());
+    }
     return MaterialApp(
       title: 'KotoLang',
+      navigatorKey: _navKey,
       debugShowCheckedModeBanner: false,
       theme: _theme(Brightness.light),
       darkTheme: _theme(Brightness.dark),

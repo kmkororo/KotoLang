@@ -24,13 +24,44 @@ class PromptVersions {
 
 String _commonRules(String native) => '''
 RULES
-- Reply with exactly one JSON object and nothing else. No preamble, no closing remarks.
-- A fenced code block is fine, but the contents must be valid JSON.
+- Put the entire reply inside ONE fenced code block marked ```json, and write
+  nothing at all outside that block. No preamble, no explanation, no closing
+  remarks, not even "here you go".
+  This matters: the user is on a phone and copies the block with its copy
+  button. Anything outside the block cannot be copied, and a second block
+  splits the answer in two.
+- The block must contain exactly one JSON object, and it must be valid JSON.
+- Do not stop half-way and offer to continue. If the amount requested will not
+  fit in one reply, produce fewer entries and finish the JSON properly. A short
+  complete answer is useful; a long truncated one is worthless.
 - Never invent facts. Use null, [] or "UNKNOWN" when you do not know.
 - confidence is a real number from 0.0 to 1.0. Be honest about it.
 - Every translation and explanation must be written in $native, and must read
   naturally in $native rather than as a literal gloss.
 - schema_version must be exactly "$schemaVersion".''';
+
+/// How much one request asks for.
+///
+/// A whole area's material in a single reply runs to tens of thousands of
+/// characters, which no phone chat app will let you select by hand and which
+/// most assistants truncate. Material is therefore built up a batch at a time,
+/// each one small enough to copy in one tap. Repeating the request adds to the
+/// same area — the importer merges and de-duplicates.
+enum BatchSize {
+  small(6, 10),
+  standard(10, 16),
+  large(20, 30);
+
+  final int items;
+  final int sentences;
+  const BatchSize(this.items, this.sentences);
+
+  static BatchSize byName(String? name) => switch (name) {
+        'small' => BatchSize.small,
+        'large' => BatchSize.large,
+        _ => BatchSize.standard,
+      };
+}
 
 // ------------------------------------------------------------------ 1. profile
 
@@ -102,6 +133,8 @@ String materialPrompt({
   List<String> priorities = const [],
   List<String> contexts = const [],
   List<String> existingItems = const [],
+  BatchSize batch = BatchSize.standard,
+  int round = 1,
 }) {
   final native = languageFor(uiLanguage).englishName;
   final rolesText = roles.isEmpty ? '(unknown)' : roles.join(', ');
@@ -126,11 +159,16 @@ Situations: $ctxText
 ALREADY STORED — do not repeat these
 $existing
 
+THIS IS BATCH $round
+The user builds their library a batch at a time and will ask you again for the
+next one. Keep strictly to the amounts below even if you could write more —
+a reply that fits in one message is the whole point.
+
 WHAT TO PRODUCE
-1. learning_items — expressions actually used in this area. 50 to 100.
+1. learning_items — expressions actually used in this area. Exactly ${batch.items}.
    Include not only technical terms but the verb phrases and collocations that
    come up constantly in this area's conversations.
-2. sentences — natural English using those items. 80 to 120.
+2. sentences — natural English using those items. Exactly ${batch.sentences}.
 
 QUALITY BAR — THIS MATTERS MOST
 - Every sentence must be grammatical and must sound like something a real
@@ -142,7 +180,7 @@ QUALITY BAR — THIS MATTERS MOST
   report, warning, opinion, instruction, discussion.
 - Aim at CEFR $level. Specialist vocabulary may be hard, but do not make the
   sentence structure harder than it needs to be.
-- Give each learning item 2 to 3 sentences in genuinely different situations.
+- Give each learning item 1 to 2 sentences in genuinely different situations.
 - If the area is thin, produce fewer items rather than padding.
 
 distractors_native
@@ -279,6 +317,7 @@ String addRealmPrompt({
   required List<String> existingRealms,
   String level = 'B1',
   String newRealm = '',
+  BatchSize batch = BatchSize.standard,
 }) {
   final native = languageFor(uiLanguage).englishName;
   final existing = existingRealms.isEmpty ? '(none)' : existingRealms.join(', ');
@@ -295,9 +334,12 @@ on what is specific to this one.
 
 English level (CEFR): $level
 
+This is the first batch for the new area, and the user will ask again for more.
+Keep to the amounts below so the reply fits in a single message.
+
 Follow the same "material" format and the same quality bar as a normal material
 request:
-- 50 to 100 learning_items, 80 to 120 sentences
+- exactly ${batch.items} learning_items and exactly ${batch.sentences} sentences
 - 6 to 18 words per sentence, varied situations, no padding
 - "targets" must appear literally in the sentence
 - 3 distractors_native per learning item, written in $native

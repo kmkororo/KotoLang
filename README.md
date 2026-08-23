@@ -10,6 +10,45 @@ There is no AI API in this app, no backend, no login, no analytics and no ads.
 
 ---
 
+## Getting the reply back in — the hard part
+
+Everything else in the app is under its own control; this step is not. The
+reply has to survive somebody else's chat UI on a phone, where a selection
+cannot be dragged over ten thousand characters. Four separate things address
+it, because no single one of them is reliable on its own.
+
+**1. The reply is deliberately small.** Material is built a batch at a time —
+6, 10 or 20 expressions per request — rather than a whole area at once. A short
+complete answer beats a long truncated one, and repeating the request adds
+more; duplicates are dropped on import. The size is chosen on the material
+screen (`Amount per request`).
+
+**2. The reply is one fenced `json` block and nothing else.** Every prompt
+insists on it, because that is what puts a one-tap copy button on the block in
+ChatGPT, Claude and Gemini. The prompts also forbid stopping half-way to offer
+a continuation.
+
+**3. A cut-off paste is rescued, not rejected.** `repairJson` in
+`lib/domain/importer.dart` walks the text with a small state machine, rolls
+back to the last complete value and closes whatever containers are still open.
+Fifty good sentences are kept instead of being thrown away with the fifty-first
+half-written one. The import is then reported as partial.
+
+**4. The paste box accepts as many pieces as it takes.** Paste what you
+managed to copy, tap *Add this piece*, copy the rest, add that. Overlapping
+selections are reconciled rather than duplicated (`appendPiece`), and the box
+reports how many sentences it can currently read after every piece, so nobody
+finds out at the end that it did not work.
+
+**And on Android, the clipboard can be skipped entirely.** KotoLang registers
+as a share target for `text/plain`, so the reply can be sent to it straight
+from the assistant's own app. This needs no permission — `MainActivity` holds
+the shared text until Dart asks for it, since a cold start delivers the intent
+long before Flutter is listening. iOS would need a separate share extension
+and does not have this yet; the clipboard path there is unchanged.
+
+---
+
 ## Where things are
 
 ```
@@ -46,7 +85,7 @@ Verified working on this machine — `flutter doctor` reports **no issues**.
 ```bash
 cd C:\Users\kmkor\KotoLang\app
 
-flutter test                       # 74 tests
+flutter test                       # 96 tests
 flutter analyze                    # no issues
 flutter run                        # debug on a connected device
 

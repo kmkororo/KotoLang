@@ -29,6 +29,10 @@ class ImportOutcome {
   final int questions;
   final String? realmName;
 
+  /// The reply stopped part-way and only what arrived before the cut was
+  /// stored. Everything kept is genuine; there is simply more still missing.
+  final bool partial;
+
   const ImportOutcome({
     required this.ok,
     this.errors = const [],
@@ -39,6 +43,7 @@ class ImportOutcome {
     this.duplicateSentences = 0,
     this.questions = 0,
     this.realmName,
+    this.partial = false,
   });
 
   const ImportOutcome.failure(this.errors)
@@ -49,7 +54,8 @@ class ImportOutcome {
         newSentences = 0,
         duplicateSentences = 0,
         questions = 0,
-        realmName = null;
+        realmName = null,
+        partial = false;
 }
 
 class SessionSlot {
@@ -113,6 +119,7 @@ class Repository {
       inputMode: (j['inputMode'] ?? 'tap') as String,
       dailyGoal: (j['dailyGoal'] ?? 1) as int,
       theme: (j['theme'] ?? 'system') as String,
+      batchSize: (j['batchSize'] ?? 'standard') as String,
     );
   }
 
@@ -125,6 +132,7 @@ class Repository {
         'inputMode': s.inputMode,
         'dailyGoal': s.dailyGoal,
         'theme': s.theme,
+        'batchSize': s.batchSize,
       }));
 
   /// null until the learner has chosen one, which is what triggers the very
@@ -236,7 +244,7 @@ class Repository {
     });
     await _saveProfile(norm.profile);
 
-    return ImportOutcome(ok: true, realms: toWrite.length);
+    return ImportOutcome(ok: true, realms: toWrite.length, partial: ex.repaired);
   }
 
   // ----------------------------------------------------------- material import
@@ -414,6 +422,7 @@ class Repository {
       newSentences: sentencesToWrite.length,
       duplicateSentences: duplicates,
       questions: generated.length,
+      partial: ex.repaired,
     );
   }
 

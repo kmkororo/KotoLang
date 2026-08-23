@@ -46,6 +46,11 @@ class S {
     'materialHintEmpty', 'materialHintNoRealm', 'addQuestions', 'readyTitle',
     'readyItems', 'readyQuestions', 'readySentences', 'readyRealms',
     'startFirstQuestion', 'goHome', 'restoreBackup',
+    // copying a long AI reply on a phone
+    'copyTipTitle', 'copyTipBody', 'addPiece', 'clearPaste',
+    'collectedSentences', 'collectedRealms', 'truncatedNotice',
+    'partialImported', 'batchSizeLabel', 'batchSmall', 'batchStandard',
+    'batchLarge', 'batchNote', 'sharedTextTitle',
     // home
     'todayEyebrow', 'todayReview', 'newQuestions', 'xpLabel', 'allRealms',
     'startLearning', 'justOne', 'bestStreakLabel', 'freezesLabel',
@@ -130,6 +135,24 @@ const _catalogueCore = <String, Map<String, String>>{
     'pasteHint':
         'Paste it exactly as the AI wrote it. Surrounding prose is fine.',
     'pastePlaceholder': 'Paste the AI reply here',
+    'copyTipTitle': 'Copying on a phone',
+    'copyTipBody':
+        'The reply arrives as a single json code block. Tap the copy button on the block itself instead of dragging over the text. If only part of it comes across, paste what you have, tap “Add this piece”, then copy the rest and add that too.',
+    'addPiece': 'Add this piece',
+    'clearPaste': 'Clear',
+    'collectedSentences': '{chars} characters held · {n} sentences readable',
+    'collectedRealms': '{chars} characters held · {n} areas readable',
+    'truncatedNotice':
+        'This looks cut off. What is here can still be saved — or copy the rest and add it as another piece.',
+    'partialImported':
+        'Saved the part that arrived: {n} entries. Ask the AI to carry on, then add the rest.',
+    'batchSizeLabel': 'Amount per request',
+    'batchSmall': 'Short — easiest to copy',
+    'batchStandard': 'Standard',
+    'batchLarge': 'Long — for a computer',
+    'batchNote':
+        'Each request is deliberately small so the reply fits in one copy. Ask again to add more; anything repeated is skipped automatically.',
+    'sharedTextTitle': 'Received from another app',
     'loadProfile': 'Load profile',
     'copyPromptAgain': 'Copy the prompt again',
     'realmsTitle': 'Your areas',
@@ -342,6 +365,21 @@ const _catalogueCore = <String, Map<String, String>>{
     'pasteTitle': 'AIの回答を貼り付けてください',
     'pasteHint': 'そのまま貼り付けて構いません。前後に説明文があっても読み取れます。',
     'pastePlaceholder': 'AIの回答をここに貼り付けてください',
+    'copyTipTitle': 'スマホでのコピーのコツ',
+    'copyTipBody':
+        '回答は json のコードブロック1つで返ってきます。文字をなぞって選択せず、ブロックのコピーボタンを押してください。途中までしかコピーできなかったときは、取れた分を貼り付けて「この分を追加」を押し、続きをコピーして同じように追加すれば大丈夫です。',
+    'addPiece': 'この分を追加',
+    'clearPaste': '消去',
+    'collectedSentences': '{chars}文字を保持中・{n}文を読み取れました',
+    'collectedRealms': '{chars}文字を保持中・{n}分野を読み取れました',
+    'truncatedNotice': '途中で切れているようです。このままでも取り込めますが、続きをコピーして追加すると全部入ります。',
+    'partialImported': '届いた分だけ保存しました（{n}件）。AIに続きを出してもらって追加してください。',
+    'batchSizeLabel': '1回あたりの分量',
+    'batchSmall': '少なめ — コピーが一番ラク',
+    'batchStandard': '標準',
+    'batchLarge': '多め — パソコン向け',
+    'batchNote': '1回の回答が長すぎるとスマホでコピーできないため、少しずつ作る方式です。同じ操作を繰り返せば増えていきます。重複は自動で除かれます。',
+    'sharedTextTitle': '他のアプリから受け取りました',
     'loadProfile': 'プロフィールを読み込む',
     'copyPromptAgain': 'プロンプトをもう一度コピー',
     'realmsTitle': 'あなたの学習分野',

@@ -66,6 +66,11 @@ class AppSettings {
   final int dailyGoal;
   final String theme;
 
+  /// How much one material request asks the AI for: small | standard | large.
+  /// Small keeps the reply short enough to copy on a phone in a single tap,
+  /// which is the difference between the app being usable there and not.
+  final String batchSize;
+
   const AppSettings({
     this.voiceName,
     this.speechRate,
@@ -73,6 +78,7 @@ class AppSettings {
     this.inputMode = 'tap',
     this.dailyGoal = 1, // the whole point: one question is a complete day
     this.theme = 'system',
+    this.batchSize = 'standard',
   });
 
   Difficulty get level => difficulties[difficulty] ?? difficulties['normal']!;
@@ -88,6 +94,7 @@ class AppSettings {
     String? inputMode,
     int? dailyGoal,
     String? theme,
+    String? batchSize,
   }) =>
       AppSettings(
         voiceName: voiceName ?? this.voiceName,
@@ -96,6 +103,7 @@ class AppSettings {
         inputMode: inputMode ?? this.inputMode,
         dailyGoal: dailyGoal ?? this.dailyGoal,
         theme: theme ?? this.theme,
+        batchSize: batchSize ?? this.batchSize,
       );
 }
 
