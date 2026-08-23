@@ -196,6 +196,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: Text(s.t('addMaterial')),
           ),
           const SizedBox(height: 8),
+          // Material imported before a question format existed never saw it.
+          // This rebuilds the questions from the sentences already stored.
+          OutlinedButton(
+            onPressed: () async {
+              final n = await ref.read(repositoryProvider).regenerateQuestions();
+              if (!context.mounted) return;
+              showToast(context, s.t('regeneratedLabel', {'n': n}));
+              await reload(ref);
+            },
+            child: Text(s.t('regenerateQuestions')),
+          ),
+          const SizedBox(height: 8),
           OutlinedButton(
             onPressed: () async {
               final profile = await ref.read(repositoryProvider).loadProfile();

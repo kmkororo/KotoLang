@@ -494,6 +494,44 @@ NormalisedProfile normaliseProfile(Map<String, dynamic> data) {
   );
 }
 
+/// Reads the optional `register` block: several ways of saying the same thing,
+/// one of which fits the stated relationship.
+///
+/// Everything is dropped together rather than piecemeal. A half-formed block —
+/// options with no marked answer, or an answer pointing past the end — would
+/// otherwise reach the generator and have to be rejected there anyway.
+({String situation, List<String> options, List<String> whys, int correct})
+    _normRegister(Object? raw, String fallbackText) {
+  const empty = (
+    situation: '',
+    options: <String>[],
+    whys: <String>[],
+    correct: -1,
+  );
+  if (raw is! Map) return empty;
+
+  final situation = clean(raw['situation_native']);
+  final variants = raw['variants'];
+  if (situation.isEmpty || variants is! List || variants.length < 3) return empty;
+
+  final options = <String>[];
+  final whys = <String>[];
+  var correct = -1;
+
+  for (final v in variants.take(4)) {
+    if (v is! Map) continue;
+    final text = clean(v['text']);
+    if (text.isEmpty) continue;
+    if (options.any((o) => normKey(o) == normKey(text))) continue;
+    if (v['fits'] == true && correct < 0) correct = options.length;
+    options.add(text);
+    whys.add(clean(v['why_native']));
+  }
+
+  if (options.length < 3 || correct < 0) return empty;
+  return (situation: situation, options: options, whys: whys, correct: correct);
+}
+
 class NormalisedMaterial {
   final Realm realm;
   final List<LearningItem> items;
@@ -546,6 +584,13 @@ NormalisedMaterial normaliseMaterial(Map<String, dynamic> data) {
     final translation = clean(raw['translation_native']);
     final paraphrase = clean(raw['paraphrase_en']);
 
+    // A cue that merely repeats the sentence is not an exchange, and would
+    // read the answer aloud before asking for it.
+    final cue = clean(raw['cue_en']);
+    final usableCue = normKey(cue) == normKey(text) ? '' : cue;
+
+    final reg = _normRegister(raw['register'], text);
+
     sentences.add(Sentence(
       id: slugId('sent', normKey(text)),
       text: text,
@@ -567,6 +612,18 @@ NormalisedMaterial normaliseMaterial(Map<String, dynamic> data) {
       paraphraseOptionsEn: _normList(raw['paraphrase_options_en'], 5)
           .where((o) => normKey(o) != normKey(paraphrase) && normKey(o) != normKey(text))
           .toList(),
+      cueEn: usableCue,
+      cueTranslationNative:
+          usableCue.isEmpty ? '' : clean(raw['cue_translation_native']),
+      // A "wrong reply" identical to the right one would make the question
+      // unanswerable.
+      replyDistractorsEn: _normList(raw['reply_distractors_en'], 5)
+          .where((o) => normKey(o) != normKey(text) && normKey(o) != normKey(usableCue))
+          .toList(),
+      registerSituationNative: reg.situation,
+      registerOptionsEn: reg.options,
+      registerWhyNative: reg.whys,
+      registerCorrect: reg.correct,
     ));
   }
 

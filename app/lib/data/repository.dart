@@ -373,6 +373,13 @@ class Repository {
         meaningOptionsNative: s.meaningOptionsNative,
         paraphraseEn: s.paraphraseEn,
         paraphraseOptionsEn: s.paraphraseOptionsEn,
+        cueEn: s.cueEn,
+        cueTranslationNative: s.cueTranslationNative,
+        replyDistractorsEn: s.replyDistractorsEn,
+        registerSituationNative: s.registerSituationNative,
+        registerOptionsEn: s.registerOptionsEn,
+        registerWhyNative: s.registerWhyNative,
+        registerCorrect: s.registerCorrect,
       ));
       sentenceKeys.add(s.normKeyValue);
     }
@@ -732,6 +739,46 @@ class Repository {
             .write(const RealmsCompanion(hasMaterial: Value(false)));
       }
     });
+  }
+
+  /// Rebuilds every question from the sentences already stored, and returns
+  /// how many there are afterwards.
+  ///
+  /// Questions are only built at import time, so a library imported before a
+  /// format existed would never see it. This is what lets an existing learner
+  /// pick up the new formats without re-importing anything.
+  ///
+  /// Safe to run repeatedly: `_questionId` is derived from the sentence and
+  /// the type, so existing questions keep their ids and the answer history
+  /// keyed to them survives. Only the option order is reshuffled, and the
+  /// schedule lives on the learning item rather than the question, so nothing
+  /// about the learner's progress moves.
+  Future<int> regenerateQuestions() async {
+    final all = await sentences();
+    if (all.isEmpty) return 0;
+
+    final itemsById = {for (final i in await items()) i.id: i};
+    final generated = qg.generateForSentences(all, itemsById, all, rng);
+    final keep = {for (final q in generated) q.id};
+
+    // Anything a rebuild no longer produces is stale — a sentence edited into
+    // a shape its old question no longer matches, say — and its statistics
+    // describe a question that is gone.
+    await db.transaction(() async {
+      for (final q in generated) {
+        await db.into(db.questions).insertOnConflictUpdate(questionToRow(q));
+      }
+      final stale = (await db.select(db.questions).get())
+          .where((r) => !keep.contains(r.id))
+          .map((r) => r.id)
+          .toList();
+      for (final id in stale) {
+        await (db.delete(db.questions)..where((t) => t.id.equals(id))).go();
+        await (db.delete(db.questionStats)..where((t) => t.questionId.equals(id))).go();
+      }
+    });
+
+    return generated.length;
   }
 
   Future<void> deleteAllMaterial() async {

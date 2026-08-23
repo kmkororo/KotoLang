@@ -95,13 +95,19 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
         for (var i = 0; i < answer.length; i++) _Tile(answer[i], 'a$i'),
         for (var i = 0; i < decoys.length; i++) _Tile(decoys[i], 'd$i'),
       ]);
-    } else if (_q.type == QuestionType.reorder) {
+    } else if (_q.type == QuestionType.reorder || _q.type == QuestionType.produce) {
       _bank = shuffled([
         for (var i = 0; i < _q.tokens.length; i++) _Tile(_q.tokens[i], 't$i'),
       ]);
     } else {
       _bank = const [];
     }
+
+    // Some formats must not be read aloud before the answer: `produce` asks
+    // the learner to recall the sentence, and playing it would simply hand it
+    // over. The audio still comes, as the model answer, once they have
+    // committed.
+    if (_silent) return;
 
     if (firstPlay) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _play(countsAgainstBudget: false));
@@ -110,13 +116,16 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
     }
   }
 
+  bool get _silent => silentUntilAnswered.contains(_q.type);
+
   void _play({bool countsAgainstBudget = true}) {
     final settings = ref.read(settingsProvider);
     if (countsAgainstBudget && settings.level.replays > 0) {
       if (_replaysLeft <= 0) return;
       setState(() => _replaysLeft -= 1);
     }
-    _speech.speak(_q.text, rate: settings.rate);
+    // `reply` speaks the other person's line; everything else speaks its own.
+    _speech.speak(_q.spokenText, rate: settings.rate);
   }
 
   bool get _canSubmit {
@@ -124,11 +133,17 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
     switch (_q.type) {
       case QuestionType.paraphrase:
       case QuestionType.gist:
+      case QuestionType.reply:
+      case QuestionType.register:
         return _choice != null;
       case QuestionType.dictation:
         return _useKeyboard ? clean(_typed.text).isNotEmpty : _placed.isNotEmpty;
       case QuestionType.reorder:
         return _placed.length == _q.tokens.length;
+      case QuestionType.produce:
+        return _useKeyboard
+            ? clean(_typed.text).isNotEmpty
+            : _placed.length == _q.tokens.length;
     }
   }
 
@@ -142,6 +157,8 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
     switch (_q.type) {
       case QuestionType.paraphrase:
       case QuestionType.gist:
+      case QuestionType.reply:
+      case QuestionType.register:
         correct = _choice == _q.correct;
       case QuestionType.dictation:
         final given =
@@ -149,6 +166,12 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
         correct = qg.gradeDictation(given, _q.answerText).correct;
       case QuestionType.reorder:
         correct = qg.gradeReorder(_placed.map((t) => t.word).toList(), _q);
+      case QuestionType.produce:
+        // Typed answers get the same near-miss tolerance as dictation; tiles
+        // can only be right or wrong, so they are compared exactly.
+        correct = _useKeyboard
+            ? qg.gradeDictation(_typed.text, _q.answerText).correct
+            : qg.gradeReorder(_placed.map((t) => t.word).toList(), _q);
     }
 
     final res = await ref.read(repositoryProvider).recordAnswer(
@@ -167,6 +190,9 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
       _xp += res.xp;
       if (correct) _correctCount++;
     });
+
+    // The model answer, now that withholding it no longer gives anything away.
+    if (_silent) _play(countsAgainstBudget: false);
   }
 
   void _next() {
@@ -215,6 +241,9 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
       QuestionType.gist => s.t('typeGist'),
       QuestionType.dictation => s.t('typeDictation'),
       QuestionType.reorder => s.t('typeReorder'),
+      QuestionType.produce => s.t('typeProduce'),
+      QuestionType.reply => s.t('typeReply'),
+      QuestionType.register => s.t('typeRegister'),
     };
     final promptText = switch (_q.type) {
       QuestionType.paraphrase => s.t('promptParaphrase'),
@@ -222,6 +251,9 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
       QuestionType.dictation =>
         _useKeyboard ? s.t('promptDictationKeyboard') : s.t('promptDictationTap'),
       QuestionType.reorder => s.t('promptReorder'),
+      QuestionType.produce => s.t('promptProduce'),
+      QuestionType.reply => s.t('promptReply'),
+      QuestionType.register => s.t('promptRegister'),
     };
 
     return PopScope(
@@ -289,7 +321,13 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
                     const SizedBox(height: 14),
 
                     // play
-                    Card(
+                    //
+                    // Withheld entirely on the formats that must not be heard
+                    // first. Leaving a dead play button on screen would only
+                    // invite the learner to press it and wonder why nothing
+                    // happens.
+                    if (!_silent || _answered)
+                      Card(
                       child: InkWell(
                         borderRadius: BorderRadius.circular(18),
                         onTap: (settings.level.replays > 0 && _replaysLeft <= 0)
@@ -324,7 +362,7 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
                         ),
                       ),
                     ),
-                    if (!speech.available) ...[
+                    if (!speech.available && (!_silent || _answered)) ...[
                       const SizedBox(height: 8),
                       Text(
                         speech.supported ? s.t('noAudioVoice') : s.t('noAudioSupport'),
@@ -362,24 +400,82 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
     );
   }
 
+  /// The four-option list, shared by every multiple-choice format.
+  List<Widget> _choices() => [
+        for (var i = 0; i < _q.options.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _OptionTile(
+              text: _q.options[i],
+              state: !_answered
+                  ? (_choice == i ? _OptionState.selected : _OptionState.idle)
+                  : i == _q.correct
+                      ? _OptionState.correct
+                      : (i == _choice ? _OptionState.wrong : _OptionState.idle),
+              onTap: _answered ? null : () => setState(() => _choice = i),
+            ),
+          ),
+      ];
+
+  /// The card that carries the situation a question is set in.
+  Widget _situationCard(String label, String body, ThemeData theme) => Card(
+        color: theme.colorScheme.secondaryContainer,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label.toUpperCase(),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                      letterSpacing: 1.2,
+                      color: theme.colorScheme.onSecondaryContainer)),
+              const SizedBox(height: 6),
+              Text(body,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                      height: 1.5, color: theme.colorScheme.onSecondaryContainer)),
+            ],
+          ),
+        ),
+      );
+
   List<Widget> _buildBody(dynamic s, ThemeData theme) {
     switch (_q.type) {
       case QuestionType.paraphrase:
       case QuestionType.gist:
+        return _choices();
+
+      case QuestionType.reply:
+        // The cue is heard, not read: showing the English would turn a
+        // listening question into a reading one. Its reading appears only
+        // once the answer is in.
         return [
-          for (var i = 0; i < _q.options.length; i++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _OptionTile(
-                text: _q.options[i],
-                state: !_answered
-                    ? (_choice == i ? _OptionState.selected : _OptionState.idle)
-                    : i == _q.correct
-                        ? _OptionState.correct
-                        : (i == _choice ? _OptionState.wrong : _OptionState.idle),
-                onTap: _answered ? null : () => setState(() => _choice = i),
-              ),
-            ),
+          if (_q.context.isNotEmpty) ...[
+            _situationCard(s.t('contextLabel'), _q.context, theme),
+            const SizedBox(height: 12),
+          ],
+          ..._choices(),
+        ];
+
+      case QuestionType.register:
+        return [
+          _situationCard(s.t('typeRegister'), _q.translationNative, theme),
+          const SizedBox(height: 12),
+          ..._choices(),
+        ];
+
+      case QuestionType.produce:
+        // The meaning is the whole prompt. Everything else about this format
+        // is the reorder machinery, reused.
+        return [
+          _situationCard(s.t('yourAnswerLabel'), _q.translationNative, theme),
+          if (_q.context.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(_q.context,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          ],
+          const SizedBox(height: 14),
+          ..._inputArea(s, theme),
         ];
 
       case QuestionType.dictation:
@@ -415,37 +511,43 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           ],
           const SizedBox(height: 14),
-          if (_useKeyboard)
-            TextField(
-              controller: _typed,
-              enabled: !_answered,
-              autocorrect: false,
-              enableSuggestions: false,
-              textCapitalization: TextCapitalization.none,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(),
-            )
-          else
-            ..._tileArea(theme),
-          const SizedBox(height: 8),
-          Center(
-            child: TextButton(
-              onPressed: _answered
-                  ? null
-                  : () => setState(() {
-                        _useKeyboard = !_useKeyboard;
-                        _placed.clear();
-                        _typed.clear();
-                      }),
-              child: Text(_useKeyboard ? s.t('switchToTap') : s.t('switchToKeyboard')),
-            ),
-          ),
+          ..._inputArea(s, theme),
         ];
 
       case QuestionType.reorder:
         return _tileArea(theme);
     }
   }
+
+  /// Word tiles or the keyboard, whichever the learner prefers, plus the
+  /// switch between them. Shared by dictation and produce.
+  List<Widget> _inputArea(dynamic s, ThemeData theme) => [
+        if (_useKeyboard)
+          TextField(
+            controller: _typed,
+            enabled: !_answered,
+            autocorrect: false,
+            enableSuggestions: false,
+            textCapitalization: TextCapitalization.none,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(),
+          )
+        else
+          ..._tileArea(theme),
+        const SizedBox(height: 8),
+        Center(
+          child: TextButton(
+            onPressed: _answered
+                ? null
+                : () => setState(() {
+                      _useKeyboard = !_useKeyboard;
+                      _placed.clear();
+                      _typed.clear();
+                    }),
+            child: Text(_useKeyboard ? s.t('switchToTap') : s.t('switchToKeyboard')),
+          ),
+        ),
+      ];
 
   List<Widget> _tileArea(ThemeData theme) => [
         Container(
@@ -494,7 +596,8 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
     final res = _outcome!;
     final correct = res.correct;
     final close = !correct &&
-        _q.type == QuestionType.dictation &&
+        (_q.type == QuestionType.dictation ||
+            (_q.type == QuestionType.produce && _useKeyboard)) &&
         qg
             .gradeDictation(
                 _useKeyboard ? _typed.text : _placed.map((t) => t.word).join(' '),
@@ -524,15 +627,31 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
                   : theme.colorScheme.onErrorContainer,
             ),
           ),
+          // The line that was heard, revealed now rather than during the
+          // question, where reading it would have replaced the listening.
+          if (_q.cueText.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('${s.t('cueLabel')}: ${_q.cueText}',
+                style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 14)),
+            if (_q.cueTranslationNative.isNotEmpty)
+              Text(_q.cueTranslationNative, style: theme.textTheme.bodySmall),
+          ],
           const SizedBox(height: 8),
           Text(_q.text, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-          if (_q.translationNative.isNotEmpty) ...[
+          if (_q.translationNative.isNotEmpty && _q.type != QuestionType.register) ...[
             const SizedBox(height: 4),
             Text(_q.translationNative, style: theme.textTheme.bodySmall),
           ],
           if (_q.type == QuestionType.dictation) ...[
             const SizedBox(height: 6),
             Text('${s.t('targetLabel')}: ${_q.answerText}',
+                style: theme.textTheme.bodySmall),
+          ],
+          // The reason the phrasing fits. Without it the register question is
+          // a coin toss the learner learns nothing from.
+          if (_q.note.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text('${s.t('registerWhyLabel')}: ${_q.note}',
                 style: theme.textTheme.bodySmall),
           ],
           if (_q.context.isNotEmpty) ...[

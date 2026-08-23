@@ -252,6 +252,141 @@ Question? buildDictation(
   return null;
 }
 
+/// "Say it." The meaning is given; the English is not, and no audio plays
+/// until the answer is in.
+///
+/// Mechanically close to reorder, and deliberately so — the tiles and the
+/// grading are shared. What differs is the only thing that matters: reorder
+/// plays the sentence first, so it asks the learner to reconstruct something
+/// they just heard. Here the sentence is never heard, so the only route to the
+/// answer is recalling it from what it means. That is the direction speaking
+/// runs in, and nothing else in the app trains it.
+Question? buildProduce(Sentence s, List<LearningItem> targets) {
+  // Without a reading of the sentence there is no prompt at all.
+  if (clean(s.translationNative).isEmpty) return null;
+
+  final t = tokenize(s.text);
+  if (t.tokens.length < _minReorderTokens || t.tokens.length > _maxReorderTokens) {
+    return null;
+  }
+
+  final q = _base(s, QuestionType.produce, targets.isNotEmpty ? targets.first.id : null);
+  return Question(
+    id: q.id,
+    type: q.type,
+    sentenceId: q.sentenceId,
+    realmId: q.realmId,
+    itemId: q.itemId,
+    text: q.text,
+    translationNative: q.translationNative,
+    level: q.level,
+    context: q.context,
+    tokens: t.tokens,
+    finalPunct: t.finalPunct,
+    answerText: s.text,
+  );
+}
+
+/// "Someone says this to you. What do you say back?"
+///
+/// The audio is the other person's line, and the four options are replies. The
+/// learner is not being asked what the English meant — they are being asked
+/// which move is the right one, which is the thing conversation actually
+/// demands and which no other format here touches.
+Question? buildReply(Sentence s, List<Sentence> realmPool, [Random? rng]) {
+  final cue = clean(s.cueEn);
+  final answer = clean(s.text);
+  if (cue.isEmpty || answer.isEmpty) return null;
+
+  // Supplied distractors are better: they are wrong *as replies to this cue*.
+  var wrong = uniqueBy(
+    s.replyDistractorsEn.map(clean).where(
+          (o) => o.isNotEmpty && normKey(o) != normKey(answer) && normKey(o) != normKey(cue),
+        ),
+    normKey,
+  );
+
+  if (wrong.length < 3) {
+    // Fall back to other sentences from the same area. Preferring a different
+    // speech act keeps them plausible English while still being the wrong
+    // move — a second request where an answer was wanted, say.
+    final pool = realmPool
+        .where((x) =>
+            x.id != s.id &&
+            !x.disabled &&
+            clean(x.text).isNotEmpty &&
+            normKey(x.text) != normKey(answer))
+        .toList()
+      ..sort((a, b) {
+        final da = a.speechAct == s.speechAct ? 1 : 0;
+        final db = b.speechAct == s.speechAct ? 1 : 0;
+        return da.compareTo(db);
+      });
+    wrong = uniqueBy([...wrong, ...pool.map((x) => clean(x.text))], normKey);
+  }
+
+  if (wrong.length < 3) return null;
+  final picked = take(shuffled(take(wrong, 8), rng), 3);
+  if (picked.length < 3) return null;
+
+  final choices = shuffled([answer, ...picked], rng);
+  final q = _base(s, QuestionType.reply, null);
+  return Question(
+    id: q.id,
+    type: q.type,
+    sentenceId: q.sentenceId,
+    realmId: q.realmId,
+    itemId: q.itemId,
+    text: q.text,
+    translationNative: q.translationNative,
+    level: q.level,
+    context: q.context,
+    options: choices,
+    correct: choices.indexOf(answer),
+    cueText: cue,
+    cueTranslationNative: clean(s.cueTranslationNative),
+    answerText: answer,
+  );
+}
+
+/// "You are saying this to *this* person. Which phrasing fits?"
+///
+/// Politeness is the part of English that fails without anyone saying so: the
+/// grammar is right, the meaning is right, and the effect is wrong. The note
+/// attached to each option is the teaching — the choice alone would not be.
+Question? buildRegister(Sentence s, [Random? rng]) {
+  final situation = clean(s.registerSituationNative);
+  final options = s.registerOptionsEn.map(clean).toList();
+  if (situation.isEmpty || options.length < 3) return null;
+  if (s.registerCorrect < 0 || s.registerCorrect >= options.length) return null;
+  if (options.any((o) => o.isEmpty)) return null;
+  if (uniqueBy(options, normKey).length != options.length) return null;
+
+  final answer = options[s.registerCorrect];
+  final whys = s.registerWhyNative;
+  final note = s.registerCorrect < whys.length ? clean(whys[s.registerCorrect]) : '';
+
+  final choices = shuffled(options, rng);
+  final q = _base(s, QuestionType.register, null);
+  return Question(
+    id: q.id,
+    type: q.type,
+    sentenceId: q.sentenceId,
+    realmId: q.realmId,
+    itemId: q.itemId,
+    // The spoken model after answering is the phrasing that fits, which is not
+    // necessarily the sentence the material was built around.
+    text: answer,
+    translationNative: situation,
+    level: q.level,
+    context: q.context,
+    options: choices,
+    correct: choices.indexOf(answer),
+    note: note,
+    answerText: answer,
+  );
+}
+
 Question? buildReorder(Sentence s, List<LearningItem> targets) {
   final t = tokenize(s.text);
   if (t.tokens.length < _minReorderTokens || t.tokens.length > _maxReorderTokens) {
@@ -310,6 +445,17 @@ List<Question> generateForSentences(
 
     final reorder = buildReorder(s, targets);
     if (reorder != null) out.add(reorder);
+
+    // The conversation formats. Each returns null when the material predates
+    // the fields it needs, so an older library keeps working untouched.
+    final produce = buildProduce(s, targets);
+    if (produce != null) out.add(produce);
+
+    final reply = buildReply(s, pool, rng);
+    if (reply != null) out.add(reply);
+
+    final register = buildRegister(s, rng);
+    if (register != null) out.add(register);
   }
   return out;
 }
@@ -357,7 +503,9 @@ List<String> validateQuestion(Question q, Map<String, Sentence>? sentencesById) 
   }
   if (clean(q.text).isEmpty) problems.add('英文が空');
 
-  if (q.type == QuestionType.paraphrase || q.type == QuestionType.gist) {
+  if (q.type == QuestionType.paraphrase ||
+      q.type == QuestionType.gist ||
+      q.type == QuestionType.reply) {
     if (q.options.length != 4) {
       problems.add('選択肢が4個でない');
     } else if (q.correct < 0 || q.correct > 3) {
@@ -371,6 +519,25 @@ List<String> validateQuestion(Question q, Map<String, Sentence>? sentencesById) 
   }
   if (q.type == QuestionType.reorder && q.tokens.length < 3) {
     problems.add('並べ替えトークンが不足');
+  }
+  if (q.type == QuestionType.produce) {
+    if (q.tokens.length < 3) problems.add('組み立てトークンが不足');
+    // Without the reading there is nothing to prompt from, and the question
+    // would show an empty card.
+    if (clean(q.translationNative).isEmpty) problems.add('意味が空');
+  }
+  if (q.type == QuestionType.reply && clean(q.cueText).isEmpty) {
+    problems.add('相手のセリフが空');
+  }
+  if (q.type == QuestionType.register) {
+    if (q.options.length < 3) {
+      problems.add('言い方の選択肢が不足');
+    } else if (q.correct < 0 || q.correct >= q.options.length) {
+      problems.add('正解位置が不正');
+    } else if (uniqueBy(q.options, normKey).length != q.options.length) {
+      problems.add('選択肢が重複');
+    }
+    if (clean(q.translationNative).isEmpty) problems.add('場面が空');
   }
   return problems;
 }

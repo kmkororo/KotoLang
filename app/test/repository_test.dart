@@ -60,6 +60,35 @@ String materialJson({
           '${t.$2} — someone else',
           '${t.$2} — already done',
         ],
+        // The conversation fields. Present on every sentence so the round trip
+        // covers them; real material will have them only where they apply.
+        'cue_en': 'What should we do about the ${t.$1}?',
+        'cue_translation_native': '${t.$2} — what now',
+        'reply_distractors_en': [
+          'The ${t.$1} belongs to a different project entirely.',
+          'Please ask me that question again a bit later.',
+          'Nobody has ever mentioned the ${t.$1} to me before.',
+        ],
+        'register': {
+          'situation_native': '${t.$2} — asking someone senior for the first time',
+          'variants': [
+            {
+              'text': 'Could you take a look at the ${t.$1} when you have a moment?',
+              'fits': true,
+              'why_native': '依頼の形で、相手の都合も尊重している。',
+            },
+            {
+              'text': 'Look at the ${t.$1}.',
+              'fits': false,
+              'why_native': '命令形なので目上には使えない。',
+            },
+            {
+              'text': 'You need to look at the ${t.$1} right now.',
+              'fits': false,
+              'why_native': '義務の押しつけに聞こえる。',
+            },
+          ],
+        },
       });
     }
   }
@@ -152,10 +181,54 @@ void main() {
             expect(q.answerWords.join(' '), q.answerText);
             expect(q.bankPool, isNotEmpty);
           case QuestionType.reorder:
+          case QuestionType.produce:
             expect(q.tokens.length, greaterThanOrEqualTo(4));
             expect('${q.tokens.join(' ')}${q.finalPunct}', q.text);
+          case QuestionType.reply:
+            expect(q.options.length, 4);
+            expect(q.options[q.correct], q.answerText);
+            expect(q.cueText, isNotEmpty);
+          case QuestionType.register:
+            expect(q.options.length, greaterThanOrEqualTo(3));
+            expect(q.options[q.correct], q.answerText);
+            expect(q.translationNative, isNotEmpty);
         }
       }
+    });
+
+    test('rebuilding the questions changes nothing that was already answered',
+        () async {
+      // Questions are only built at import, so a library imported before a
+      // format existed would never see it. Rebuilding has to be safe to run on
+      // a library someone has been studying for months.
+      await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await repo.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'meaning A')]),
+        uiLanguage: 'en',
+      );
+
+      final before = await repo.questions();
+      final answered = before.first;
+      await repo.recordAnswer(question: answered, correct: true, wasDue: false);
+      final srsBefore = await repo.srsStates();
+      final historyBefore = (await repo.history()).length;
+
+      final n = await repo.regenerateQuestions();
+      expect(n, before.length, reason: 'nothing new to add on a fresh import');
+
+      final after = await repo.questions();
+      expect(after.map((q) => q.id).toSet(), before.map((q) => q.id).toSet(),
+          reason: 'ids are derived from sentence and type, so they must be stable');
+
+      // The answer history is keyed to the question id and the schedule to the
+      // learning item; neither may be disturbed.
+      final stat = await (db.select(db.questionStats)
+            ..where((t) => t.questionId.equals(answered.id)))
+          .getSingleOrNull();
+      expect(stat, isNotNull, reason: 'the answer history was thrown away');
+      expect(stat!.n, 1);
+      expect(await repo.srsStates(), hasLength(srsBefore.length));
+      expect((await repo.history()).length, historyBefore);
     });
 
     test('re-importing the same material adds nothing', () async {
@@ -277,7 +350,7 @@ void main() {
       }
     });
 
-    test('comprehension formats dominate the mix', () async {
+    test('a real session mixes every format, conversation first', () async {
       await seed();
       final tally = <QuestionType, int>{};
       for (var i = 0; i < 12; i++) {
@@ -287,12 +360,21 @@ void main() {
         }
       }
       final total = tally.values.fold(0, (a, b) => a + b);
-      final comprehension =
-          (tally[QuestionType.gist] ?? 0) + (tally[QuestionType.paraphrase] ?? 0);
-      expect(comprehension / total, greaterThan(0.45));
       for (final t in QuestionType.values) {
         expect(tally[t] ?? 0, greaterThan(0), reason: '$t never appeared');
       }
+
+      // The point of the rebalance: what to say and how to say it now get more
+      // of the session than understanding what was said.
+      final conversation = (tally[QuestionType.reply] ?? 0) +
+          (tally[QuestionType.produce] ?? 0) +
+          (tally[QuestionType.register] ?? 0);
+      final comprehension =
+          (tally[QuestionType.gist] ?? 0) + (tally[QuestionType.paraphrase] ?? 0);
+      expect(conversation, greaterThan(comprehension));
+
+      // Listening is still the spine of the app and must keep a real share.
+      expect(comprehension / total, greaterThan(0.2));
     });
 
     test('filtering by realm only serves that realm', () async {

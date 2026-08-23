@@ -91,6 +91,15 @@ class Sentences extends Table {
   TextColumn get meaningOptionsNative => text().withDefault(const Constant('[]')).map(const StringListConverter())();
   TextColumn get paraphraseEn => text().withDefault(const Constant(''))();
   TextColumn get paraphraseOptionsEn => text().withDefault(const Constant('[]')).map(const StringListConverter())();
+  // Added in schema 2, for the conversation formats. All defaulted, so
+  // material imported before then simply generates fewer question types.
+  TextColumn get cueEn => text().withDefault(const Constant(''))();
+  TextColumn get cueTranslationNative => text().withDefault(const Constant(''))();
+  TextColumn get replyDistractorsEn => text().withDefault(const Constant('[]')).map(const StringListConverter())();
+  TextColumn get registerSituationNative => text().withDefault(const Constant(''))();
+  TextColumn get registerOptionsEn => text().withDefault(const Constant('[]')).map(const StringListConverter())();
+  TextColumn get registerWhyNative => text().withDefault(const Constant('[]')).map(const StringListConverter())();
+  IntColumn get registerCorrect => integer().withDefault(const Constant(-1))();
   BoolColumn get disabled => boolean().withDefault(const Constant(false))();
 
   @override
@@ -116,6 +125,10 @@ class Questions extends Table {
   TextColumn get bankPool => text().withDefault(const Constant('[]')).map(const StringListConverter())();
   TextColumn get tokens => text().withDefault(const Constant('[]')).map(const StringListConverter())();
   TextColumn get finalPunct => text().withDefault(const Constant(''))();
+  // Added in schema 2.
+  TextColumn get cueText => text().withDefault(const Constant(''))();
+  TextColumn get cueTranslationNative => text().withDefault(const Constant(''))();
+  TextColumn get note => text().withDefault(const Constant(''))();
   TextColumn get answerText => text().withDefault(const Constant(''))();
   BoolColumn get disabled => boolean().withDefault(const Constant(false))();
 
@@ -208,7 +221,7 @@ class AppDatabase extends _$AppDatabase {
       : super(executor ?? driftDatabase(name: 'kotolang'));
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -217,7 +230,29 @@ class AppDatabase extends _$AppDatabase {
           await _createIndexes();
         },
         onUpgrade: (mig, from, to) async {
-          // Schema 1 is the first release; future versions add steps here.
+          // 1 -> 2 adds the columns the conversation formats need. Every one
+          // has a default, so existing rows stay valid and material imported
+          // under schema 1 keeps working — it just yields fewer formats.
+          if (from < 2) {
+            for (final column in [
+              sentences.cueEn,
+              sentences.cueTranslationNative,
+              sentences.replyDistractorsEn,
+              sentences.registerSituationNative,
+              sentences.registerOptionsEn,
+              sentences.registerWhyNative,
+              sentences.registerCorrect,
+            ]) {
+              await mig.addColumn(sentences, column);
+            }
+            for (final column in [
+              questions.cueText,
+              questions.cueTranslationNative,
+              questions.note,
+            ]) {
+              await mig.addColumn(questions, column);
+            }
+          }
           await _createIndexes();
         },
         beforeOpen: (details) async {
@@ -324,6 +359,13 @@ extension SentenceRowX on SentenceRow {
         meaningOptionsNative: meaningOptionsNative,
         paraphraseEn: paraphraseEn,
         paraphraseOptionsEn: paraphraseOptionsEn,
+        cueEn: cueEn,
+        cueTranslationNative: cueTranslationNative,
+        replyDistractorsEn: replyDistractorsEn,
+        registerSituationNative: registerSituationNative,
+        registerOptionsEn: registerOptionsEn,
+        registerWhyNative: registerWhyNative,
+        registerCorrect: registerCorrect,
         disabled: disabled,
       );
 }
@@ -343,6 +385,13 @@ SentencesCompanion sentenceToRow(m.Sentence s) => SentencesCompanion.insert(
       meaningOptionsNative: Value(s.meaningOptionsNative),
       paraphraseEn: Value(s.paraphraseEn),
       paraphraseOptionsEn: Value(s.paraphraseOptionsEn),
+      cueEn: Value(s.cueEn),
+      cueTranslationNative: Value(s.cueTranslationNative),
+      replyDistractorsEn: Value(s.replyDistractorsEn),
+      registerSituationNative: Value(s.registerSituationNative),
+      registerOptionsEn: Value(s.registerOptionsEn),
+      registerWhyNative: Value(s.registerWhyNative),
+      registerCorrect: Value(s.registerCorrect),
       disabled: Value(s.disabled),
     );
 
@@ -365,6 +414,9 @@ extension QuestionRowX on QuestionRow {
         bankPool: bankPool,
         tokens: tokens,
         finalPunct: finalPunct,
+        cueText: cueText,
+        cueTranslationNative: cueTranslationNative,
+        note: note,
         answerText: answerText,
         disabled: disabled,
       );
@@ -388,6 +440,9 @@ QuestionsCompanion questionToRow(m.Question q) => QuestionsCompanion.insert(
       bankPool: Value(q.bankPool),
       tokens: Value(q.tokens),
       finalPunct: Value(q.finalPunct),
+      cueText: Value(q.cueText),
+      cueTranslationNative: Value(q.cueTranslationNative),
+      note: Value(q.note),
       answerText: Value(q.answerText),
       disabled: Value(q.disabled),
     );

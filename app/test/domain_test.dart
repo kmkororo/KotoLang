@@ -24,6 +24,13 @@ Sentence _sentence(
   List<String> meaningOptions = const [],
   String paraphrase = '',
   List<String> paraphraseOptions = const [],
+  String cue = '',
+  String cueJa = '',
+  List<String> replyDistractors = const [],
+  String registerSituation = '',
+  List<String> registerOptions = const [],
+  List<String> registerWhy = const [],
+  int registerCorrect = -1,
 }) =>
     Sentence(
       id: id,
@@ -37,6 +44,13 @@ Sentence _sentence(
       meaningOptionsNative: meaningOptions,
       paraphraseEn: paraphrase,
       paraphraseOptionsEn: paraphraseOptions,
+      cueEn: cue,
+      cueTranslationNative: cueJa,
+      replyDistractorsEn: replyDistractors,
+      registerSituationNative: registerSituation,
+      registerOptionsEn: registerOptions,
+      registerWhyNative: registerWhy,
+      registerCorrect: registerCorrect,
     );
 
 LearningItem _item(String id, String text, {String ja = ''}) => LearningItem(
@@ -218,14 +232,14 @@ void main() {
           reason: 'a deterministic choice once made reorder unreachable');
     });
 
-    test('comprehension formats dominate the long run', () {
+    test('the rotation puts conversation ahead of comprehension', () {
       final rng = Random(11);
       var s = SrsState.blank('rot').copyWith(
         introduced: true,
         formats: {QuestionType.dictation: const FormatStat(n: 1, ok: 1)},
       );
       final tally = {for (final t in all) t: 0};
-      for (var i = 0; i < 400; i++) {
+      for (var i = 0; i < 700; i++) {
         final t = preferredFormat(s, all, rng)!;
         tally[t] = tally[t]! + 1;
         final f = Map<QuestionType, FormatStat>.from(s.formats);
@@ -235,10 +249,24 @@ void main() {
       for (final t in all) {
         expect(tally[t], greaterThan(0), reason: '$t was starved');
       }
+
+      // The weighting is the app's statement about what matters. Deciding what
+      // to say is the scarcest skill, so `reply` leads; `reorder` trails
+      // because `produce` asks the same thing without playing the answer.
+      final ranked = all.toList()..sort((a, b) => tally[b]!.compareTo(tally[a]!));
+      expect(ranked.first, QuestionType.reply);
+      expect(ranked.last, QuestionType.reorder);
+
+      final conversation = tally[QuestionType.reply]! +
+          tally[QuestionType.produce]! +
+          tally[QuestionType.register]!;
       final comprehension =
-          (tally[QuestionType.gist]! + tally[QuestionType.paraphrase]!) / 400;
-      expect(comprehension, greaterThan(0.5));
-      expect(comprehension, lessThan(0.75));
+          tally[QuestionType.gist]! + tally[QuestionType.paraphrase]!;
+      expect(conversation, greaterThan(comprehension));
+
+      // ...but listening is still what the app is for, so comprehension must
+      // not be squeezed out either.
+      expect(comprehension / 700, greaterThan(0.25));
     });
 
     test('a capped item is pushed towards production', () {
@@ -357,7 +385,26 @@ void main() {
             'We can move on without going over the rules for repairs.',
             'The rules for repairs will be reviewed by someone else.',
             'The rules for repairs were already reviewed last week.',
-          ]),
+          ],
+          cue: 'Shall we go straight to the sign-off?',
+          cueJa: 'このまま承認に進みますか。',
+          replyDistractors: [
+            'Yes, the repair policy was withdrawn last year.',
+            'No, I have never seen that drawing before.',
+            'Please send the sign-off sheet to the supplier.',
+          ],
+          registerSituation: '初めて話す取引先に、確認をお願いするとき',
+          registerOptions: [
+            'Could we go over the repair policy first?',
+            'Go over the repair policy first.',
+            'You have to go over the repair policy first.',
+          ],
+          registerWhy: [
+            '依頼の形になっていて、初対面でも angry に聞こえません。',
+            '命令形なので、対等または目下にしか使えません。',
+            'have to は義務の押しつけに聞こえます。',
+          ],
+          registerCorrect: 0),
       _sentence('s2', 'The damage tolerance analysis is still in progress.',
           ja: '損傷許容解析はまだ進行中です。',
           items: ['it2'],
@@ -367,10 +414,17 @@ void main() {
             'Work on the tolerance study finished some time ago.',
             'Work on the tolerance study has not started at all.',
             'Work on the tolerance study was handed to another team.',
+          ],
+          cue: 'Is the damage tolerance work done?',
+          cueJa: '損傷許容の作業は終わりましたか。',
+          replyDistractors: [
+            'The analysis was never requested by anyone.',
+            'Please repeat the question a little more slowly.',
+            'We should go over the rules for repairs instead.',
           ]),
     ];
 
-    test('produces all four formats with valid structure', () {
+    test('produces every format, each with a valid structure', () {
       final qs = generateForSentences(corpus, items, corpus, Random(3));
       final byType = groupBy(qs, (Question q) => q.type);
       for (final t in QuestionType.values) {

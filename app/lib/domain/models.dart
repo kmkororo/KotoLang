@@ -166,6 +166,24 @@ class Sentence {
   final String paraphraseEn;
   final List<String> paraphraseOptionsEn;
 
+  /// What the other person says that this sentence answers, and its reading.
+  /// Empty when the sentence opens an exchange rather than replying to one —
+  /// in which case no `reply` question can be built from it.
+  final String cueEn;
+  final String cueTranslationNative;
+
+  /// Replies that sound plausible but are the wrong move. Optional: without
+  /// them the generator falls back to other sentences in the same realm.
+  final List<String> replyDistractorsEn;
+
+  /// The same intent said several ways, for the `register` question: which
+  /// phrasing fits this relationship. [registerCorrect] indexes the one that
+  /// does; [registerWhyNative] explains each, in the learner's language.
+  final String registerSituationNative;
+  final List<String> registerOptionsEn;
+  final List<String> registerWhyNative;
+  final int registerCorrect;
+
   final bool disabled;
 
   const Sentence({
@@ -183,6 +201,13 @@ class Sentence {
     this.meaningOptionsNative = const [],
     this.paraphraseEn = '',
     this.paraphraseOptionsEn = const [],
+    this.cueEn = '',
+    this.cueTranslationNative = '',
+    this.replyDistractorsEn = const [],
+    this.registerSituationNative = '',
+    this.registerOptionsEn = const [],
+    this.registerWhyNative = const [],
+    this.registerCorrect = -1,
     this.disabled = false,
   });
 
@@ -201,6 +226,13 @@ class Sentence {
         meaningOptionsNative: meaningOptionsNative,
         paraphraseEn: paraphraseEn,
         paraphraseOptionsEn: paraphraseOptionsEn,
+        cueEn: cueEn,
+        cueTranslationNative: cueTranslationNative,
+        replyDistractorsEn: replyDistractorsEn,
+        registerSituationNative: registerSituationNative,
+        registerOptionsEn: registerOptionsEn,
+        registerWhyNative: registerWhyNative,
+        registerCorrect: registerCorrect,
         disabled: disabled ?? this.disabled,
       );
 }
@@ -219,7 +251,25 @@ enum QuestionType {
   dictation,
 
   /// Rebuild the whole sentence from word tiles. Production.
-  reorder;
+  reorder,
+
+  /// Say it from the meaning alone — no audio until after the answer.
+  ///
+  /// Every other format plays the English first and asks the learner to
+  /// recognise or rebuild it, which is not what happens in a conversation.
+  /// Here the only cue is what you want to say, which is the direction
+  /// speaking actually runs in. Production, and the strongest of them.
+  produce,
+
+  /// Someone says something to you. Which reply is the right move?
+  ///
+  /// The one format about choosing *what to say* rather than understanding
+  /// what was said. Recognition, so it does not satisfy the mastery gate.
+  reply,
+
+  /// The same thing said several ways: which one fits this relationship?
+  /// Politeness is the part of English that fails silently. Recognition.
+  register;
 
   static QuestionType? parse(String s) {
     for (final t in QuestionType.values) {
@@ -231,7 +281,19 @@ enum QuestionType {
 
 /// Formats that require the learner to produce language rather than recognise
 /// it. Mastery is gated on these.
-const productionTypes = {QuestionType.dictation, QuestionType.reorder};
+///
+/// `reply` and `register` are deliberately absent: they are worth a great deal
+/// for conversation but they are still four-option questions, and picking the
+/// right answer from a list is not evidence that it could have been produced.
+const productionTypes = {
+  QuestionType.dictation,
+  QuestionType.reorder,
+  QuestionType.produce,
+};
+
+/// Formats whose audio is withheld until the answer is in. Playing it first
+/// would hand over the very thing being asked for.
+const silentUntilAnswered = {QuestionType.produce, QuestionType.register};
 
 class Question {
   final String id;
@@ -256,9 +318,17 @@ class Question {
   final List<String> answerWords;
   final List<String> bankPool; // decoy tiles drawn from the same realm
 
-  // reorder
+  // reorder / produce
   final List<String> tokens;
   final String finalPunct;
+
+  // reply: the other person's line, which is what gets spoken
+  final String cueText;
+  final String cueTranslationNative;
+
+  /// Why the answer is the right one. Written in the learner's language and
+  /// shown after answering; `register` is the format that needs it.
+  final String note;
 
   final String answerText;
   final bool disabled;
@@ -282,9 +352,18 @@ class Question {
     this.bankPool = const [],
     this.tokens = const [],
     this.finalPunct = '',
+    this.cueText = '',
+    this.cueTranslationNative = '',
+    this.note = '',
     this.answerText = '',
     this.disabled = false,
   });
+
+  /// What the speech engine should read out. For `reply` that is the other
+  /// person's line, not the answer — reading the answer would give it away.
+  String get spokenText => type == QuestionType.reply && cueText.isNotEmpty
+      ? cueText
+      : text;
 
   Question copyWith({bool? disabled, List<String>? answerWords, List<String>? bankPool}) =>
       Question(
@@ -306,6 +385,9 @@ class Question {
         bankPool: bankPool ?? this.bankPool,
         tokens: tokens,
         finalPunct: finalPunct,
+        cueText: cueText,
+        cueTranslationNative: cueTranslationNative,
+        note: note,
         answerText: answerText,
         disabled: disabled ?? this.disabled,
       );

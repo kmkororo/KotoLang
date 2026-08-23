@@ -18,10 +18,11 @@ cannot be dragged over ten thousand characters. Four separate things address
 it, because no single one of them is reliable on its own.
 
 **1. The reply is deliberately small.** Material is built a batch at a time —
-6, 10 or 20 expressions per request — rather than a whole area at once. A short
+4, 6 or 10 expressions per request — rather than a whole area at once. A short
 complete answer beats a long truncated one, and repeating the request adds
 more; duplicates are dropped on import. The size is chosen on the material
-screen (`Amount per request`).
+screen (`Amount per request`). The counts came down when the conversation
+fields were added, since each sentence now carries roughly twice the JSON.
 
 **2. The reply is one fenced `json` block and nothing else.** Every prompt
 insists on it, because that is what puts a one-tap copy button on the block in
@@ -97,7 +98,7 @@ Verified working on this machine — `flutter doctor` reports **no issues**.
 ```bash
 cd C:\Users\kmkor\KotoLang\app
 
-flutter test                       # 98 tests
+flutter test                       # 124 tests
 flutter analyze                    # no issues
 flutter run                        # debug on a connected device
 
@@ -152,27 +153,56 @@ says so rather than pretending otherwise.
 
 ## Question formats
 
-| Format | What it asks | Options |
-|---|---|---|
-| Paraphrase | Which English sentence means the same? | 4 English sentences |
-| Meaning | Which reading matches what you heard? | 4 in your language |
-| Dictation | Build the target expression | tap word tiles |
-| Word order | Rebuild the sentence | tap word tiles |
+Conversation splits into four things, and for a long time this app trained only
+the first: **understanding what was said**, **retrieving the English you need**,
+**deciding what to say**, and **repairing a conversation that has broken down**.
+Every original format played the English first and asked the learner to
+recognise or rebuild it — which is not the direction speaking runs in. Three
+formats were added to close that gap.
 
-The first two are weighted to roughly 60% of the mix. Their wrong options differ
-from the answer by exactly one thing — negation, who acts, tense, a condition,
-or strength — so they cannot be solved without hearing the detail.
+| Format | What it asks | Answered by | Audio |
+|---|---|---|---|
+| Paraphrase | Which English sentence means the same? | 4 English sentences | plays the sentence |
+| Meaning | Which reading matches what you heard? | 4 in your language | plays the sentence |
+| Dictation | Build the target expression | word tiles or keyboard | plays the sentence |
+| Word order | Rebuild the sentence | word tiles | plays the sentence |
+| **Say it** | Say this, from the meaning alone | word tiles or keyboard | **withheld until answered** |
+| **Reply** | They said this — what do you say back? | 4 English replies | **plays their line, not yours** |
+| **Phrasing** | Which way of saying it fits this person? | 3 English phrasings | after answering |
 
-Everything is answered by tapping. Dictation offers a keyboard, but never as the
-default: typing English on a phone is the friction most likely to end a session.
+**Say it** is the one that costs nothing to adopt: it needs no field the AI was
+not already supplying, so an existing library gains it the moment the questions
+are rebuilt (Settings → *Rebuild the questions*). It is mechanically close to
+word order, and the difference is the whole point — word order plays the
+sentence first, so it asks you to reconstruct something you just heard. Here the
+sentence is never heard, so the only route to it is recalling what it means.
+
+**Reply** is the only format about choosing a move rather than decoding one, and
+it is weighted highest for that reason. **Phrasing** carries a short note saying
+what each wording does to the listener; without that it would be a coin toss.
+
+Wrong options differ from the answer by exactly one thing — negation, who acts,
+tense, a condition, or strength — so they cannot be solved without hearing the
+detail. Reply distractors invert that: they are correct English about the right
+subject, and what is wrong is the *move*.
+
+Everything is answered by tapping. Typing is offered but never the default:
+typing English on a phone is the friction most likely to end a session.
+
+**Backward compatibility.** Reply and Phrasing need fields that material
+imported before them does not have. The generator returns nothing rather than
+inventing anything, so an older library keeps working and simply produces fewer
+formats.
 
 ## Learning model
 
 - **Spaced repetition** on the *expression*, not the question: `1 → 3 → 7 → 16 →
   35 days`, back to tomorrow on a miss.
 - **Recognition gate.** Multiple choice alone caps an item at box 3. It only
-  advances further after a correct dictation or word-order answer, so "I tapped
-  the right button" never counts as mastery.
+  advances further after a correct dictation, word-order or *say it* answer, so
+  "I tapped the right button" never counts as mastery. Reply and Phrasing are
+  four-option questions and so do not release the gate, however valuable they
+  are otherwise.
 - **Selection order**: due reviews → weak items → *never-studied* → everything
   else by staleness. New material ranking above seen-but-not-due is what keeps
   sessions varied; without it the planner drills a handful of items forever.
@@ -207,14 +237,17 @@ by two areas is unlinked, not deleted.
 
 ## Testing
 
-`flutter test` — **74 tests**, all passing.
+`flutter test` — **124 tests**, all passing.
 
 | Suite | Covers |
 |---|---|
-| `domain_test.dart` (32) | SRS intervals, recognition gate, format rotation, streak & freeze arithmetic, XP bounds, question generation and grading, DST-safe dates |
-| `l10n_test.dart` (9) | every locale defines every key, no unused keys, placeholders consistent, device-locale resolution |
-| `repository_test.dart` (25) | imports persist, malformed replies never throw, breadth-first introduction, no repeated sentences, scoped resets, export/restore round trip |
-| `app_flow_test.dart` (8) | real widgets over a real database: first-run language picker, onboarding routing, answering a question, switching interface language |
+| `domain_test.dart` | SRS intervals, recognition gate, format rotation, streak & freeze arithmetic, XP bounds, question generation and grading, DST-safe dates |
+| `l10n_test.dart` | every locale defines every key, no unused keys, placeholders consistent, device-locale resolution |
+| `repository_test.dart` | imports persist, malformed replies never throw, breadth-first introduction, no repeated sentences, scoped resets, export/restore round trip, rebuilding questions preserves answer history |
+| `app_flow_test.dart` | real widgets over a real database: first-run language picker, onboarding routing, answering each format, reset routing, switching interface language |
+| `paste_test.dart` | truncation rescue, piecewise pasting, overlap removal, the readout after each piece |
+| `conversation_test.dart` | the three conversation formats: what each needs, what each refuses, and that material predating them yields nothing rather than junk |
+| `migration_test.dart` | a schema 1 library upgrades in place, keeps its material and progress, and gains only the formats it can actually build |
 
 Two real defects were found by these tests and fixed:
 

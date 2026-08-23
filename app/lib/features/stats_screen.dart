@@ -172,6 +172,9 @@ class StatsScreen extends ConsumerWidget {
                       QuestionType.gist => s.t('typeGist'),
                       QuestionType.dictation => s.t('typeDictation'),
                       QuestionType.reorder => s.t('typeReorder'),
+                      QuestionType.produce => s.t('typeProduce'),
+                      QuestionType.reply => s.t('typeReply'),
+                      QuestionType.register => s.t('typeRegister'),
                     },
                     value: d.formats[type]!.n == 0
                         ? null

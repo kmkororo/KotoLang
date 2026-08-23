@@ -1488,6 +1488,82 @@ class $SentencesTable extends Sentences
     requiredDuringInsert: false,
     defaultValue: const Constant('[]'),
   ).withConverter<List<String>>($SentencesTable.$converterparaphraseOptionsEn);
+  static const VerificationMeta _cueEnMeta = const VerificationMeta('cueEn');
+  @override
+  late final GeneratedColumn<String> cueEn = GeneratedColumn<String>(
+    'cue_en',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _cueTranslationNativeMeta =
+      const VerificationMeta('cueTranslationNative');
+  @override
+  late final GeneratedColumn<String> cueTranslationNative =
+      GeneratedColumn<String>(
+        'cue_translation_native',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(''),
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<List<String>, String>
+  replyDistractorsEn = GeneratedColumn<String>(
+    'reply_distractors_en',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  ).withConverter<List<String>>($SentencesTable.$converterreplyDistractorsEn);
+  static const VerificationMeta _registerSituationNativeMeta =
+      const VerificationMeta('registerSituationNative');
+  @override
+  late final GeneratedColumn<String> registerSituationNative =
+      GeneratedColumn<String>(
+        'register_situation_native',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(''),
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<List<String>, String>
+  registerOptionsEn = GeneratedColumn<String>(
+    'register_options_en',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  ).withConverter<List<String>>($SentencesTable.$converterregisterOptionsEn);
+  @override
+  late final GeneratedColumnWithTypeConverter<List<String>, String>
+  registerWhyNative = GeneratedColumn<String>(
+    'register_why_native',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  ).withConverter<List<String>>($SentencesTable.$converterregisterWhyNative);
+  static const VerificationMeta _registerCorrectMeta = const VerificationMeta(
+    'registerCorrect',
+  );
+  @override
+  late final GeneratedColumn<int> registerCorrect = GeneratedColumn<int>(
+    'register_correct',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(-1),
+  );
   static const VerificationMeta _disabledMeta = const VerificationMeta(
     'disabled',
   );
@@ -1519,6 +1595,13 @@ class $SentencesTable extends Sentences
     meaningOptionsNative,
     paraphraseEn,
     paraphraseOptionsEn,
+    cueEn,
+    cueTranslationNative,
+    replyDistractorsEn,
+    registerSituationNative,
+    registerOptionsEn,
+    registerWhyNative,
+    registerCorrect,
     disabled,
   ];
   @override
@@ -1616,6 +1699,39 @@ class $SentencesTable extends Sentences
         ),
       );
     }
+    if (data.containsKey('cue_en')) {
+      context.handle(
+        _cueEnMeta,
+        cueEn.isAcceptableOrUnknown(data['cue_en']!, _cueEnMeta),
+      );
+    }
+    if (data.containsKey('cue_translation_native')) {
+      context.handle(
+        _cueTranslationNativeMeta,
+        cueTranslationNative.isAcceptableOrUnknown(
+          data['cue_translation_native']!,
+          _cueTranslationNativeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('register_situation_native')) {
+      context.handle(
+        _registerSituationNativeMeta,
+        registerSituationNative.isAcceptableOrUnknown(
+          data['register_situation_native']!,
+          _registerSituationNativeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('register_correct')) {
+      context.handle(
+        _registerCorrectMeta,
+        registerCorrect.isAcceptableOrUnknown(
+          data['register_correct']!,
+          _registerCorrectMeta,
+        ),
+      );
+    }
     if (data.containsKey('disabled')) {
       context.handle(
         _disabledMeta,
@@ -1695,6 +1811,40 @@ class $SentencesTable extends Sentences
               data['${effectivePrefix}paraphrase_options_en'],
             )!,
           ),
+      cueEn: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cue_en'],
+      )!,
+      cueTranslationNative: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cue_translation_native'],
+      )!,
+      replyDistractorsEn: $SentencesTable.$converterreplyDistractorsEn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}reply_distractors_en'],
+        )!,
+      ),
+      registerSituationNative: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}register_situation_native'],
+      )!,
+      registerOptionsEn: $SentencesTable.$converterregisterOptionsEn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}register_options_en'],
+        )!,
+      ),
+      registerWhyNative: $SentencesTable.$converterregisterWhyNative.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}register_why_native'],
+        )!,
+      ),
+      registerCorrect: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}register_correct'],
+      )!,
       disabled: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}disabled'],
@@ -1713,6 +1863,12 @@ class $SentencesTable extends Sentences
       const StringListConverter();
   static TypeConverter<List<String>, String> $converterparaphraseOptionsEn =
       const StringListConverter();
+  static TypeConverter<List<String>, String> $converterreplyDistractorsEn =
+      const StringListConverter();
+  static TypeConverter<List<String>, String> $converterregisterOptionsEn =
+      const StringListConverter();
+  static TypeConverter<List<String>, String> $converterregisterWhyNative =
+      const StringListConverter();
 }
 
 class SentenceRow extends DataClass implements Insertable<SentenceRow> {
@@ -1730,6 +1886,13 @@ class SentenceRow extends DataClass implements Insertable<SentenceRow> {
   final List<String> meaningOptionsNative;
   final String paraphraseEn;
   final List<String> paraphraseOptionsEn;
+  final String cueEn;
+  final String cueTranslationNative;
+  final List<String> replyDistractorsEn;
+  final String registerSituationNative;
+  final List<String> registerOptionsEn;
+  final List<String> registerWhyNative;
+  final int registerCorrect;
   final bool disabled;
   const SentenceRow({
     required this.id,
@@ -1746,6 +1909,13 @@ class SentenceRow extends DataClass implements Insertable<SentenceRow> {
     required this.meaningOptionsNative,
     required this.paraphraseEn,
     required this.paraphraseOptionsEn,
+    required this.cueEn,
+    required this.cueTranslationNative,
+    required this.replyDistractorsEn,
+    required this.registerSituationNative,
+    required this.registerOptionsEn,
+    required this.registerWhyNative,
+    required this.registerCorrect,
     required this.disabled,
   });
   @override
@@ -1783,6 +1953,27 @@ class SentenceRow extends DataClass implements Insertable<SentenceRow> {
         ),
       );
     }
+    map['cue_en'] = Variable<String>(cueEn);
+    map['cue_translation_native'] = Variable<String>(cueTranslationNative);
+    {
+      map['reply_distractors_en'] = Variable<String>(
+        $SentencesTable.$converterreplyDistractorsEn.toSql(replyDistractorsEn),
+      );
+    }
+    map['register_situation_native'] = Variable<String>(
+      registerSituationNative,
+    );
+    {
+      map['register_options_en'] = Variable<String>(
+        $SentencesTable.$converterregisterOptionsEn.toSql(registerOptionsEn),
+      );
+    }
+    {
+      map['register_why_native'] = Variable<String>(
+        $SentencesTable.$converterregisterWhyNative.toSql(registerWhyNative),
+      );
+    }
+    map['register_correct'] = Variable<int>(registerCorrect);
     map['disabled'] = Variable<bool>(disabled);
     return map;
   }
@@ -1805,6 +1996,13 @@ class SentenceRow extends DataClass implements Insertable<SentenceRow> {
       meaningOptionsNative: Value(meaningOptionsNative),
       paraphraseEn: Value(paraphraseEn),
       paraphraseOptionsEn: Value(paraphraseOptionsEn),
+      cueEn: Value(cueEn),
+      cueTranslationNative: Value(cueTranslationNative),
+      replyDistractorsEn: Value(replyDistractorsEn),
+      registerSituationNative: Value(registerSituationNative),
+      registerOptionsEn: Value(registerOptionsEn),
+      registerWhyNative: Value(registerWhyNative),
+      registerCorrect: Value(registerCorrect),
       disabled: Value(disabled),
     );
   }
@@ -1833,6 +2031,23 @@ class SentenceRow extends DataClass implements Insertable<SentenceRow> {
       paraphraseOptionsEn: serializer.fromJson<List<String>>(
         json['paraphraseOptionsEn'],
       ),
+      cueEn: serializer.fromJson<String>(json['cueEn']),
+      cueTranslationNative: serializer.fromJson<String>(
+        json['cueTranslationNative'],
+      ),
+      replyDistractorsEn: serializer.fromJson<List<String>>(
+        json['replyDistractorsEn'],
+      ),
+      registerSituationNative: serializer.fromJson<String>(
+        json['registerSituationNative'],
+      ),
+      registerOptionsEn: serializer.fromJson<List<String>>(
+        json['registerOptionsEn'],
+      ),
+      registerWhyNative: serializer.fromJson<List<String>>(
+        json['registerWhyNative'],
+      ),
+      registerCorrect: serializer.fromJson<int>(json['registerCorrect']),
       disabled: serializer.fromJson<bool>(json['disabled']),
     );
   }
@@ -1858,6 +2073,15 @@ class SentenceRow extends DataClass implements Insertable<SentenceRow> {
       'paraphraseOptionsEn': serializer.toJson<List<String>>(
         paraphraseOptionsEn,
       ),
+      'cueEn': serializer.toJson<String>(cueEn),
+      'cueTranslationNative': serializer.toJson<String>(cueTranslationNative),
+      'replyDistractorsEn': serializer.toJson<List<String>>(replyDistractorsEn),
+      'registerSituationNative': serializer.toJson<String>(
+        registerSituationNative,
+      ),
+      'registerOptionsEn': serializer.toJson<List<String>>(registerOptionsEn),
+      'registerWhyNative': serializer.toJson<List<String>>(registerWhyNative),
+      'registerCorrect': serializer.toJson<int>(registerCorrect),
       'disabled': serializer.toJson<bool>(disabled),
     };
   }
@@ -1877,6 +2101,13 @@ class SentenceRow extends DataClass implements Insertable<SentenceRow> {
     List<String>? meaningOptionsNative,
     String? paraphraseEn,
     List<String>? paraphraseOptionsEn,
+    String? cueEn,
+    String? cueTranslationNative,
+    List<String>? replyDistractorsEn,
+    String? registerSituationNative,
+    List<String>? registerOptionsEn,
+    List<String>? registerWhyNative,
+    int? registerCorrect,
     bool? disabled,
   }) => SentenceRow(
     id: id ?? this.id,
@@ -1893,6 +2124,14 @@ class SentenceRow extends DataClass implements Insertable<SentenceRow> {
     meaningOptionsNative: meaningOptionsNative ?? this.meaningOptionsNative,
     paraphraseEn: paraphraseEn ?? this.paraphraseEn,
     paraphraseOptionsEn: paraphraseOptionsEn ?? this.paraphraseOptionsEn,
+    cueEn: cueEn ?? this.cueEn,
+    cueTranslationNative: cueTranslationNative ?? this.cueTranslationNative,
+    replyDistractorsEn: replyDistractorsEn ?? this.replyDistractorsEn,
+    registerSituationNative:
+        registerSituationNative ?? this.registerSituationNative,
+    registerOptionsEn: registerOptionsEn ?? this.registerOptionsEn,
+    registerWhyNative: registerWhyNative ?? this.registerWhyNative,
+    registerCorrect: registerCorrect ?? this.registerCorrect,
     disabled: disabled ?? this.disabled,
   );
   SentenceRow copyWithCompanion(SentencesCompanion data) {
@@ -1923,6 +2162,25 @@ class SentenceRow extends DataClass implements Insertable<SentenceRow> {
       paraphraseOptionsEn: data.paraphraseOptionsEn.present
           ? data.paraphraseOptionsEn.value
           : this.paraphraseOptionsEn,
+      cueEn: data.cueEn.present ? data.cueEn.value : this.cueEn,
+      cueTranslationNative: data.cueTranslationNative.present
+          ? data.cueTranslationNative.value
+          : this.cueTranslationNative,
+      replyDistractorsEn: data.replyDistractorsEn.present
+          ? data.replyDistractorsEn.value
+          : this.replyDistractorsEn,
+      registerSituationNative: data.registerSituationNative.present
+          ? data.registerSituationNative.value
+          : this.registerSituationNative,
+      registerOptionsEn: data.registerOptionsEn.present
+          ? data.registerOptionsEn.value
+          : this.registerOptionsEn,
+      registerWhyNative: data.registerWhyNative.present
+          ? data.registerWhyNative.value
+          : this.registerWhyNative,
+      registerCorrect: data.registerCorrect.present
+          ? data.registerCorrect.value
+          : this.registerCorrect,
       disabled: data.disabled.present ? data.disabled.value : this.disabled,
     );
   }
@@ -1944,13 +2202,20 @@ class SentenceRow extends DataClass implements Insertable<SentenceRow> {
           ..write('meaningOptionsNative: $meaningOptionsNative, ')
           ..write('paraphraseEn: $paraphraseEn, ')
           ..write('paraphraseOptionsEn: $paraphraseOptionsEn, ')
+          ..write('cueEn: $cueEn, ')
+          ..write('cueTranslationNative: $cueTranslationNative, ')
+          ..write('replyDistractorsEn: $replyDistractorsEn, ')
+          ..write('registerSituationNative: $registerSituationNative, ')
+          ..write('registerOptionsEn: $registerOptionsEn, ')
+          ..write('registerWhyNative: $registerWhyNative, ')
+          ..write('registerCorrect: $registerCorrect, ')
           ..write('disabled: $disabled')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     body,
     normKeyValue,
@@ -1965,8 +2230,15 @@ class SentenceRow extends DataClass implements Insertable<SentenceRow> {
     meaningOptionsNative,
     paraphraseEn,
     paraphraseOptionsEn,
+    cueEn,
+    cueTranslationNative,
+    replyDistractorsEn,
+    registerSituationNative,
+    registerOptionsEn,
+    registerWhyNative,
+    registerCorrect,
     disabled,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1985,6 +2257,13 @@ class SentenceRow extends DataClass implements Insertable<SentenceRow> {
           other.meaningOptionsNative == this.meaningOptionsNative &&
           other.paraphraseEn == this.paraphraseEn &&
           other.paraphraseOptionsEn == this.paraphraseOptionsEn &&
+          other.cueEn == this.cueEn &&
+          other.cueTranslationNative == this.cueTranslationNative &&
+          other.replyDistractorsEn == this.replyDistractorsEn &&
+          other.registerSituationNative == this.registerSituationNative &&
+          other.registerOptionsEn == this.registerOptionsEn &&
+          other.registerWhyNative == this.registerWhyNative &&
+          other.registerCorrect == this.registerCorrect &&
           other.disabled == this.disabled);
 }
 
@@ -2003,6 +2282,13 @@ class SentencesCompanion extends UpdateCompanion<SentenceRow> {
   final Value<List<String>> meaningOptionsNative;
   final Value<String> paraphraseEn;
   final Value<List<String>> paraphraseOptionsEn;
+  final Value<String> cueEn;
+  final Value<String> cueTranslationNative;
+  final Value<List<String>> replyDistractorsEn;
+  final Value<String> registerSituationNative;
+  final Value<List<String>> registerOptionsEn;
+  final Value<List<String>> registerWhyNative;
+  final Value<int> registerCorrect;
   final Value<bool> disabled;
   final Value<int> rowid;
   const SentencesCompanion({
@@ -2020,6 +2306,13 @@ class SentencesCompanion extends UpdateCompanion<SentenceRow> {
     this.meaningOptionsNative = const Value.absent(),
     this.paraphraseEn = const Value.absent(),
     this.paraphraseOptionsEn = const Value.absent(),
+    this.cueEn = const Value.absent(),
+    this.cueTranslationNative = const Value.absent(),
+    this.replyDistractorsEn = const Value.absent(),
+    this.registerSituationNative = const Value.absent(),
+    this.registerOptionsEn = const Value.absent(),
+    this.registerWhyNative = const Value.absent(),
+    this.registerCorrect = const Value.absent(),
     this.disabled = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -2038,6 +2331,13 @@ class SentencesCompanion extends UpdateCompanion<SentenceRow> {
     this.meaningOptionsNative = const Value.absent(),
     this.paraphraseEn = const Value.absent(),
     this.paraphraseOptionsEn = const Value.absent(),
+    this.cueEn = const Value.absent(),
+    this.cueTranslationNative = const Value.absent(),
+    this.replyDistractorsEn = const Value.absent(),
+    this.registerSituationNative = const Value.absent(),
+    this.registerOptionsEn = const Value.absent(),
+    this.registerWhyNative = const Value.absent(),
+    this.registerCorrect = const Value.absent(),
     this.disabled = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -2059,6 +2359,13 @@ class SentencesCompanion extends UpdateCompanion<SentenceRow> {
     Expression<String>? meaningOptionsNative,
     Expression<String>? paraphraseEn,
     Expression<String>? paraphraseOptionsEn,
+    Expression<String>? cueEn,
+    Expression<String>? cueTranslationNative,
+    Expression<String>? replyDistractorsEn,
+    Expression<String>? registerSituationNative,
+    Expression<String>? registerOptionsEn,
+    Expression<String>? registerWhyNative,
+    Expression<int>? registerCorrect,
     Expression<bool>? disabled,
     Expression<int>? rowid,
   }) {
@@ -2079,6 +2386,16 @@ class SentencesCompanion extends UpdateCompanion<SentenceRow> {
       if (paraphraseEn != null) 'paraphrase_en': paraphraseEn,
       if (paraphraseOptionsEn != null)
         'paraphrase_options_en': paraphraseOptionsEn,
+      if (cueEn != null) 'cue_en': cueEn,
+      if (cueTranslationNative != null)
+        'cue_translation_native': cueTranslationNative,
+      if (replyDistractorsEn != null)
+        'reply_distractors_en': replyDistractorsEn,
+      if (registerSituationNative != null)
+        'register_situation_native': registerSituationNative,
+      if (registerOptionsEn != null) 'register_options_en': registerOptionsEn,
+      if (registerWhyNative != null) 'register_why_native': registerWhyNative,
+      if (registerCorrect != null) 'register_correct': registerCorrect,
       if (disabled != null) 'disabled': disabled,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2099,6 +2416,13 @@ class SentencesCompanion extends UpdateCompanion<SentenceRow> {
     Value<List<String>>? meaningOptionsNative,
     Value<String>? paraphraseEn,
     Value<List<String>>? paraphraseOptionsEn,
+    Value<String>? cueEn,
+    Value<String>? cueTranslationNative,
+    Value<List<String>>? replyDistractorsEn,
+    Value<String>? registerSituationNative,
+    Value<List<String>>? registerOptionsEn,
+    Value<List<String>>? registerWhyNative,
+    Value<int>? registerCorrect,
     Value<bool>? disabled,
     Value<int>? rowid,
   }) {
@@ -2117,6 +2441,14 @@ class SentencesCompanion extends UpdateCompanion<SentenceRow> {
       meaningOptionsNative: meaningOptionsNative ?? this.meaningOptionsNative,
       paraphraseEn: paraphraseEn ?? this.paraphraseEn,
       paraphraseOptionsEn: paraphraseOptionsEn ?? this.paraphraseOptionsEn,
+      cueEn: cueEn ?? this.cueEn,
+      cueTranslationNative: cueTranslationNative ?? this.cueTranslationNative,
+      replyDistractorsEn: replyDistractorsEn ?? this.replyDistractorsEn,
+      registerSituationNative:
+          registerSituationNative ?? this.registerSituationNative,
+      registerOptionsEn: registerOptionsEn ?? this.registerOptionsEn,
+      registerWhyNative: registerWhyNative ?? this.registerWhyNative,
+      registerCorrect: registerCorrect ?? this.registerCorrect,
       disabled: disabled ?? this.disabled,
       rowid: rowid ?? this.rowid,
     );
@@ -2177,6 +2509,43 @@ class SentencesCompanion extends UpdateCompanion<SentenceRow> {
         ),
       );
     }
+    if (cueEn.present) {
+      map['cue_en'] = Variable<String>(cueEn.value);
+    }
+    if (cueTranslationNative.present) {
+      map['cue_translation_native'] = Variable<String>(
+        cueTranslationNative.value,
+      );
+    }
+    if (replyDistractorsEn.present) {
+      map['reply_distractors_en'] = Variable<String>(
+        $SentencesTable.$converterreplyDistractorsEn.toSql(
+          replyDistractorsEn.value,
+        ),
+      );
+    }
+    if (registerSituationNative.present) {
+      map['register_situation_native'] = Variable<String>(
+        registerSituationNative.value,
+      );
+    }
+    if (registerOptionsEn.present) {
+      map['register_options_en'] = Variable<String>(
+        $SentencesTable.$converterregisterOptionsEn.toSql(
+          registerOptionsEn.value,
+        ),
+      );
+    }
+    if (registerWhyNative.present) {
+      map['register_why_native'] = Variable<String>(
+        $SentencesTable.$converterregisterWhyNative.toSql(
+          registerWhyNative.value,
+        ),
+      );
+    }
+    if (registerCorrect.present) {
+      map['register_correct'] = Variable<int>(registerCorrect.value);
+    }
     if (disabled.present) {
       map['disabled'] = Variable<bool>(disabled.value);
     }
@@ -2203,6 +2572,13 @@ class SentencesCompanion extends UpdateCompanion<SentenceRow> {
           ..write('meaningOptionsNative: $meaningOptionsNative, ')
           ..write('paraphraseEn: $paraphraseEn, ')
           ..write('paraphraseOptionsEn: $paraphraseOptionsEn, ')
+          ..write('cueEn: $cueEn, ')
+          ..write('cueTranslationNative: $cueTranslationNative, ')
+          ..write('replyDistractorsEn: $replyDistractorsEn, ')
+          ..write('registerSituationNative: $registerSituationNative, ')
+          ..write('registerOptionsEn: $registerOptionsEn, ')
+          ..write('registerWhyNative: $registerWhyNative, ')
+          ..write('registerCorrect: $registerCorrect, ')
           ..write('disabled: $disabled, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -2393,6 +2769,40 @@ class $QuestionsTable extends Questions
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _cueTextMeta = const VerificationMeta(
+    'cueText',
+  );
+  @override
+  late final GeneratedColumn<String> cueText = GeneratedColumn<String>(
+    'cue_text',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _cueTranslationNativeMeta =
+      const VerificationMeta('cueTranslationNative');
+  @override
+  late final GeneratedColumn<String> cueTranslationNative =
+      GeneratedColumn<String>(
+        'cue_translation_native',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(''),
+      );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _answerTextMeta = const VerificationMeta(
     'answerText',
   );
@@ -2439,6 +2849,9 @@ class $QuestionsTable extends Questions
     bankPool,
     tokens,
     finalPunct,
+    cueText,
+    cueTranslationNative,
+    note,
     answerText,
     disabled,
   ];
@@ -2542,6 +2955,27 @@ class $QuestionsTable extends Questions
         finalPunct.isAcceptableOrUnknown(data['final_punct']!, _finalPunctMeta),
       );
     }
+    if (data.containsKey('cue_text')) {
+      context.handle(
+        _cueTextMeta,
+        cueText.isAcceptableOrUnknown(data['cue_text']!, _cueTextMeta),
+      );
+    }
+    if (data.containsKey('cue_translation_native')) {
+      context.handle(
+        _cueTranslationNativeMeta,
+        cueTranslationNative.isAcceptableOrUnknown(
+          data['cue_translation_native']!,
+          _cueTranslationNativeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
     if (data.containsKey('answer_text')) {
       context.handle(
         _answerTextMeta,
@@ -2639,6 +3073,18 @@ class $QuestionsTable extends Questions
         DriftSqlType.string,
         data['${effectivePrefix}final_punct'],
       )!,
+      cueText: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cue_text'],
+      )!,
+      cueTranslationNative: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cue_translation_native'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      )!,
       answerText: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}answer_text'],
@@ -2683,6 +3129,9 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
   final List<String> bankPool;
   final List<String> tokens;
   final String finalPunct;
+  final String cueText;
+  final String cueTranslationNative;
+  final String note;
   final String answerText;
   final bool disabled;
   const QuestionRow({
@@ -2703,6 +3152,9 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
     required this.bankPool,
     required this.tokens,
     required this.finalPunct,
+    required this.cueText,
+    required this.cueTranslationNative,
+    required this.note,
     required this.answerText,
     required this.disabled,
   });
@@ -2744,6 +3196,9 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
       );
     }
     map['final_punct'] = Variable<String>(finalPunct);
+    map['cue_text'] = Variable<String>(cueText);
+    map['cue_translation_native'] = Variable<String>(cueTranslationNative);
+    map['note'] = Variable<String>(note);
     map['answer_text'] = Variable<String>(answerText);
     map['disabled'] = Variable<bool>(disabled);
     return map;
@@ -2770,6 +3225,9 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
       bankPool: Value(bankPool),
       tokens: Value(tokens),
       finalPunct: Value(finalPunct),
+      cueText: Value(cueText),
+      cueTranslationNative: Value(cueTranslationNative),
+      note: Value(note),
       answerText: Value(answerText),
       disabled: Value(disabled),
     );
@@ -2798,6 +3256,11 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
       bankPool: serializer.fromJson<List<String>>(json['bankPool']),
       tokens: serializer.fromJson<List<String>>(json['tokens']),
       finalPunct: serializer.fromJson<String>(json['finalPunct']),
+      cueText: serializer.fromJson<String>(json['cueText']),
+      cueTranslationNative: serializer.fromJson<String>(
+        json['cueTranslationNative'],
+      ),
+      note: serializer.fromJson<String>(json['note']),
       answerText: serializer.fromJson<String>(json['answerText']),
       disabled: serializer.fromJson<bool>(json['disabled']),
     );
@@ -2823,6 +3286,9 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
       'bankPool': serializer.toJson<List<String>>(bankPool),
       'tokens': serializer.toJson<List<String>>(tokens),
       'finalPunct': serializer.toJson<String>(finalPunct),
+      'cueText': serializer.toJson<String>(cueText),
+      'cueTranslationNative': serializer.toJson<String>(cueTranslationNative),
+      'note': serializer.toJson<String>(note),
       'answerText': serializer.toJson<String>(answerText),
       'disabled': serializer.toJson<bool>(disabled),
     };
@@ -2846,6 +3312,9 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
     List<String>? bankPool,
     List<String>? tokens,
     String? finalPunct,
+    String? cueText,
+    String? cueTranslationNative,
+    String? note,
     String? answerText,
     bool? disabled,
   }) => QuestionRow(
@@ -2866,6 +3335,9 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
     bankPool: bankPool ?? this.bankPool,
     tokens: tokens ?? this.tokens,
     finalPunct: finalPunct ?? this.finalPunct,
+    cueText: cueText ?? this.cueText,
+    cueTranslationNative: cueTranslationNative ?? this.cueTranslationNative,
+    note: note ?? this.note,
     answerText: answerText ?? this.answerText,
     disabled: disabled ?? this.disabled,
   );
@@ -2896,6 +3368,11 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
       finalPunct: data.finalPunct.present
           ? data.finalPunct.value
           : this.finalPunct,
+      cueText: data.cueText.present ? data.cueText.value : this.cueText,
+      cueTranslationNative: data.cueTranslationNative.present
+          ? data.cueTranslationNative.value
+          : this.cueTranslationNative,
+      note: data.note.present ? data.note.value : this.note,
       answerText: data.answerText.present
           ? data.answerText.value
           : this.answerText,
@@ -2923,6 +3400,9 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
           ..write('bankPool: $bankPool, ')
           ..write('tokens: $tokens, ')
           ..write('finalPunct: $finalPunct, ')
+          ..write('cueText: $cueText, ')
+          ..write('cueTranslationNative: $cueTranslationNative, ')
+          ..write('note: $note, ')
           ..write('answerText: $answerText, ')
           ..write('disabled: $disabled')
           ..write(')'))
@@ -2930,7 +3410,7 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     type,
     sentenceId,
@@ -2948,9 +3428,12 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
     bankPool,
     tokens,
     finalPunct,
+    cueText,
+    cueTranslationNative,
+    note,
     answerText,
     disabled,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2972,6 +3455,9 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
           other.bankPool == this.bankPool &&
           other.tokens == this.tokens &&
           other.finalPunct == this.finalPunct &&
+          other.cueText == this.cueText &&
+          other.cueTranslationNative == this.cueTranslationNative &&
+          other.note == this.note &&
           other.answerText == this.answerText &&
           other.disabled == this.disabled);
 }
@@ -2994,6 +3480,9 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
   final Value<List<String>> bankPool;
   final Value<List<String>> tokens;
   final Value<String> finalPunct;
+  final Value<String> cueText;
+  final Value<String> cueTranslationNative;
+  final Value<String> note;
   final Value<String> answerText;
   final Value<bool> disabled;
   final Value<int> rowid;
@@ -3015,6 +3504,9 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     this.bankPool = const Value.absent(),
     this.tokens = const Value.absent(),
     this.finalPunct = const Value.absent(),
+    this.cueText = const Value.absent(),
+    this.cueTranslationNative = const Value.absent(),
+    this.note = const Value.absent(),
     this.answerText = const Value.absent(),
     this.disabled = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -3037,6 +3529,9 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     this.bankPool = const Value.absent(),
     this.tokens = const Value.absent(),
     this.finalPunct = const Value.absent(),
+    this.cueText = const Value.absent(),
+    this.cueTranslationNative = const Value.absent(),
+    this.note = const Value.absent(),
     this.answerText = const Value.absent(),
     this.disabled = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -3063,6 +3558,9 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     Expression<String>? bankPool,
     Expression<String>? tokens,
     Expression<String>? finalPunct,
+    Expression<String>? cueText,
+    Expression<String>? cueTranslationNative,
+    Expression<String>? note,
     Expression<String>? answerText,
     Expression<bool>? disabled,
     Expression<int>? rowid,
@@ -3085,6 +3583,10 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
       if (bankPool != null) 'bank_pool': bankPool,
       if (tokens != null) 'tokens': tokens,
       if (finalPunct != null) 'final_punct': finalPunct,
+      if (cueText != null) 'cue_text': cueText,
+      if (cueTranslationNative != null)
+        'cue_translation_native': cueTranslationNative,
+      if (note != null) 'note': note,
       if (answerText != null) 'answer_text': answerText,
       if (disabled != null) 'disabled': disabled,
       if (rowid != null) 'rowid': rowid,
@@ -3109,6 +3611,9 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     Value<List<String>>? bankPool,
     Value<List<String>>? tokens,
     Value<String>? finalPunct,
+    Value<String>? cueText,
+    Value<String>? cueTranslationNative,
+    Value<String>? note,
     Value<String>? answerText,
     Value<bool>? disabled,
     Value<int>? rowid,
@@ -3131,6 +3636,9 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
       bankPool: bankPool ?? this.bankPool,
       tokens: tokens ?? this.tokens,
       finalPunct: finalPunct ?? this.finalPunct,
+      cueText: cueText ?? this.cueText,
+      cueTranslationNative: cueTranslationNative ?? this.cueTranslationNative,
+      note: note ?? this.note,
       answerText: answerText ?? this.answerText,
       disabled: disabled ?? this.disabled,
       rowid: rowid ?? this.rowid,
@@ -3199,6 +3707,17 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     if (finalPunct.present) {
       map['final_punct'] = Variable<String>(finalPunct.value);
     }
+    if (cueText.present) {
+      map['cue_text'] = Variable<String>(cueText.value);
+    }
+    if (cueTranslationNative.present) {
+      map['cue_translation_native'] = Variable<String>(
+        cueTranslationNative.value,
+      );
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
     if (answerText.present) {
       map['answer_text'] = Variable<String>(answerText.value);
     }
@@ -3231,6 +3750,9 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
           ..write('bankPool: $bankPool, ')
           ..write('tokens: $tokens, ')
           ..write('finalPunct: $finalPunct, ')
+          ..write('cueText: $cueText, ')
+          ..write('cueTranslationNative: $cueTranslationNative, ')
+          ..write('note: $note, ')
           ..write('answerText: $answerText, ')
           ..write('disabled: $disabled, ')
           ..write('rowid: $rowid')
@@ -6089,6 +6611,13 @@ typedef $$SentencesTableCreateCompanionBuilder =
       Value<List<String>> meaningOptionsNative,
       Value<String> paraphraseEn,
       Value<List<String>> paraphraseOptionsEn,
+      Value<String> cueEn,
+      Value<String> cueTranslationNative,
+      Value<List<String>> replyDistractorsEn,
+      Value<String> registerSituationNative,
+      Value<List<String>> registerOptionsEn,
+      Value<List<String>> registerWhyNative,
+      Value<int> registerCorrect,
       Value<bool> disabled,
       Value<int> rowid,
     });
@@ -6108,6 +6637,13 @@ typedef $$SentencesTableUpdateCompanionBuilder =
       Value<List<String>> meaningOptionsNative,
       Value<String> paraphraseEn,
       Value<List<String>> paraphraseOptionsEn,
+      Value<String> cueEn,
+      Value<String> cueTranslationNative,
+      Value<List<String>> replyDistractorsEn,
+      Value<String> registerSituationNative,
+      Value<List<String>> registerOptionsEn,
+      Value<List<String>> registerWhyNative,
+      Value<int> registerCorrect,
       Value<bool> disabled,
       Value<int> rowid,
     });
@@ -6192,6 +6728,44 @@ class $$SentencesTableFilterComposer
   get paraphraseOptionsEn => $composableBuilder(
     column: $table.paraphraseOptionsEn,
     builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<String> get cueEn => $composableBuilder(
+    column: $table.cueEn,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cueTranslationNative => $composableBuilder(
+    column: $table.cueTranslationNative,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<List<String>, List<String>, String>
+  get replyDistractorsEn => $composableBuilder(
+    column: $table.replyDistractorsEn,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<String> get registerSituationNative => $composableBuilder(
+    column: $table.registerSituationNative,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<List<String>, List<String>, String>
+  get registerOptionsEn => $composableBuilder(
+    column: $table.registerOptionsEn,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<List<String>, List<String>, String>
+  get registerWhyNative => $composableBuilder(
+    column: $table.registerWhyNative,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<int> get registerCorrect => $composableBuilder(
+    column: $table.registerCorrect,
+    builder: (column) => ColumnFilters(column),
   );
 
   ColumnFilters<bool> get disabled => $composableBuilder(
@@ -6279,6 +6853,41 @@ class $$SentencesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get cueEn => $composableBuilder(
+    column: $table.cueEn,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get cueTranslationNative => $composableBuilder(
+    column: $table.cueTranslationNative,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get replyDistractorsEn => $composableBuilder(
+    column: $table.replyDistractorsEn,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get registerSituationNative => $composableBuilder(
+    column: $table.registerSituationNative,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get registerOptionsEn => $composableBuilder(
+    column: $table.registerOptionsEn,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get registerWhyNative => $composableBuilder(
+    column: $table.registerWhyNative,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get registerCorrect => $composableBuilder(
+    column: $table.registerCorrect,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get disabled => $composableBuilder(
     column: $table.disabled,
     builder: (column) => ColumnOrderings(column),
@@ -6350,6 +6959,42 @@ class $$SentencesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get cueEn =>
+      $composableBuilder(column: $table.cueEn, builder: (column) => column);
+
+  GeneratedColumn<String> get cueTranslationNative => $composableBuilder(
+    column: $table.cueTranslationNative,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<List<String>, String>
+  get replyDistractorsEn => $composableBuilder(
+    column: $table.replyDistractorsEn,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get registerSituationNative => $composableBuilder(
+    column: $table.registerSituationNative,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<List<String>, String>
+  get registerOptionsEn => $composableBuilder(
+    column: $table.registerOptionsEn,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<List<String>, String>
+  get registerWhyNative => $composableBuilder(
+    column: $table.registerWhyNative,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get registerCorrect => $composableBuilder(
+    column: $table.registerCorrect,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get disabled =>
       $composableBuilder(column: $table.disabled, builder: (column) => column);
 }
@@ -6399,6 +7044,13 @@ class $$SentencesTableTableManager
                 Value<List<String>> meaningOptionsNative = const Value.absent(),
                 Value<String> paraphraseEn = const Value.absent(),
                 Value<List<String>> paraphraseOptionsEn = const Value.absent(),
+                Value<String> cueEn = const Value.absent(),
+                Value<String> cueTranslationNative = const Value.absent(),
+                Value<List<String>> replyDistractorsEn = const Value.absent(),
+                Value<String> registerSituationNative = const Value.absent(),
+                Value<List<String>> registerOptionsEn = const Value.absent(),
+                Value<List<String>> registerWhyNative = const Value.absent(),
+                Value<int> registerCorrect = const Value.absent(),
                 Value<bool> disabled = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SentencesCompanion(
@@ -6416,6 +7068,13 @@ class $$SentencesTableTableManager
                 meaningOptionsNative: meaningOptionsNative,
                 paraphraseEn: paraphraseEn,
                 paraphraseOptionsEn: paraphraseOptionsEn,
+                cueEn: cueEn,
+                cueTranslationNative: cueTranslationNative,
+                replyDistractorsEn: replyDistractorsEn,
+                registerSituationNative: registerSituationNative,
+                registerOptionsEn: registerOptionsEn,
+                registerWhyNative: registerWhyNative,
+                registerCorrect: registerCorrect,
                 disabled: disabled,
                 rowid: rowid,
               ),
@@ -6435,6 +7094,13 @@ class $$SentencesTableTableManager
                 Value<List<String>> meaningOptionsNative = const Value.absent(),
                 Value<String> paraphraseEn = const Value.absent(),
                 Value<List<String>> paraphraseOptionsEn = const Value.absent(),
+                Value<String> cueEn = const Value.absent(),
+                Value<String> cueTranslationNative = const Value.absent(),
+                Value<List<String>> replyDistractorsEn = const Value.absent(),
+                Value<String> registerSituationNative = const Value.absent(),
+                Value<List<String>> registerOptionsEn = const Value.absent(),
+                Value<List<String>> registerWhyNative = const Value.absent(),
+                Value<int> registerCorrect = const Value.absent(),
                 Value<bool> disabled = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SentencesCompanion.insert(
@@ -6452,6 +7118,13 @@ class $$SentencesTableTableManager
                 meaningOptionsNative: meaningOptionsNative,
                 paraphraseEn: paraphraseEn,
                 paraphraseOptionsEn: paraphraseOptionsEn,
+                cueEn: cueEn,
+                cueTranslationNative: cueTranslationNative,
+                replyDistractorsEn: replyDistractorsEn,
+                registerSituationNative: registerSituationNative,
+                registerOptionsEn: registerOptionsEn,
+                registerWhyNative: registerWhyNative,
+                registerCorrect: registerCorrect,
                 disabled: disabled,
                 rowid: rowid,
               ),
@@ -6499,6 +7172,9 @@ typedef $$QuestionsTableCreateCompanionBuilder =
       Value<List<String>> bankPool,
       Value<List<String>> tokens,
       Value<String> finalPunct,
+      Value<String> cueText,
+      Value<String> cueTranslationNative,
+      Value<String> note,
       Value<String> answerText,
       Value<bool> disabled,
       Value<int> rowid,
@@ -6522,6 +7198,9 @@ typedef $$QuestionsTableUpdateCompanionBuilder =
       Value<List<String>> bankPool,
       Value<List<String>> tokens,
       Value<String> finalPunct,
+      Value<String> cueText,
+      Value<String> cueTranslationNative,
+      Value<String> note,
       Value<String> answerText,
       Value<bool> disabled,
       Value<int> rowid,
@@ -6622,6 +7301,21 @@ class $$QuestionsTableFilterComposer
 
   ColumnFilters<String> get finalPunct => $composableBuilder(
     column: $table.finalPunct,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cueText => $composableBuilder(
+    column: $table.cueText,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cueTranslationNative => $composableBuilder(
+    column: $table.cueTranslationNative,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6730,6 +7424,21 @@ class $$QuestionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get cueText => $composableBuilder(
+    column: $table.cueText,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get cueTranslationNative => $composableBuilder(
+    column: $table.cueTranslationNative,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get answerText => $composableBuilder(
     column: $table.answerText,
     builder: (column) => ColumnOrderings(column),
@@ -6810,6 +7519,17 @@ class $$QuestionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get cueText =>
+      $composableBuilder(column: $table.cueText, builder: (column) => column);
+
+  GeneratedColumn<String> get cueTranslationNative => $composableBuilder(
+    column: $table.cueTranslationNative,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
   GeneratedColumn<String> get answerText => $composableBuilder(
     column: $table.answerText,
     builder: (column) => column,
@@ -6867,6 +7587,9 @@ class $$QuestionsTableTableManager
                 Value<List<String>> bankPool = const Value.absent(),
                 Value<List<String>> tokens = const Value.absent(),
                 Value<String> finalPunct = const Value.absent(),
+                Value<String> cueText = const Value.absent(),
+                Value<String> cueTranslationNative = const Value.absent(),
+                Value<String> note = const Value.absent(),
                 Value<String> answerText = const Value.absent(),
                 Value<bool> disabled = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -6888,6 +7611,9 @@ class $$QuestionsTableTableManager
                 bankPool: bankPool,
                 tokens: tokens,
                 finalPunct: finalPunct,
+                cueText: cueText,
+                cueTranslationNative: cueTranslationNative,
+                note: note,
                 answerText: answerText,
                 disabled: disabled,
                 rowid: rowid,
@@ -6911,6 +7637,9 @@ class $$QuestionsTableTableManager
                 Value<List<String>> bankPool = const Value.absent(),
                 Value<List<String>> tokens = const Value.absent(),
                 Value<String> finalPunct = const Value.absent(),
+                Value<String> cueText = const Value.absent(),
+                Value<String> cueTranslationNative = const Value.absent(),
+                Value<String> note = const Value.absent(),
                 Value<String> answerText = const Value.absent(),
                 Value<bool> disabled = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -6932,6 +7661,9 @@ class $$QuestionsTableTableManager
                 bankPool: bankPool,
                 tokens: tokens,
                 finalPunct: finalPunct,
+                cueText: cueText,
+                cueTranslationNative: cueTranslationNative,
+                note: note,
                 answerText: answerText,
                 disabled: disabled,
                 rowid: rowid,

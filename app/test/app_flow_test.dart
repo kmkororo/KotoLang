@@ -116,6 +116,93 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
+  testWidgets('a "say it" question offers no way to hear the answer first',
+      (tester) async {
+    // The one thing that makes this format different from reorder. If the
+    // play button were on screen the learner could simply listen and copy,
+    // and the question would stop testing recall.
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+      await r.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await r.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'meaning A')]),
+        uiLanguage: 'en',
+      );
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    // Walk sessions until the format comes up; the mix is deliberately varied.
+    var guard = 0;
+    while (find.text(s.t('typeProduce')).evaluate().isEmpty && guard++ < 25) {
+      if (find.byType(QuizScreen).evaluate().isNotEmpty) {
+        // The quiz screen leaves by its close icon, behind a confirmation.
+        await tester.tap(find.byIcon(Icons.close));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(s.t('quitConfirm')));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text(s.t('justOne')));
+      await tester.pumpAndSettle();
+    }
+
+    expect(find.text(s.t('typeProduce')), findsOneWidget,
+        reason: 'the produce format never came up in $guard tries');
+    expect(find.text(s.t('playAgain')), findsNothing);
+    expect(find.text(s.t('promptProduce')), findsOneWidget);
+    // The meaning is the prompt, so it has to be on screen.
+    final sentence = (await repo.sentences()).first;
+    expect(find.textContaining(sentence.translationNative.split(' ').first),
+        findsWidgets);
+  });
+
+  testWidgets('a "phrasing" question states the situation and explains itself',
+      (tester) async {
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+      await r.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await r.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'meaning A')]),
+        uiLanguage: 'en',
+      );
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    var guard = 0;
+    while (find.text(s.t('typeRegister')).evaluate().isEmpty && guard++ < 40) {
+      if (find.byType(QuizScreen).evaluate().isNotEmpty) {
+        await tester.tap(find.byIcon(Icons.close));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(s.t('quitConfirm')));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text(s.t('justOne')));
+      await tester.pumpAndSettle();
+    }
+
+    expect(find.text(s.t('typeRegister')), findsOneWidget,
+        reason: 'the register format never came up in $guard tries');
+
+    // Who you are speaking to is the entire question, so it must be stated.
+    final sentence =
+        (await repo.sentences()).firstWhere((x) => x.registerCorrect >= 0);
+    expect(find.text(sentence.registerSituationNative), findsOneWidget);
+    // It is a question about phrasing, not about listening.
+    expect(find.text(s.t('playAgain')), findsNothing);
+
+    // Pick the phrasing that fits, by its text rather than its position.
+    await tester.tap(find.text(sentence.registerOptionsEn[sentence.registerCorrect]));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, s.t('answerLabel')));
+    await tester.pumpAndSettle();
+
+    // The reason is the teaching. Without it the question is a coin toss.
+    expect(find.textContaining(s.t('registerWhyLabel')), findsOneWidget);
+  });
+
   testWidgets('answering a multiple-choice question records it and shows why',
       (tester) async {
     late Repository repository;

@@ -47,10 +47,14 @@ RULES
 /// most assistants truncate. Material is therefore built up a batch at a time,
 /// each one small enough to copy in one tap. Repeating the request adds to the
 /// same area — the importer merges and de-duplicates.
+/// Counts came down when the conversation fields were added: each sentence now
+/// carries a cue, its reading, wrong replies and sometimes a register block,
+/// which is roughly twice the JSON it used to be. Asking for the old numbers
+/// would put the reply straight back past what a phone can copy.
 enum BatchSize {
-  small(6, 10),
-  standard(10, 16),
-  large(20, 30);
+  small(4, 5),
+  standard(6, 8),
+  large(10, 14);
 
   final int items;
   final int sentences;
@@ -170,18 +174,34 @@ WHAT TO PRODUCE
    come up constantly in this area's conversations.
 2. sentences — natural English using those items. Exactly ${batch.sentences}.
 
-QUALITY BAR — THIS MATTERS MOST
+THESE ARE SPOKEN TURNS, NOT WRITTEN SENTENCES — THIS MATTERS MOST
+Every sentence must be something this person would **say out loud to another
+person**, in a real exchange. Not a line from a document, a report or a status
+field. The test: could you say it to someone's face and expect an answer?
+
+  Good  "Could you check the revision status before we sign off?"
+  Good  "I'd rather not commit to that date until we've seen the analysis."
+  Bad   "The revision status has not been recorded yet."   <- a status field
+  Bad   "The repair policy defines the applicable limits." <- a definition
+
+Lean hard on the moves conversation is actually made of: asking for something,
+declining, hedging, disagreeing politely, checking you understood, correcting
+a misunderstanding, giving bad news, buying time, agreeing with a condition.
+
+QUALITY BAR
 - Every sentence must be grammatical and must sound like something a real
   practitioner would actually say.
 - Do not cram terminology in. One or two target expressions per sentence.
 - This is listening material: 6 to 18 words per sentence.
 - Do not pad by rewording the same sentence. Each one must earn its place.
-- Vary the situation: statement, question, request, confirmation, explanation,
-  report, warning, opinion, instruction, discussion.
 - Aim at CEFR $level. Specialist vocabulary may be hard, but do not make the
   sentence structure harder than it needs to be.
 - Give each learning item 1 to 2 sentences in genuinely different situations.
 - If the area is thin, produce fewer items rather than padding.
+
+speech_act — use a real label, it is not decoration
+One of: request, offer, refusal, agreement, disagreement, confirmation,
+clarification, apology, warning, suggestion, question, report, instruction.
 
 distractors_native
 Each learning item needs 3 wrong-but-plausible meanings written in $native.
@@ -215,6 +235,39 @@ acts, shift the tense, change the strength, add or drop a condition.
 A wholly unrelated option makes the question trivial. Never include an option
 that means the same as translation_native.
 
+cue_en / cue_translation_native — THE MOST VALUABLE FIELD HERE
+What does the other person say, that this sentence is the answer to?
+
+This turns the sentence from something to understand into something to *say
+back*, which is the part of speaking that fails in real life. Write the other
+person's line in English, plus its reading in $native.
+
+- Give a cue to every sentence that could plausibly be a reply. Aim for most
+  of them.
+- Use "" only for a sentence that genuinely opens an exchange.
+- The cue must not be a rephrasing of the sentence itself.
+- Keep it short: one spoken line, 4 to 14 words.
+
+reply_distractors_en
+Three replies to that same cue that a learner might pick but that would land
+badly. They must be correct English and about the same subject — the mistake
+should be the *move*, not the grammar.
+- Wrong move: answering a yes/no question with an unrelated request.
+- Wrong stance: agreeing when the situation calls for pushing back.
+- Wrong footing: too blunt, or too vague to be useful.
+Never write a distractor that would also be a reasonable reply.
+
+register — attach to roughly a third of the sentences, where politeness matters
+The same intent said three ways, with only one fitting the stated relationship.
+This is the part of English that fails silently: the grammar is right, the
+meaning is right, and the effect is wrong.
+- situation_native: who is being spoken to and how well you know them, in $native.
+- variants: exactly 3. All say the same thing. Exactly one has "fits": true.
+- why_native: one short line per variant, in $native, saying what it does to
+  the listener. This is the teaching — write it for all three, not just the
+  right one.
+Skip the block entirely for a sentence where phrasing genuinely does not matter.
+
 ${_commonRules(native)}
 
 OUTPUT SHAPE
@@ -243,27 +296,48 @@ OUTPUT SHAPE
   ],
   "sentences": [
     {
-      "text": "We need to review the repair policy before proceeding.",
+      "text": "Could we go over the repair policy before we sign anything?",
       "translation_native": "the sentence translated into $native",
       "level": "B1",
       "context": "design review",
-      "speech_act": "statement",
+      "speech_act": "request",
       "targets": ["repair policy"],
       "naturalness": 5,
-      "paraphrase_en": "We should go over the rules for repairs before moving on.",
-      "paraphrase_options_en": [
-        "We can move on without going over the rules for repairs.",
-        "The rules for repairs will be reviewed by someone else.",
-        "The rules for repairs were already reviewed last week."
+      "cue_en": "Everything looks fine to me — shall we sign it off?",
+      "cue_translation_native": "the cue translated into $native",
+      "reply_distractors_en": [
+        "Yes, go ahead and send it to the supplier tonight.",
+        "I have not looked at any of the drawings yet.",
+        "The repair policy was withdrawn earlier this year."
       ],
-      "meaning_options_native": ["near miss 1", "near miss 2", "near miss 3"]
+      "paraphrase_en": "Can we look at the rules for repairs first, before signing?",
+      "paraphrase_options_en": [
+        "We can sign it now and look at the rules for repairs later.",
+        "Someone else will look at the rules for repairs for us.",
+        "The rules for repairs were already gone through last week."
+      ],
+      "meaning_options_native": ["near miss 1", "near miss 2", "near miss 3"],
+      "register": {
+        "situation_native": "who you are speaking to, and how well you know them, in $native",
+        "variants": [
+          {"text": "Could we go over the repair policy first?", "fits": true,
+           "why_native": "why this one lands well, in $native"},
+          {"text": "Go over the repair policy first.", "fits": false,
+           "why_native": "why this one is too blunt here, in $native"},
+          {"text": "You need to go over the repair policy first.", "fits": false,
+           "why_native": "why this one sounds like an order, in $native"}
+        ]
+      }
     }
   ]
 }
 
 NOTE: "targets" must contain only learning item texts that literally appear in
 that sentence, matched exactly. Never list an expression the sentence does not
-contain.''';
+contain.
+
+NOTE: "register" is optional per sentence — include it on about a third of
+them. "cue_en" should be on most of them; use "" only for an opening line.''';
 }
 
 // -------------------------------------------------------------------- 3. audit
@@ -340,11 +414,19 @@ Keep to the amounts below so the reply fits in a single message.
 Follow the same "material" format and the same quality bar as a normal material
 request:
 - exactly ${batch.items} learning_items and exactly ${batch.sentences} sentences
-- 6 to 18 words per sentence, varied situations, no padding
+- every sentence must be a **spoken turn** — something said to another person
+  and expecting an answer, never a line from a document or a status field
+- 6 to 18 words per sentence, varied speech acts, no padding
 - "targets" must appear literally in the sentence
 - 3 distractors_native per learning item, written in $native
 - paraphrase_en plus 3 paraphrase_options_en per sentence, all in English
 - 3 meaning_options_native per sentence, written in $native
+- cue_en plus cue_translation_native on most sentences: the line the other
+  person says that this sentence answers
+- reply_distractors_en: 3 replies to that cue that are correct English but the
+  wrong move
+- a "register" block on about a third of them: 3 ways to say the same thing,
+  exactly one marked "fits": true, each with a why_native written in $native
 
 ${_commonRules(native)}
 
@@ -357,9 +439,12 @@ OUTPUT SHAPE
   "learning_items": [ { "text": "", "type": "term", "meaning_native": "", "priority": 3,
       "confidence": 0.8, "related_terms": [], "contexts": [], "distractors_native": [] } ],
   "sentences": [ { "text": "", "translation_native": "", "level": "$level", "context": "",
-      "speech_act": "statement", "targets": [], "naturalness": 5,
+      "speech_act": "request", "targets": [], "naturalness": 5,
+      "cue_en": "", "cue_translation_native": "", "reply_distractors_en": [],
       "paraphrase_en": "", "paraphrase_options_en": [],
-      "meaning_options_native": [] } ]
+      "meaning_options_native": [],
+      "register": { "situation_native": "",
+        "variants": [ { "text": "", "fits": true, "why_native": "" } ] } } ]
 }
 
 THE NEW AREA
