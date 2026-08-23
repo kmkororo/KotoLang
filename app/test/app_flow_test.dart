@@ -7,6 +7,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/native.dart';
@@ -15,6 +16,7 @@ import 'package:kotolang/app.dart';
 import 'package:kotolang/core/l10n/strings.dart';
 import 'package:kotolang/data/database.dart';
 import 'package:kotolang/data/repository.dart';
+import 'package:kotolang/features/ai_links.dart';
 import 'package:kotolang/features/quiz_screen.dart';
 
 import 'paste_test.dart' show materialReply;
@@ -75,7 +77,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(await repo.loadUiLanguage(), 'ja');
-    expect(find.textContaining(S('ja').t('copyPrompt')), findsWidgets);
+    expect(find.text(S('ja').t('goToPaste')), findsOneWidget);
   });
 
   testWidgets('a learner with material lands on home and can start a session',
@@ -172,12 +174,82 @@ void main() {
     final s = S('en');
     // Language is chosen but nothing else exists: the welcome screen, never a
     // home screen with nothing on it.
-    expect(find.text(s.t('copyPrompt')), findsOneWidget);
+    expect(find.text(s.t('welcomeTitle')), findsOneWidget);
+    expect(find.text(s.t('goToPaste')), findsOneWidget);
     expect(find.text(s.t('startLearning')), findsNothing);
+  });
+
+  testWidgets('the profile step copies and pastes on the one screen',
+      (tester) async {
+    // Copying used to be on the welcome screen and pasting on the next one,
+    // which left people holding a prompt with nowhere obvious to put it.
+    _tallScreen(tester);
+    final (db, _) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    await tester.tap(find.text(s.t('goToPaste')));
+    await tester.pumpAndSettle();
+
+    expect(find.text(s.t('step1Title')), findsOneWidget);
+    expect(find.text(s.t('copyPrompt')), findsOneWidget);
+    expect(find.text(s.t('openAiTitle')), findsOneWidget);
+    for (final ai in aiServices) {
+      expect(find.text(ai.name), findsOneWidget, reason: ai.name);
+    }
+    expect(find.text(s.t('step2Title')), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text(s.t('loadProfile')), findsOneWidget);
+  });
+
+  testWidgets('tapping an assistant copies the prompt before opening it',
+      (tester) async {
+    _tallScreen(tester);
+    final (db, _) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+    });
+    addTearDown(db.close);
+
+    String? copied;
+    final launched = <String>[];
+    final messenger = tester.binding.defaultBinaryMessenger;
+    const launcher = MethodChannel('plugins.flutter.io/url_launcher');
+
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map)['text'] as String?;
+      }
+      return null;
+    });
+    messenger.setMockMethodCallHandler(launcher, (call) async {
+      final args = call.arguments;
+      if (args is Map && args['url'] is String) launched.add(args['url'] as String);
+      return true;
+    });
+    addTearDown(() {
+      messenger.setMockMethodCallHandler(SystemChannels.platform, null);
+      messenger.setMockMethodCallHandler(launcher, null);
+    });
+
+    await tester.tap(find.text(S('en').t('goToPaste')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('ChatGPT'));
+    await tester.pumpAndSettle();
+
+    // The order is the whole point: the prompt must already be on the
+    // clipboard by the time the assistant's input box appears.
+    expect(copied, isNotNull, reason: 'the prompt was never copied');
+    expect(copied, contains('```json'));
+    expect(copied, contains('schema_version'));
+    expect(launched, contains('https://chatgpt.com/'));
   });
 
   testWidgets('realms exist but no material yet goes to the material step',
       (tester) async {
+    _tallScreen(tester);
     final (db, _) = await pumpApp(tester, seed: (r) async {
       await r.saveUiLanguage('en');
       await r.importProfile(profileJson(['Work']), uiLanguage: 'en');
@@ -185,11 +257,12 @@ void main() {
     addTearDown(db.close);
 
     final s = S('en');
-    // The screen title is the anchor. The import button sits below the copy
-    // guidance and the paste box, so it has to be scrolled to.
     expect(find.text(s.t('materialTitle')), findsOneWidget);
-    await tester.scrollUntilVisible(find.text(s.t('addQuestions')), 200,
-        scrollable: find.byType(Scrollable).last);
+    // Both halves of the job are on this one screen: copy, then paste.
+    expect(find.text(s.t('step1Title')), findsOneWidget);
+    expect(find.text(s.t('copyPrompt')), findsOneWidget);
+    expect(find.text(s.t('openAiTitle')), findsOneWidget);
+    expect(find.text(s.t('step2Title')), findsOneWidget);
     expect(find.text(s.t('addQuestions')), findsOneWidget);
   });
 

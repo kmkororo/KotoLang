@@ -91,7 +91,7 @@ genuinely differs per device.
 ## 5. Run the tests
 
 ```bash
-flutter test                                   # 96 host tests, no device needed
+flutter test                                   # 98 host tests, no device needed
 flutter test integration_test/device_test.dart # on the connected iPhone
 ```
 

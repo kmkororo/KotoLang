@@ -15,6 +15,7 @@ import '../core/l10n/languages.dart';
 import '../core/l10n/strings.dart';
 import '../domain/models.dart';
 import '../domain/prompts.dart' as prompts;
+import 'ai_links.dart';
 import 'paste_box.dart';
 
 // ------------------------------------------------------------ shared pieces
@@ -41,6 +42,42 @@ class _Page extends StatelessWidget {
 Future<void> copyToClipboard(BuildContext context, String text, String toast) async {
   await Clipboard.setData(ClipboardData(text: text));
   if (context.mounted) showToast(context, toast);
+}
+
+/// "1 — Copy the prompt". Copying and pasting live on one screen, so the two
+/// halves are numbered: without that the page reads as an undifferentiated
+/// pile of buttons and it is not obvious which comes first.
+class _StepHeader extends StatelessWidget {
+  final int n;
+  final String title;
+  const _StepHeader(this.n, this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 13,
+            backgroundColor: theme.colorScheme.primary,
+            child: Text('$n',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onPrimary)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(title,
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // -------------------------------------------------------- 1. language picker
@@ -229,17 +266,14 @@ class WelcomeScreen extends ConsumerWidget {
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
               const SizedBox(height: 14),
+              // One action only. Copying used to happen here and pasting on
+              // the next screen, which left people holding a prompt with no
+              // idea where it was meant to go.
               FilledButton.icon(
-                icon: const Icon(Icons.copy_all),
-                onPressed: () => copyToClipboard(
-                    context, prompts.profilePrompt(uiLanguage: lang), s.t('copied')),
-                label: Text(s.t('copyPrompt')),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
+                icon: const Icon(Icons.arrow_forward),
                 onPressed: () => Navigator.push(context,
                     MaterialPageRoute(builder: (_) => const PasteProfileScreen())),
-                child: Text(s.t('goToPaste')),
+                label: Text(s.t('goToPaste')),
               ),
             ],
           ),
@@ -318,12 +352,35 @@ class _PasteProfileScreenState extends ConsumerState<PasteProfileScreen> {
     final s = ref.watch(stringsProvider);
     final lang = ref.watch(languageProvider) ?? fallbackLanguage;
 
-    return _Page(back: s.t('pasteTitle'), children: [
+    final theme = Theme.of(context);
+    String promptText() => prompts.profilePrompt(uiLanguage: lang);
+
+    // Copying and pasting are two halves of one job, so they belong on one
+    // screen. Splitting them across two was the whole reason the first run was
+    // hard to follow.
+    return _Page(back: s.t('goToPaste'), children: [
+      Text(s.t('useYourAiSub'),
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+      const SizedBox(height: 20),
+
+      _StepHeader(1, s.t('step1Title')),
+      FilledButton.icon(
+        icon: const Icon(Icons.copy_all),
+        onPressed: () => copyToClipboard(context, promptText(), s.t('copied')),
+        label: Text(s.t('copyPrompt')),
+      ),
+      const SizedBox(height: 16),
+      AiLinks(s: s, prompt: () async => promptText()),
+
+      const SizedBox(height: 24),
+      const Divider(),
+      const SizedBox(height: 16),
+
+      _StepHeader(2, s.t('step2Title')),
       Text(s.t('pasteHint'),
-          style: Theme.of(context)
-              .textTheme
-              .bodySmall
-              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
       const SizedBox(height: 12),
       CopyTip(s),
       const SizedBox(height: 12),
@@ -331,7 +388,7 @@ class _PasteProfileScreenState extends ConsumerState<PasteProfileScreen> {
       if (_error != null) ...[
         const SizedBox(height: 12),
         Card(
-          color: Theme.of(context).colorScheme.errorContainer,
+          color: theme.colorScheme.errorContainer,
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
@@ -340,11 +397,10 @@ class _PasteProfileScreenState extends ConsumerState<PasteProfileScreen> {
                 Text(s.t('importFailedTitle'),
                     style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onErrorContainer)),
+                        color: theme.colorScheme.onErrorContainer)),
                 const SizedBox(height: 4),
                 Text(_error!,
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.onErrorContainer)),
+                    style: TextStyle(color: theme.colorScheme.onErrorContainer)),
               ],
             ),
           ),
@@ -357,13 +413,6 @@ class _PasteProfileScreenState extends ConsumerState<PasteProfileScreen> {
             ? const SizedBox(
                 height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
             : Text(s.t('loadProfile')),
-      ),
-      const SizedBox(height: 8),
-      OutlinedButton.icon(
-        icon: const Icon(Icons.copy_all),
-        onPressed: () =>
-            copyToClipboard(context, prompts.profilePrompt(uiLanguage: lang), s.t('copied')),
-        label: Text(s.t('copyPromptAgain')),
       ),
     ]);
   }
@@ -510,11 +559,13 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
   Realm? get _realm =>
       _realms.where((r) => r.id == _realmId).firstOrNull;
 
-  Future<void> _copyPrompt() async {
-    final s = ref.read(stringsProvider);
+  /// Built on demand: it needs the stored expressions so the AI is told what
+  /// not to repeat, and both the copy button and the assistant shortcuts want
+  /// exactly the same text.
+  Future<String> _promptText() async {
     final lang = ref.read(languageProvider) ?? fallbackLanguage;
     final realm = _realm;
-    if (realm == null) return;
+    if (realm == null) return '';
 
     final repo = ref.read(repositoryProvider);
     final profile = await repo.loadProfile();
@@ -523,23 +574,25 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
         .map((i) => i.text)
         .toList();
 
-    if (!mounted) return;
-    await copyToClipboard(
-      context,
-      prompts.materialPrompt(
-        uiLanguage: lang,
-        realmName: realm.name,
-        realmNative: realm.nameNative,
-        level: profile?.englishLevel ?? 'B1',
-        roles: profile?.roles ?? const [],
-        priorities: profile?.learningPriorities ?? const [],
-        contexts: realm.contexts,
-        existingItems: existing,
-        batch: _batch,
-        round: _round,
-      ),
-      s.t('copied'),
+    return prompts.materialPrompt(
+      uiLanguage: lang,
+      realmName: realm.name,
+      realmNative: realm.nameNative,
+      level: profile?.englishLevel ?? 'B1',
+      roles: profile?.roles ?? const [],
+      priorities: profile?.learningPriorities ?? const [],
+      contexts: realm.contexts,
+      existingItems: existing,
+      batch: _batch,
+      round: _round,
     );
+  }
+
+  Future<void> _copyPrompt() async {
+    final s = ref.read(stringsProvider);
+    final text = await _promptText();
+    if (!mounted || text.isEmpty) return;
+    await copyToClipboard(context, text, s.t('copied'));
   }
 
   Future<void> _import() async {
@@ -650,12 +703,20 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
       Text(s.t('batchNote'),
           style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
       const SizedBox(height: 12),
+      _StepHeader(1, s.t('step1Title')),
       FilledButton.icon(
         icon: const Icon(Icons.copy_all),
         onPressed: realm == null ? null : _copyPrompt,
         label: Text(s.t('copyPrompt')),
       ),
       const SizedBox(height: 16),
+      AiLinks(s: s, enabled: realm != null, prompt: _promptText),
+
+      const SizedBox(height: 24),
+      const Divider(),
+      const SizedBox(height: 16),
+
+      _StepHeader(2, s.t('step2Title')),
       CopyTip(s),
       const SizedBox(height: 12),
       PasteBox(controller: _paste, s: s),

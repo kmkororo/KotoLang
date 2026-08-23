@@ -40,6 +40,18 @@ selections are reconciled rather than duplicated (`appendPiece`), and the box
 reports how many sentences it can currently read after every piece, so nobody
 finds out at the end that it did not work.
 
+**Copying and pasting are on one screen.** They are two halves of one job, and
+splitting them across two screens meant handing somebody a prompt with nowhere
+obvious to put it. Both the profile step and the material step now read
+*1 — copy the prompt* / *2 — paste the reply*, top to bottom, on a single page.
+
+**One tap hands the prompt to an assistant.** ChatGPT, Claude, Gemini and
+Copilot each have a shortcut that copies the prompt *and then* opens the app,
+in that order, so the prompt is already on the clipboard when the input box
+appears. Prefilling through a `?q=` URL is deliberately not attempted: the
+prompts run to thousands of characters and would be silently truncated. The
+glyphs are generic on purpose — KotoLang is not affiliated with any of them.
+
 **And on Android, the clipboard can be skipped entirely.** KotoLang registers
 as a share target for `text/plain`, so the reply can be sent to it straight
 from the assistant's own app. This needs no permission — `MainActivity` holds
@@ -85,7 +97,7 @@ Verified working on this machine — `flutter doctor` reports **no issues**.
 ```bash
 cd C:\Users\kmkor\KotoLang\app
 
-flutter test                       # 96 tests
+flutter test                       # 98 tests
 flutter analyze                    # no issues
 flutter run                        # debug on a connected device
 

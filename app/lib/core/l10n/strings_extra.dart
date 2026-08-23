@@ -24,10 +24,15 @@ const catalogueExtra = <String, Map<String, String>>{
     'copyPrompt': 'Copiar prompt',
     'copied': 'Copiado',
     'copyFailed': 'No se pudo copiar; selecciona el texto manualmente',
-    'goToPaste': 'Siguiente: pegar la respuesta',
-    'pasteTitle': 'Pega la respuesta',
+    'goToPaste': 'Crear tu perfil',
     'pasteHint': 'Pégala tal cual. No importa si incluye texto alrededor.',
     'pastePlaceholder': 'Pega aquí la respuesta de la IA',
+    'openAiTitle': 'Abre tu IA',
+    'openAiSub':
+        'Al tocar se copia el prompt y luego se abre la aplicación. Pégalo en la IA y vuelve con la respuesta.',
+    'promptCopiedOpening': 'Prompt copiado: pégalo en {name}',
+    'openFailed':
+        'No se pudo abrir esa aplicación. El prompt ya está copiado: abre la IA tú mismo y pégalo.',
     'copyTipTitle': 'Copiar en el móvil',
     'copyTipBody':
         'La respuesta llega en un solo bloque de código json. Pulsa el botón de copiar del bloque en vez de arrastrar sobre el texto. Si solo consigues una parte, pega lo que tengas, toca «Añadir esta parte», copia el resto y añádelo igual.',
@@ -47,7 +52,6 @@ const catalogueExtra = <String, Map<String, String>>{
         'Cada petición es corta a propósito para que la respuesta quepa en una sola copia. Repítela para añadir más; lo repetido se descarta solo.',
     'sharedTextTitle': 'Recibido de otra aplicación',
     'loadProfile': 'Cargar perfil',
-    'copyPromptAgain': 'Copiar el prompt otra vez',
     'realmsTitle': 'Tus áreas',
     'realmsHint':
         'Empieza con una o dos que te importen más. Podrás añadir más cuando quieras.',
@@ -255,10 +259,15 @@ const catalogueExtra = <String, Map<String, String>>{
     'copyPrompt': 'Copiar prompt',
     'copied': 'Copiado',
     'copyFailed': 'Não foi possível copiar; selecione o texto manualmente',
-    'goToPaste': 'Avançar: colar a resposta',
-    'pasteTitle': 'Cole a resposta',
+    'goToPaste': 'Criar seu perfil',
     'pasteHint': 'Cole exatamente como veio. Texto ao redor não atrapalha.',
     'pastePlaceholder': 'Cole aqui a resposta da IA',
+    'openAiTitle': 'Abra sua IA',
+    'openAiSub':
+        'Ao tocar, o prompt é copiado e o aplicativo é aberto. Cole na IA e volte com a resposta.',
+    'promptCopiedOpening': 'Prompt copiado — cole no {name}',
+    'openFailed':
+        'Não foi possível abrir esse aplicativo. O prompt já está copiado: abra a IA e cole.',
     'copyTipTitle': 'Copiar no celular',
     'copyTipBody':
         'A resposta vem em um único bloco de código json. Toque no botão de copiar do próprio bloco em vez de arrastar sobre o texto. Se vier só uma parte, cole o que conseguiu, toque em “Adicionar esta parte”, copie o resto e adicione do mesmo jeito.',
@@ -278,7 +287,6 @@ const catalogueExtra = <String, Map<String, String>>{
         'Cada pedido é curto de propósito, para a resposta caber em uma cópia só. Repita para acrescentar mais; repetições são descartadas automaticamente.',
     'sharedTextTitle': 'Recebido de outro aplicativo',
     'loadProfile': 'Carregar perfil',
-    'copyPromptAgain': 'Copiar o prompt novamente',
     'realmsTitle': 'Suas áreas',
     'realmsHint':
         'Comece por uma ou duas que mais importam. Dá para incluir outras depois.',
@@ -486,10 +494,15 @@ const catalogueExtra = <String, Map<String, String>>{
     'copyPrompt': 'Copier l’invite',
     'copied': 'Copié',
     'copyFailed': 'Copie impossible — sélectionnez le texte manuellement',
-    'goToPaste': 'Suivant : coller la réponse',
-    'pasteTitle': 'Collez la réponse',
+    'goToPaste': 'Créer votre profil',
     'pasteHint': 'Collez telle quelle. Le texte autour ne gêne pas.',
     'pastePlaceholder': 'Collez ici la réponse de l’IA',
+    'openAiTitle': 'Ouvrir votre IA',
+    'openAiSub':
+        'Un appui copie l’invite puis ouvre l’application. Collez-la dans l’IA et revenez avec la réponse.',
+    'promptCopiedOpening': 'Invite copiée — collez-la dans {name}',
+    'openFailed':
+        'Impossible d’ouvrir cette application. L’invite est copiée : ouvrez l’IA vous-même et collez-la.',
     'copyTipTitle': 'Copier depuis un téléphone',
     'copyTipBody':
         'La réponse arrive dans un seul bloc de code json. Appuyez sur le bouton de copie du bloc plutôt que de faire glisser la sélection. Si vous n’en obtenez qu’une partie, collez ce que vous avez, touchez « Ajouter ce morceau », copiez la suite et ajoutez-la de même.',
@@ -509,7 +522,6 @@ const catalogueExtra = <String, Map<String, String>>{
         'Chaque demande est volontairement courte pour que la réponse tienne en une seule copie. Recommencez pour en ajouter ; les doublons sont écartés automatiquement.',
     'sharedTextTitle': 'Reçu d’une autre application',
     'loadProfile': 'Charger le profil',
-    'copyPromptAgain': 'Copier l’invite à nouveau',
     'realmsTitle': 'Vos domaines',
     'realmsHint':
         'Commencez par un ou deux domaines essentiels. Vous pourrez en ajouter plus tard.',
@@ -718,10 +730,15 @@ const catalogueExtra = <String, Map<String, String>>{
     'copyPrompt': 'Prompt kopieren',
     'copied': 'Kopiert',
     'copyFailed': 'Kopieren nicht möglich — bitte den Text manuell markieren',
-    'goToPaste': 'Weiter: Antwort einfügen',
-    'pasteTitle': 'Antwort einfügen',
+    'goToPaste': 'Profil anlegen',
     'pasteHint': 'Einfach so einfügen, wie die KI geantwortet hat. Umgebender Text stört nicht.',
     'pastePlaceholder': 'Antwort der KI hier einfügen',
+    'openAiTitle': 'KI öffnen',
+    'openAiSub':
+        'Ein Tippen kopiert den Prompt und öffnet dann die App. Füge ihn in der KI ein und komm mit der Antwort zurück.',
+    'promptCopiedOpening': 'Prompt kopiert — füge ihn in {name} ein',
+    'openFailed':
+        'Diese App ließ sich nicht öffnen. Der Prompt ist kopiert: öffne die KI selbst und füge ihn ein.',
     'copyTipTitle': 'Kopieren am Handy',
     'copyTipBody':
         'Die Antwort kommt als ein einziger json-Codeblock. Tippe auf den Kopier-Button am Block, statt über den Text zu wischen. Kommt nur ein Teil an, füge das Erhaltene ein, tippe auf „Diesen Teil hinzufügen“, kopiere den Rest und füge ihn ebenso hinzu.',
@@ -741,7 +758,6 @@ const catalogueExtra = <String, Map<String, String>>{
         'Jede Anfrage ist bewusst klein, damit die Antwort in einen Kopiervorgang passt. Wiederhole sie, um mehr zu ergänzen; Doppeltes wird automatisch übersprungen.',
     'sharedTextTitle': 'Aus einer anderen App erhalten',
     'loadProfile': 'Profil laden',
-    'copyPromptAgain': 'Prompt erneut kopieren',
     'realmsTitle': 'Deine Bereiche',
     'realmsHint':
         'Beginne mit ein oder zwei wichtigen Bereichen. Weitere kannst du jederzeit ergänzen.',
@@ -950,10 +966,13 @@ const catalogueExtra = <String, Map<String, String>>{
     'copyPrompt': '프롬프트 복사',
     'copied': '복사했습니다',
     'copyFailed': '복사하지 못했습니다. 직접 선택해 주세요',
-    'goToPaste': '다음: 답변 붙여넣기',
-    'pasteTitle': '답변을 붙여넣으세요',
+    'goToPaste': '프로필 만들기',
     'pasteHint': '그대로 붙여넣어도 됩니다. 앞뒤에 설명이 있어도 읽어냅니다.',
     'pastePlaceholder': 'AI 답변을 여기에 붙여넣으세요',
+    'openAiTitle': 'AI 열기',
+    'openAiSub': '누르면 프롬프트를 복사한 뒤 앱을 엽니다. AI 입력창에 붙여넣고 답변을 가져오세요.',
+    'promptCopiedOpening': '프롬프트를 복사했습니다. {name}에 붙여넣으세요',
+    'openFailed': '앱을 열지 못했습니다. 프롬프트는 복사되어 있으니 AI를 직접 열어 붙여넣으세요.',
     'copyTipTitle': '휴대폰에서 복사하는 요령',
     'copyTipBody':
         '답변은 json 코드 블록 하나로 옵니다. 글자를 드래그해서 선택하지 말고 블록의 복사 버튼을 누르세요. 일부만 복사되었다면 얻은 만큼 붙여넣고 “이 부분 추가”를 누른 뒤, 나머지를 복사해 같은 방법으로 추가하면 됩니다.',
@@ -970,7 +989,6 @@ const catalogueExtra = <String, Map<String, String>>{
     'batchNote': '답변이 한 번에 복사될 수 있도록 요청을 일부러 짧게 만듭니다. 같은 작업을 반복하면 계속 늘어나며, 중복은 자동으로 걸러집니다.',
     'sharedTextTitle': '다른 앱에서 받았습니다',
     'loadProfile': '프로필 불러오기',
-    'copyPromptAgain': '프롬프트 다시 복사',
     'realmsTitle': '나의 분야',
     'realmsHint': '가장 중요한 1~2개부터 시작하세요. 나중에 언제든 추가할 수 있습니다.',
     'importanceLabel': '중요도 {n}/5',
@@ -1162,10 +1180,13 @@ const catalogueExtra = <String, Map<String, String>>{
     'copyPrompt': '复制提示词',
     'copied': '已复制',
     'copyFailed': '无法复制，请手动选择文本',
-    'goToPaste': '下一步：粘贴回复',
-    'pasteTitle': '粘贴回复',
+    'goToPaste': '创建个人资料',
     'pasteHint': '原样粘贴即可，前后有说明文字也能识别。',
     'pastePlaceholder': '把 AI 的回复粘贴到这里',
+    'openAiTitle': '打开 AI',
+    'openAiSub': '点击后会先复制提示词，再打开对应应用。粘贴给 AI，然后把回复带回来。',
+    'promptCopiedOpening': '提示词已复制，请粘贴到 {name}',
+    'openFailed': '无法打开该应用。提示词已复制，请自行打开 AI 并粘贴。',
     'copyTipTitle': '手机上的复制技巧',
     'copyTipBody':
         '回复会放在一个 json 代码块里。请点代码块自带的复制按钮，不要用手指拖选文字。如果只复制到一部分，就先把拿到的粘贴进来，点「添加这一段」，再复制剩下的、同样添加即可。',
@@ -1182,7 +1203,6 @@ const catalogueExtra = <String, Map<String, String>>{
     'batchNote': '为了让回复能一次复制完，每次请求都刻意做得很短。重复同样的操作就会不断增加，重复内容会自动跳过。',
     'sharedTextTitle': '来自其他应用',
     'loadProfile': '载入档案',
-    'copyPromptAgain': '再次复制提示词',
     'realmsTitle': '你的学习领域',
     'realmsHint': '先从最重要的一两个开始，之后随时可以添加。',
     'importanceLabel': '重要度 {n}/5',
@@ -1375,10 +1395,15 @@ const catalogueExtra = <String, Map<String, String>>{
     'copyPrompt': 'प्रॉम्प्ट कॉपी करें',
     'copied': 'कॉपी हो गया',
     'copyFailed': 'कॉपी नहीं हो सका — कृपया टेक्स्ट खुद चुनें',
-    'goToPaste': 'आगे: जवाब चिपकाएँ',
-    'pasteTitle': 'जवाब चिपकाएँ',
+    'goToPaste': 'अपनी प्रोफ़ाइल बनाएँ',
     'pasteHint': 'जैसा है वैसा चिपकाएँ। आसपास लिखा हुआ हो तो भी चलेगा।',
     'pastePlaceholder': 'AI का जवाब यहाँ चिपकाएँ',
+    'openAiTitle': 'अपना AI खोलें',
+    'openAiSub':
+        'टैप करने पर प्रॉम्प्ट कॉपी होकर ऐप खुल जाता है। उसे AI में चिपकाएँ और जवाब लेकर लौटें।',
+    'promptCopiedOpening': 'प्रॉम्प्ट कॉपी हो गया — इसे {name} में चिपकाएँ',
+    'openFailed':
+        'वह ऐप नहीं खुल सका। प्रॉम्प्ट कॉपी हो चुका है — AI खुद खोलकर चिपका दें।',
     'copyTipTitle': 'फ़ोन पर कॉपी करने का तरीक़ा',
     'copyTipBody':
         'जवाब एक ही json कोड ब्लॉक में आता है। टेक्स्ट को उँगली से चुनने के बजाय ब्लॉक के कॉपी बटन को दबाएँ। अगर सिर्फ़ कुछ हिस्सा ही आया हो, तो जितना मिला उसे चिपकाएँ, “यह हिस्सा जोड़ें” दबाएँ, फिर बाक़ी कॉपी करके उसी तरह जोड़ दें।',
@@ -1398,7 +1423,6 @@ const catalogueExtra = <String, Map<String, String>>{
         'हर अनुरोध जानबूझकर छोटा रखा गया है ताकि जवाब एक ही बार में कॉपी हो जाए। और जोड़ने के लिए वही दोहराएँ; दोहराई गई चीज़ें अपने आप छोड़ दी जाती हैं।',
     'sharedTextTitle': 'दूसरे ऐप से मिला',
     'loadProfile': 'प्रोफ़ाइल लोड करें',
-    'copyPromptAgain': 'प्रॉम्प्ट दोबारा कॉपी करें',
     'realmsTitle': 'आपके क्षेत्र',
     'realmsHint': 'सबसे ज़रूरी एक-दो से शुरू करें। बाद में कभी भी और जोड़ सकते हैं।',
     'importanceLabel': 'महत्व {n}/5',
@@ -1600,10 +1624,15 @@ const catalogueExtra = <String, Map<String, String>>{
     'copyPrompt': 'Salin prompt',
     'copied': 'Tersalin',
     'copyFailed': 'Gagal menyalin — silakan pilih teksnya secara manual',
-    'goToPaste': 'Lanjut: tempel jawaban',
-    'pasteTitle': 'Tempel jawabannya',
+    'goToPaste': 'Buat profil Anda',
     'pasteHint': 'Tempel apa adanya. Ada teks di sekitarnya pun tidak masalah.',
     'pastePlaceholder': 'Tempel jawaban AI di sini',
+    'openAiTitle': 'Buka AI Anda',
+    'openAiSub':
+        'Sekali ketuk, prompt disalin lalu aplikasinya dibuka. Tempel di AI dan kembali dengan jawabannya.',
+    'promptCopiedOpening': 'Prompt tersalin — tempel di {name}',
+    'openFailed':
+        'Aplikasi itu tidak bisa dibuka. Prompt sudah tersalin: buka AI sendiri lalu tempel.',
     'copyTipTitle': 'Menyalin di ponsel',
     'copyTipBody':
         'Jawaban datang sebagai satu blok kode json. Tekan tombol salin pada bloknya, jangan menyeret pilihan di atas teks. Kalau yang tersalin hanya sebagian, tempel dulu yang ada, ketuk “Tambahkan bagian ini”, lalu salin sisanya dan tambahkan dengan cara sama.',
@@ -1623,7 +1652,6 @@ const catalogueExtra = <String, Map<String, String>>{
         'Tiap permintaan sengaja dibuat pendek agar jawabannya muat dalam satu kali salin. Ulangi untuk menambah; yang berulang dilewati otomatis.',
     'sharedTextTitle': 'Diterima dari aplikasi lain',
     'loadProfile': 'Muat profil',
-    'copyPromptAgain': 'Salin prompt lagi',
     'realmsTitle': 'Bidang Anda',
     'realmsHint': 'Mulai dari satu atau dua yang paling penting. Bisa ditambah kapan saja.',
     'importanceLabel': 'Kepentingan {n}/5',

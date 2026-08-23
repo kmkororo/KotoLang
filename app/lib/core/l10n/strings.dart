@@ -40,12 +40,14 @@ class S {
     'welcomeEyebrow', 'welcomeTitle', 'welcomeLede',
     'step1Title', 'step1Sub', 'step2Title', 'step2Sub', 'step3Title', 'step3Sub',
     'useYourAiTitle', 'useYourAiSub', 'copyPrompt', 'copied', 'copyFailed',
-    'goToPaste', 'pasteTitle', 'pasteHint', 'pastePlaceholder', 'loadProfile',
-    'copyPromptAgain', 'realmsTitle', 'realmsHint', 'importanceLabel',
+    'goToPaste', 'pasteHint', 'pastePlaceholder', 'loadProfile',
+    'realmsTitle', 'realmsHint', 'importanceLabel',
     'hasMaterial', 'materialTitle', 'realmLabel', 'materialHintWith',
     'materialHintEmpty', 'materialHintNoRealm', 'addQuestions', 'readyTitle',
     'readyItems', 'readyQuestions', 'readySentences', 'readyRealms',
     'startFirstQuestion', 'goHome', 'restoreBackup',
+    // handing the prompt to an assistant
+    'openAiTitle', 'openAiSub', 'promptCopiedOpening', 'openFailed',
     // copying a long AI reply on a phone
     'copyTipTitle', 'copyTipBody', 'addPiece', 'clearPaste',
     'collectedSentences', 'collectedRealms', 'truncatedNotice',
@@ -130,11 +132,16 @@ const _catalogueCore = <String, Map<String, String>>{
     'copyPrompt': 'Copy prompt',
     'copied': 'Copied',
     'copyFailed': 'Could not copy — please select the text manually',
-    'goToPaste': 'Next: paste the reply',
-    'pasteTitle': 'Paste the reply',
+    'goToPaste': 'Set up your profile',
     'pasteHint':
         'Paste it exactly as the AI wrote it. Surrounding prose is fine.',
     'pastePlaceholder': 'Paste the AI reply here',
+    'openAiTitle': 'Open your AI',
+    'openAiSub':
+        'Tapping copies the prompt and then opens the app. Paste it into the AI and come back with the reply.',
+    'promptCopiedOpening': 'Prompt copied — paste it into {name}',
+    'openFailed':
+        'Could not open that app. The prompt is copied, so open the AI yourself and paste it.',
     'copyTipTitle': 'Copying on a phone',
     'copyTipBody':
         'The reply arrives as a single json code block. Tap the copy button on the block itself instead of dragging over the text. If only part of it comes across, paste what you have, tap “Add this piece”, then copy the rest and add that too.',
@@ -154,7 +161,6 @@ const _catalogueCore = <String, Map<String, String>>{
         'Each request is deliberately small so the reply fits in one copy. Ask again to add more; anything repeated is skipped automatically.',
     'sharedTextTitle': 'Received from another app',
     'loadProfile': 'Load profile',
-    'copyPromptAgain': 'Copy the prompt again',
     'realmsTitle': 'Your areas',
     'realmsHint':
         'Start with one or two that matter most. You can add more at any time.',
@@ -361,10 +367,13 @@ const _catalogueCore = <String, Map<String, String>>{
     'copyPrompt': 'プロンプトをコピー',
     'copied': 'コピーしました',
     'copyFailed': 'コピーできませんでした。手動で選択してください',
-    'goToPaste': '次へ：AIの回答を貼り付ける',
-    'pasteTitle': 'AIの回答を貼り付けてください',
+    'goToPaste': 'プロフィールを作る',
     'pasteHint': 'そのまま貼り付けて構いません。前後に説明文があっても読み取れます。',
     'pastePlaceholder': 'AIの回答をここに貼り付けてください',
+    'openAiTitle': 'AIを開く',
+    'openAiSub': 'タップするとプロンプトをコピーしてからAIを開きます。AIの入力欄に貼り付けて、返ってきた回答を持ち帰ってください。',
+    'promptCopiedOpening': 'プロンプトをコピーしました。{name}に貼り付けてください',
+    'openFailed': 'アプリを開けませんでした。プロンプトはコピー済みなので、AIを開いて貼り付けてください。',
     'copyTipTitle': 'スマホでのコピーのコツ',
     'copyTipBody':
         '回答は json のコードブロック1つで返ってきます。文字をなぞって選択せず、ブロックのコピーボタンを押してください。途中までしかコピーできなかったときは、取れた分を貼り付けて「この分を追加」を押し、続きをコピーして同じように追加すれば大丈夫です。',
@@ -381,7 +390,6 @@ const _catalogueCore = <String, Map<String, String>>{
     'batchNote': '1回の回答が長すぎるとスマホでコピーできないため、少しずつ作る方式です。同じ操作を繰り返せば増えていきます。重複は自動で除かれます。',
     'sharedTextTitle': '他のアプリから受け取りました',
     'loadProfile': 'プロフィールを読み込む',
-    'copyPromptAgain': 'プロンプトをもう一度コピー',
     'realmsTitle': 'あなたの学習分野',
     'realmsHint': 'まずは重要な1〜2分野から始めるのがおすすめです。あとからいつでも追加できます。',
     'importanceLabel': '重要度 {n}/5',
