@@ -23,16 +23,28 @@ class AiService {
   final String url;
   final Color color;
   final IconData icon;
-  const AiService(this.name, this.url, this.color, this.icon);
+
+  /// The service's own URL scheme, where it has one. Tried before the web
+  /// address because a plain https link does not reliably reach the installed
+  /// app: Android only routes it there while "open supported links" is on for
+  /// that app, and it is off by default on a good many phones. A scheme is
+  /// not subject to that setting.
+  final String? scheme;
+
+  const AiService(this.name, this.url, this.color, this.icon, {this.scheme});
 }
 
 /// Deliberately generic glyphs rather than the services' own marks: KotoLang
 /// is not affiliated with any of them, and a lookalike logo would imply it is.
+///
+/// Schemes are only listed where the app was seen to declare one. Gemini and
+/// Copilot have none, so they open on the web — which is no loss, since the
+/// browser gives a full chat box to paste into.
 const aiServices = <AiService>[
   AiService('ChatGPT', 'https://chatgpt.com/', Color(0xFF10A37F),
-      Icons.forum_outlined),
+      Icons.forum_outlined, scheme: 'chatgpt'),
   AiService('Claude', 'https://claude.ai/new', Color(0xFFD97757),
-      Icons.auto_awesome),
+      Icons.auto_awesome, scheme: 'claude'),
   AiService('Gemini', 'https://gemini.google.com/app', Color(0xFF4285F4),
       Icons.blur_on),
   AiService('Copilot', 'https://copilot.microsoft.com/', Color(0xFF0078D4),
@@ -61,12 +73,24 @@ class AiLinks extends StatelessWidget {
     if (!context.mounted) return;
     showToast(context, s.t('promptCopiedOpening', {'name': ai.name}));
 
-    final ok = await launchUrl(
-      Uri.parse(ai.url),
-      mode: LaunchMode.externalApplication,
-    ).catchError((_) => false);
+    // The installed app first, the web address second.
+    final scheme = ai.scheme;
+    if (scheme != null && await _launch(Uri.parse('$scheme://'))) return;
+    if (await _launch(Uri.parse(ai.url))) return;
 
-    if (!ok && context.mounted) showToast(context, s.t('openFailed'));
+    if (context.mounted) showToast(context, s.t('openFailed'));
+  }
+
+  /// True only if something actually opened. `canLaunchUrl` is asked first so
+  /// that a scheme nobody handles — the app simply is not installed — falls
+  /// through to the web address instead of surfacing an error.
+  Future<bool> _launch(Uri uri) async {
+    try {
+      if (!await canLaunchUrl(uri)) return false;
+      return await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      return false;
+    }
   }
 
   @override

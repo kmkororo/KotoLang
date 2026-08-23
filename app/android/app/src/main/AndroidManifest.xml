@@ -59,5 +59,17 @@
             <category android:name="android.intent.category.BROWSABLE"/>
             <data android:scheme="https"/>
         </intent>
+        <!-- The assistants' own schemes. Needed so the setup screens can tell
+             whether an app is installed and open it directly: an https link
+             only reaches the app while "open supported links" is enabled for
+             it, which is off by default on many phones. Visibility only. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="chatgpt"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="claude"/>
+        </intent>
     </queries>
 </manifest>

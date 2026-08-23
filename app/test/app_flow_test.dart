@@ -214,6 +214,11 @@ void main() {
 
     String? copied;
     final launched = <String>[];
+    // Stands in for what is installed on the phone. An https link only reaches
+    // an assistant's app while "open supported links" is on for it, so the
+    // app's own scheme is tried first and the web address is the fallback.
+    final installed = <String>{};
+
     final messenger = tester.binding.defaultBinaryMessenger;
     const launcher = MethodChannel('plugins.flutter.io/url_launcher');
 
@@ -224,9 +229,16 @@ void main() {
       return null;
     });
     messenger.setMockMethodCallHandler(launcher, (call) async {
-      final args = call.arguments;
-      if (args is Map && args['url'] is String) launched.add(args['url'] as String);
-      return true;
+      final url = (call.arguments as Map?)?['url'] as String?;
+      if (url == null) return false;
+      final handled =
+          url.startsWith('https:') || installed.any((s) => url.startsWith('$s:'));
+      if (call.method == 'canLaunch') return handled;
+      if (call.method == 'launch' && handled) {
+        launched.add(url);
+        return true;
+      }
+      return false;
     });
     addTearDown(() {
       messenger.setMockMethodCallHandler(SystemChannels.platform, null);
@@ -236,6 +248,7 @@ void main() {
     await tester.tap(find.text(S('en').t('goToPaste')));
     await tester.pumpAndSettle();
 
+    // Nothing installed: the web address is used.
     await tester.tap(find.text('ChatGPT'));
     await tester.pumpAndSettle();
 
@@ -244,7 +257,20 @@ void main() {
     expect(copied, isNotNull, reason: 'the prompt was never copied');
     expect(copied, contains('```json'));
     expect(copied, contains('schema_version'));
-    expect(launched, contains('https://chatgpt.com/'));
+    expect(launched, ['https://chatgpt.com/']);
+
+    // With the app installed, it is opened directly instead.
+    installed.add('chatgpt');
+    launched.clear();
+    await tester.tap(find.text('ChatGPT'));
+    await tester.pumpAndSettle();
+    expect(launched, ['chatgpt://']);
+
+    // Gemini declares no scheme, so it always goes to the web.
+    launched.clear();
+    await tester.tap(find.text('Gemini'));
+    await tester.pumpAndSettle();
+    expect(launched, ['https://gemini.google.com/app']);
   });
 
   testWidgets('realms exist but no material yet goes to the material step',
