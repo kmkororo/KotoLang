@@ -214,3 +214,78 @@ Progress applyChest(Progress p, ChestReward reward) {
       return p;
   }
 }
+
+// ------------------------------------------------------------- koto coin
+//
+// A currency separate from XP. XP says "you studied"; Koto Coin says "you
+// can grow your world" — it is spent on unlocking realms, never on studying
+// itself. Every value here is a named constant precisely so it can be tuned
+// without touching the logic that spends it.
+
+/// How many realms are usable before any of them has to be paid for. Chosen
+/// at first run; nothing before this needs Koto Coin at all.
+const freeRealmSlots = 3;
+
+/// Flat cost to unlock one realm beyond the free slots. Flat rather than a
+/// curve: simple to reason about, and just as tunable.
+const realmUnlockCost = 100;
+
+const sessionBonus5 = 5;
+const sessionBonus10 = 10;
+const streakBonusEvery = 7;
+const streakBonus = 15;
+const journeyCompleteBonus = 10;
+
+/// Coin earned for one answer. Quality over quantity: an incorrect answer
+/// earns nothing (unlike XP, which still pays a small amount for the
+/// attempt), and the two listening formats — main-idea comprehension and
+/// choosing the right reply — pay triple, because they are what the app is
+/// actually for.
+int kotoFor(QuestionType type, bool correct, {bool firstCorrect = false, bool wasDue = false}) {
+  if (!correct) return 0;
+  var base = (type == QuestionType.gist || type == QuestionType.reply) ? 3 : 1;
+  if (firstCorrect) base += 2;
+  if (wasDue) base += 1;
+  return base;
+}
+
+/// The one-time bonus for finishing a session of at least 5 or 10 questions.
+/// The larger threshold subsumes the smaller one — a ten-question session
+/// pays the ten-question bonus, not both.
+int sessionCompletionBonus(int answered) {
+  if (answered >= 10) return sessionBonus10;
+  if (answered >= 5) return sessionBonus5;
+  return 0;
+}
+
+// ------------------------------------------------------- listening mastery
+//
+// "82%" invites the reading "82% of English", which this app has no way to
+// measure and no business claiming. What it can honestly report is how often
+// the learner has picked the right main idea or the right reply when it
+// counted — so that is exactly what gets shown, captioned as what it is
+// ("大意をつかむ力"), never as a global fluency score.
+
+/// Accuracy over the two listening formats — main-idea comprehension and
+/// choosing the right reply — as a 0..100 percentage. Null when there is
+/// nothing to compute it from yet, so the caller can show "not enough data"
+/// rather than a misleading 0%.
+int? listeningMastery(List<HistoryEntry> history) {
+  var n = 0, ok = 0;
+  for (final h in history) {
+    if (h.type != QuestionType.gist && h.type != QuestionType.reply) continue;
+    n++;
+    if (h.correct) ok++;
+  }
+  if (n == 0) return null;
+  return ((ok / n) * 100).round();
+}
+
+/// The last 7 local calendar days, oldest first, true where at least one
+/// question was answered. A thin slice of the same history the 28-day heatmap
+/// in the stats screen reads, so a streak reset never erases it — it is
+/// derived from the answer log, not from the streak counter.
+List<bool> weeklyStrip(List<HistoryEntry> history, String today) {
+  final days = {for (final h in history) h.day};
+  return [for (var i = 6; i >= 0; i--) days.contains(addDays(today, -i))];
+}

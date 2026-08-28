@@ -250,23 +250,18 @@ void main() {
         expect(tally[t], greaterThan(0), reason: '$t was starved');
       }
 
-      // The weighting is the app's statement about what matters. Deciding what
-      // to say is the scarcest skill, so `reply` leads; `reorder` trails
-      // because `produce` asks the same thing without playing the answer.
+      // The weighting is the app's statement about what matters. KotoLang is
+      // listening-first: understanding the main idea (`gist`) and choosing
+      // the right response (`reply`) tie for the top, well ahead of every
+      // other format. `reorder` trails because `produce` asks the same thing
+      // without playing the answer first.
       final ranked = all.toList()..sort((a, b) => tally[b]!.compareTo(tally[a]!));
-      expect(ranked.first, QuestionType.reply);
+      expect(ranked.take(2).toSet(), {QuestionType.gist, QuestionType.reply});
       expect(ranked.last, QuestionType.reorder);
 
-      final conversation = tally[QuestionType.reply]! +
-          tally[QuestionType.produce]! +
-          tally[QuestionType.register]!;
-      final comprehension =
-          tally[QuestionType.gist]! + tally[QuestionType.paraphrase]!;
-      expect(conversation, greaterThan(comprehension));
-
-      // ...but listening is still what the app is for, so comprehension must
-      // not be squeezed out either.
-      expect(comprehension / 700, greaterThan(0.25));
+      final leading = tally[QuestionType.gist]! + tally[QuestionType.reply]!;
+      final rest = 700 - leading;
+      expect(leading, greaterThan(rest));
     });
 
     test('a capped item is pushed towards production', () {
@@ -366,6 +361,84 @@ void main() {
       expect(applyChest(p, chestTable[0]).freezes, p.freezes + 1);
       expect(applyChest(p, chestTable[1]).pendingBoost, 2);
       expect(applyChest(p, chestTable[2]).xpTotal, p.xpTotal + 20);
+    });
+  });
+
+  group('koto coin', () {
+    test('a wrong answer earns nothing, regardless of format', () {
+      // Quality over quantity: XP still pays a small amount for the attempt,
+      // but Koto Coin only rewards genuine understanding.
+      for (final t in QuestionType.values) {
+        expect(kotoFor(t, false), 0);
+        expect(kotoFor(t, false, wasDue: true, firstCorrect: true), 0);
+      }
+    });
+
+    test('the two listening formats pay more than the rest', () {
+      expect(kotoFor(QuestionType.gist, true), greaterThan(kotoFor(QuestionType.dictation, true)));
+      expect(kotoFor(QuestionType.reply, true), greaterThan(kotoFor(QuestionType.produce, true)));
+      expect(kotoFor(QuestionType.gist, true), kotoFor(QuestionType.reply, true));
+    });
+
+    test('firstCorrect and wasDue stack on top of the base amount', () {
+      final base = kotoFor(QuestionType.dictation, true);
+      expect(kotoFor(QuestionType.dictation, true, firstCorrect: true), base + 2);
+      expect(kotoFor(QuestionType.dictation, true, wasDue: true), base + 1);
+      expect(kotoFor(QuestionType.dictation, true, firstCorrect: true, wasDue: true), base + 3);
+    });
+
+    test('session completion pays the larger threshold only, never both', () {
+      expect(sessionCompletionBonus(1), 0);
+      expect(sessionCompletionBonus(4), 0);
+      expect(sessionCompletionBonus(5), sessionBonus5);
+      expect(sessionCompletionBonus(9), sessionBonus5);
+      expect(sessionCompletionBonus(10), sessionBonus10);
+      expect(sessionCompletionBonus(20), sessionBonus10);
+    });
+
+    test('listening mastery reads accuracy on gist and reply only', () {
+      final now = today();
+      HistoryEntry h(QuestionType t, bool ok) => HistoryEntry(
+            day: now,
+            at: DateTime.now(),
+            questionId: 'q',
+            realmId: 'r',
+            type: t,
+            correct: ok,
+            wasDue: false,
+          );
+
+      expect(listeningMastery(const []), isNull, reason: 'nothing to compute from yet');
+
+      final history = [
+        h(QuestionType.gist, true),
+        h(QuestionType.gist, false),
+        h(QuestionType.reply, true),
+        // Ignored: neither format counts toward the score.
+        h(QuestionType.dictation, false),
+        h(QuestionType.dictation, false),
+      ];
+      expect(listeningMastery(history), 67); // 2 of 3 gist/reply answers, rounded
+    });
+
+    test('the weekly strip is a 7-day window ending today, oldest first', () {
+      const t = '2026-08-24';
+      HistoryEntry on(String day) => HistoryEntry(
+            day: day,
+            at: DateTime.now(),
+            questionId: 'q',
+            realmId: 'r',
+            type: QuestionType.gist,
+            correct: true,
+            wasDue: false,
+          );
+      final history = [on(addDays(t, -6)), on(addDays(t, -2)), on(t)];
+      final week = weeklyStrip(history, t);
+      expect(week, hasLength(7));
+      expect(week.first, isTrue); // 6 days ago
+      expect(week[4], isTrue); // 2 days ago
+      expect(week.last, isTrue); // today
+      expect(week.where((d) => d).length, 3);
     });
   });
 

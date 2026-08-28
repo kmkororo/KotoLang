@@ -125,6 +125,21 @@ class $RealmsTable extends Realms with TableInfo<$RealmsTable, RealmRow> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _unlockedMeta = const VerificationMeta(
+    'unlocked',
+  );
+  @override
+  late final GeneratedColumn<bool> unlocked = GeneratedColumn<bool>(
+    'unlocked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("unlocked" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -137,6 +152,7 @@ class $RealmsTable extends Realms with TableInfo<$RealmsTable, RealmRow> {
     selected,
     hasMaterial,
     createdAt,
+    unlocked,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -213,6 +229,12 @@ class $RealmsTable extends Realms with TableInfo<$RealmsTable, RealmRow> {
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('unlocked')) {
+      context.handle(
+        _unlockedMeta,
+        unlocked.isAcceptableOrUnknown(data['unlocked']!, _unlockedMeta),
+      );
+    }
     return context;
   }
 
@@ -264,6 +286,10 @@ class $RealmsTable extends Realms with TableInfo<$RealmsTable, RealmRow> {
         DriftSqlType.int,
         data['${effectivePrefix}created_at'],
       )!,
+      unlocked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}unlocked'],
+      )!,
     );
   }
 
@@ -287,6 +313,7 @@ class RealmRow extends DataClass implements Insertable<RealmRow> {
   final bool selected;
   final bool hasMaterial;
   final int createdAt;
+  final bool unlocked;
   const RealmRow({
     required this.id,
     required this.name,
@@ -298,6 +325,7 @@ class RealmRow extends DataClass implements Insertable<RealmRow> {
     required this.selected,
     required this.hasMaterial,
     required this.createdAt,
+    required this.unlocked,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -316,6 +344,7 @@ class RealmRow extends DataClass implements Insertable<RealmRow> {
     map['selected'] = Variable<bool>(selected);
     map['has_material'] = Variable<bool>(hasMaterial);
     map['created_at'] = Variable<int>(createdAt);
+    map['unlocked'] = Variable<bool>(unlocked);
     return map;
   }
 
@@ -331,6 +360,7 @@ class RealmRow extends DataClass implements Insertable<RealmRow> {
       selected: Value(selected),
       hasMaterial: Value(hasMaterial),
       createdAt: Value(createdAt),
+      unlocked: Value(unlocked),
     );
   }
 
@@ -350,6 +380,7 @@ class RealmRow extends DataClass implements Insertable<RealmRow> {
       selected: serializer.fromJson<bool>(json['selected']),
       hasMaterial: serializer.fromJson<bool>(json['hasMaterial']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
+      unlocked: serializer.fromJson<bool>(json['unlocked']),
     );
   }
   @override
@@ -366,6 +397,7 @@ class RealmRow extends DataClass implements Insertable<RealmRow> {
       'selected': serializer.toJson<bool>(selected),
       'hasMaterial': serializer.toJson<bool>(hasMaterial),
       'createdAt': serializer.toJson<int>(createdAt),
+      'unlocked': serializer.toJson<bool>(unlocked),
     };
   }
 
@@ -380,6 +412,7 @@ class RealmRow extends DataClass implements Insertable<RealmRow> {
     bool? selected,
     bool? hasMaterial,
     int? createdAt,
+    bool? unlocked,
   }) => RealmRow(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -391,6 +424,7 @@ class RealmRow extends DataClass implements Insertable<RealmRow> {
     selected: selected ?? this.selected,
     hasMaterial: hasMaterial ?? this.hasMaterial,
     createdAt: createdAt ?? this.createdAt,
+    unlocked: unlocked ?? this.unlocked,
   );
   RealmRow copyWithCompanion(RealmsCompanion data) {
     return RealmRow(
@@ -414,6 +448,7 @@ class RealmRow extends DataClass implements Insertable<RealmRow> {
           ? data.hasMaterial.value
           : this.hasMaterial,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      unlocked: data.unlocked.present ? data.unlocked.value : this.unlocked,
     );
   }
 
@@ -429,7 +464,8 @@ class RealmRow extends DataClass implements Insertable<RealmRow> {
           ..write('contexts: $contexts, ')
           ..write('selected: $selected, ')
           ..write('hasMaterial: $hasMaterial, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('unlocked: $unlocked')
           ..write(')'))
         .toString();
   }
@@ -446,6 +482,7 @@ class RealmRow extends DataClass implements Insertable<RealmRow> {
     selected,
     hasMaterial,
     createdAt,
+    unlocked,
   );
   @override
   bool operator ==(Object other) =>
@@ -460,7 +497,8 @@ class RealmRow extends DataClass implements Insertable<RealmRow> {
           other.contexts == this.contexts &&
           other.selected == this.selected &&
           other.hasMaterial == this.hasMaterial &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.unlocked == this.unlocked);
 }
 
 class RealmsCompanion extends UpdateCompanion<RealmRow> {
@@ -474,6 +512,7 @@ class RealmsCompanion extends UpdateCompanion<RealmRow> {
   final Value<bool> selected;
   final Value<bool> hasMaterial;
   final Value<int> createdAt;
+  final Value<bool> unlocked;
   final Value<int> rowid;
   const RealmsCompanion({
     this.id = const Value.absent(),
@@ -486,6 +525,7 @@ class RealmsCompanion extends UpdateCompanion<RealmRow> {
     this.selected = const Value.absent(),
     this.hasMaterial = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.unlocked = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   RealmsCompanion.insert({
@@ -499,6 +539,7 @@ class RealmsCompanion extends UpdateCompanion<RealmRow> {
     this.selected = const Value.absent(),
     this.hasMaterial = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.unlocked = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name),
@@ -514,6 +555,7 @@ class RealmsCompanion extends UpdateCompanion<RealmRow> {
     Expression<bool>? selected,
     Expression<bool>? hasMaterial,
     Expression<int>? createdAt,
+    Expression<bool>? unlocked,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -527,6 +569,7 @@ class RealmsCompanion extends UpdateCompanion<RealmRow> {
       if (selected != null) 'selected': selected,
       if (hasMaterial != null) 'has_material': hasMaterial,
       if (createdAt != null) 'created_at': createdAt,
+      if (unlocked != null) 'unlocked': unlocked,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -542,6 +585,7 @@ class RealmsCompanion extends UpdateCompanion<RealmRow> {
     Value<bool>? selected,
     Value<bool>? hasMaterial,
     Value<int>? createdAt,
+    Value<bool>? unlocked,
     Value<int>? rowid,
   }) {
     return RealmsCompanion(
@@ -555,6 +599,7 @@ class RealmsCompanion extends UpdateCompanion<RealmRow> {
       selected: selected ?? this.selected,
       hasMaterial: hasMaterial ?? this.hasMaterial,
       createdAt: createdAt ?? this.createdAt,
+      unlocked: unlocked ?? this.unlocked,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -594,6 +639,9 @@ class RealmsCompanion extends UpdateCompanion<RealmRow> {
     if (createdAt.present) {
       map['created_at'] = Variable<int>(createdAt.value);
     }
+    if (unlocked.present) {
+      map['unlocked'] = Variable<bool>(unlocked.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -613,6 +661,7 @@ class RealmsCompanion extends UpdateCompanion<RealmRow> {
           ..write('selected: $selected, ')
           ..write('hasMaterial: $hasMaterial, ')
           ..write('createdAt: $createdAt, ')
+          ..write('unlocked: $unlocked, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5965,6 +6014,7 @@ typedef $$RealmsTableCreateCompanionBuilder =
       Value<bool> selected,
       Value<bool> hasMaterial,
       Value<int> createdAt,
+      Value<bool> unlocked,
       Value<int> rowid,
     });
 typedef $$RealmsTableUpdateCompanionBuilder =
@@ -5979,6 +6029,7 @@ typedef $$RealmsTableUpdateCompanionBuilder =
       Value<bool> selected,
       Value<bool> hasMaterial,
       Value<int> createdAt,
+      Value<bool> unlocked,
       Value<int> rowid,
     });
 
@@ -6041,6 +6092,11 @@ class $$RealmsTableFilterComposer
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<bool> get unlocked => $composableBuilder(
+    column: $table.unlocked,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$RealmsTableOrderingComposer
@@ -6101,6 +6157,11 @@ class $$RealmsTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get unlocked => $composableBuilder(
+    column: $table.unlocked,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$RealmsTableAnnotationComposer
@@ -6151,6 +6212,9 @@ class $$RealmsTableAnnotationComposer
 
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get unlocked =>
+      $composableBuilder(column: $table.unlocked, builder: (column) => column);
 }
 
 class $$RealmsTableTableManager
@@ -6191,6 +6255,7 @@ class $$RealmsTableTableManager
                 Value<bool> selected = const Value.absent(),
                 Value<bool> hasMaterial = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
+                Value<bool> unlocked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RealmsCompanion(
                 id: id,
@@ -6203,6 +6268,7 @@ class $$RealmsTableTableManager
                 selected: selected,
                 hasMaterial: hasMaterial,
                 createdAt: createdAt,
+                unlocked: unlocked,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6217,6 +6283,7 @@ class $$RealmsTableTableManager
                 Value<bool> selected = const Value.absent(),
                 Value<bool> hasMaterial = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
+                Value<bool> unlocked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RealmsCompanion.insert(
                 id: id,
@@ -6229,6 +6296,7 @@ class $$RealmsTableTableManager
                 selected: selected,
                 hasMaterial: hasMaterial,
                 createdAt: createdAt,
+                unlocked: unlocked,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

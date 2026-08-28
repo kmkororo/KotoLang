@@ -98,7 +98,7 @@ Verified working on this machine — `flutter doctor` reports **no issues**.
 ```bash
 cd C:\Users\kmkor\KotoLang\app
 
-flutter test                       # 124 tests
+flutter test                       # 136 tests
 flutter analyze                    # no issues
 flutter run                        # debug on a connected device
 
@@ -177,9 +177,26 @@ word order, and the difference is the whole point — word order plays the
 sentence first, so it asks you to reconstruct something you just heard. Here the
 sentence is never heard, so the only route to it is recalling what it means.
 
-**Reply** is the only format about choosing a move rather than decoding one, and
-it is weighted highest for that reason. **Phrasing** carries a short note saying
-what each wording does to the listener; without that it would be a coin toss.
+**Reply** is the only format about choosing a move rather than decoding one.
+**Phrasing** carries a short note saying what each wording does to the
+listener; without that it would be a coin toss.
+
+**Listening-first weighting.** `formatWeight` in `lib/domain/srs.dart` decides
+how often each format comes up, and it is not an even split:
+
+```
+gist 3.0, reply 3.0   — main idea and choosing the right reply lead, tied
+paraphrase 1.6
+produce 1.2
+dictation 0.8
+register 0.6
+reorder 0.4            — produce asks the same thing without the head start
+```
+
+Understanding the main idea and knowing what to say back are what a
+conversation is actually made of, so they dominate the mix by a wide margin
+rather than a narrow one, while every format stays reachable — none is ever
+starved to zero.
 
 Wrong options differ from the answer by exactly one thing — negation, who acts,
 tense, a condition, or strength — so they cannot be solved without hearing the
@@ -212,6 +229,47 @@ formats.
 - **Streak freezes** cover missed days automatically. When they run out the
   streak ends without reproach, and the best streak is kept.
 
+## Koto Coin — growing your own set of worlds
+
+XP says "you studied"; Koto Coin says "you can open another world." The two
+are deliberately separate currencies (`Progress.xpTotal` vs `Progress.kotoCoins`
+in `lib/domain/models.dart`), and Koto Coin is never required for ordinary
+study — it only gates *adding a new realm*.
+
+- **The first three realms are free.** Chosen once, at onboarding
+  (`RealmPickerScreen(firstRun: true)` in `lib/features/onboarding_screens.dart`),
+  capped so a fourth checkbox is not even selectable.
+- **Every realm beyond that costs `realmUnlockCost`** (100, a flat constant in
+  `lib/domain/progress_service.dart`, tunable in one place). Settings → *Your
+  areas* reuses the same picker screen to show every realm the AI ever
+  suggested — unlocked ones open straight into building material, locked ones
+  show their price and an *Unlock* button that is disabled with an exact
+  shortfall ("need 42 more Koto") rather than failing silently.
+- **Coin is earned by understanding, not by attempting.** `kotoFor` in
+  `progress_service.dart` pays 0 for a wrong answer — XP still pays a little
+  for the attempt, Koto Coin does not — and pays triple for a correct `gist`
+  or `reply`, the two listening formats. A first-ever correct answer on an
+  expression and a review answered on time each add a small bonus on top.
+- **Two session-level bonuses**, settled once when a session ends
+  (`Repository.finishSession`): a flat bonus for reaching 5 or 10 questions
+  (the larger absorbs the smaller, never both), and — at most once a day — a
+  bonus for touching every realm that has material, derived by checking the
+  answer log rather than tracked as separate state, so it can never drift out
+  of sync with what was actually studied.
+- **A realm already built is never charged for retroactively.** The schema 3
+  migration grandfathers in any realm with material or an explicit prior
+  selection; only a realm the AI merely suggested and the learner never
+  touched stays locked, which is exactly what the system is meant to gate.
+
+**Listening Mastery**, shown on the home screen, is deliberately not framed as
+a fluency score. It is exactly one thing: accuracy on `gist` and `reply`
+answers (`listeningMastery` in `progress_service.dart`), captioned as "your ear
+for the main idea" rather than "English ability {n}%" — a number the app has
+no way to actually measure. **Today's Journey** and the 7-day weekly strip are
+both derived the same way, straight from the answer log rather than tracked as
+separate state, so neither can drift out of sync with what was actually
+studied and neither is erased by a streak reset.
+
 ## Data, privacy and backup
 
 Everything lives in SQLite on the device. This app performs **no network
@@ -237,17 +295,17 @@ by two areas is unlinked, not deleted.
 
 ## Testing
 
-`flutter test` — **124 tests**, all passing.
+`flutter test` — **136 tests**, all passing.
 
 | Suite | Covers |
 |---|---|
-| `domain_test.dart` | SRS intervals, recognition gate, format rotation, streak & freeze arithmetic, XP bounds, question generation and grading, DST-safe dates |
+| `domain_test.dart` | SRS intervals, recognition gate, listening-first format rotation, streak & freeze arithmetic, XP and Koto Coin bounds, listening mastery and the weekly strip, question generation and grading, DST-safe dates |
 | `l10n_test.dart` | every locale defines every key, no unused keys, placeholders consistent, device-locale resolution |
 | `repository_test.dart` | imports persist, malformed replies never throw, breadth-first introduction, no repeated sentences, scoped resets, export/restore round trip, rebuilding questions preserves answer history |
-| `app_flow_test.dart` | real widgets over a real database: first-run language picker, onboarding routing, answering each format, reset routing, switching interface language |
+| `app_flow_test.dart` | real widgets over a real database: first-run language picker, onboarding routing, answering each format, the free-realm cap, unlocking a realm with and without enough coin, reset routing, switching interface language |
 | `paste_test.dart` | truncation rescue, piecewise pasting, overlap removal, the readout after each piece |
 | `conversation_test.dart` | the three conversation formats: what each needs, what each refuses, and that material predating them yields nothing rather than junk |
-| `migration_test.dart` | a schema 1 library upgrades in place, keeps its material and progress, and gains only the formats it can actually build |
+| `migration_test.dart` | schema 1 → 2 → 3 in sequence: material and progress survive, a realm already built is grandfathered as unlocked, one the AI only suggested stays locked, and only the formats each schema can actually build appear |
 
 Two real defects were found by these tests and fixed:
 

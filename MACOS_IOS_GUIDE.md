@@ -1,7 +1,7 @@
 # Running KotoLang on a MacBook (iOS)
 
 Everything in `app/lib` is already shared with the Android build and is covered
-by 124 tests. What has never been compiled is the iOS half, because Xcode only
+by 136 tests. What has never been compiled is the iOS half, because Xcode only
 runs on macOS. This is the sequence from a clean Mac to a running iPhone app.
 
 ---
@@ -91,7 +91,7 @@ genuinely differs per device.
 ## 5. Run the tests
 
 ```bash
-flutter test                                   # 124 host tests, no device needed
+flutter test                                   # 136 host tests, no device needed
 flutter test integration_test/device_test.dart # on the connected iPhone
 ```
 

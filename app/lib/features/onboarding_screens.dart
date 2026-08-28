@@ -14,6 +14,7 @@ import '../app.dart';
 import '../core/l10n/languages.dart';
 import '../core/l10n/strings.dart';
 import '../domain/models.dart';
+import '../domain/progress_service.dart';
 import '../domain/prompts.dart' as prompts;
 import 'ai_links.dart';
 import 'paste_box.dart';
@@ -352,8 +353,8 @@ class _PasteProfileScreenState extends ConsumerState<PasteProfileScreen> {
     // Pushed, never `pushReplacement`. The root screen decides where the app
     // belongs, and when the root is itself showing a setup step, replacing the
     // route deletes that decision-maker for the rest of the session.
-    Navigator.push(
-        context, MaterialPageRoute(builder: (_) => const RealmPickerScreen()));
+    Navigator.push(context,
+        MaterialPageRoute(builder: (_) => const RealmPickerScreen(firstRun: true)));
   }
 
   @override
@@ -429,8 +430,18 @@ class _PasteProfileScreenState extends ConsumerState<PasteProfileScreen> {
 
 // -------------------------------------------------------- 4. realm picker
 
+/// Two roles for one screen, matching `LanguagePickerScreen`'s own
+/// first-run/settings split:
+///
+/// - `firstRun: true` (straight after profile import) — pick exactly
+///   [freeRealmSlots] areas, free, with the rest of the AI-suggested areas
+///   left locked for later.
+/// - `firstRun: false` (reached from Settings as "your areas") — every area
+///   the AI ever suggested, unlocked ones tappable to build more material,
+///   locked ones priced and unlockable with Koto Coin.
 class RealmPickerScreen extends ConsumerStatefulWidget {
-  const RealmPickerScreen({super.key});
+  final bool firstRun;
+  const RealmPickerScreen({super.key, this.firstRun = false});
 
   @override
   ConsumerState<RealmPickerScreen> createState() => _RealmPickerScreenState();
@@ -439,6 +450,7 @@ class RealmPickerScreen extends ConsumerStatefulWidget {
 class _RealmPickerScreenState extends ConsumerState<RealmPickerScreen> {
   List<Realm> _realms = const [];
   final _selected = <String>{};
+  bool _busy = false;
 
   @override
   void initState() {
@@ -451,62 +463,158 @@ class _RealmPickerScreenState extends ConsumerState<RealmPickerScreen> {
     if (!mounted) return;
     setState(() {
       _realms = list;
-      // Preselect the ones the AI rated most important.
-      for (final r in list.take(2)) {
-        _selected.add(r.id);
+      if (widget.firstRun) {
+        // Preselect the ones the AI rated most important.
+        for (final r in list.take(freeRealmSlots)) {
+          _selected.add(r.id);
+        }
       }
     });
+  }
+
+  Future<void> _confirmFirstRun() async {
+    await ref.read(repositoryProvider).markRealmsUnlocked(_selected.toList());
+    if (!mounted) return;
+    Navigator.push(context,
+        MaterialPageRoute(builder: (_) => MaterialScreen(realmId: _selected.first)));
+  }
+
+  Future<void> _unlock(Realm r) async {
+    final s = ref.read(stringsProvider);
+    final progress = ref.read(progressProvider);
+    if (progress.kotoCoins < realmUnlockCost) {
+      showToast(
+          context, s.t('unlockRealmNeedMore', {'n': realmUnlockCost - progress.kotoCoins}));
+      return;
+    }
+    final ok = await confirm(
+      context,
+      title: s.t('unlockRealmConfirmTitle', {'realm': r.label}),
+      body: s.t('unlockRealmConfirmBody', {'n': realmUnlockCost}),
+      confirmLabel: s.t('unlockButton'),
+      cancelLabel: s.t('cancel'),
+      destructive: false,
+    );
+    if (!ok || !mounted) return;
+
+    setState(() => _busy = true);
+    final spent = await ref.read(repositoryProvider).unlockRealm(r.id);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (!spent) return; // balance moved between the check above and now
+
+    ref.read(progressProvider.notifier).state = await ref.read(repositoryProvider).loadProgress();
+    await _load();
+    if (!mounted) return;
+    // A one-time note the moment the very last locked area opens up, rather
+    // than a permanent fixture on the home screen for what is a rare state.
+    if (_realms.every((x) => x.unlocked)) {
+      showToast(context, s.t('allRealmsUnlocked'));
+    }
+    Navigator.push(
+        context, MaterialPageRoute(builder: (_) => MaterialScreen(realmId: r.id)));
   }
 
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
     final theme = Theme.of(context);
+    final progress = ref.watch(progressProvider);
+    final atCap = widget.firstRun && _selected.length >= freeRealmSlots;
 
     return _Page(back: s.t('realmsTitle'), children: [
-      Text(s.t('realmsHint'),
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-      const SizedBox(height: 12),
+      // Only relevant the first time: from Settings, each tile already says
+      // for itself whether it has material, is unlocked, or costs Koto Coin.
+      if (widget.firstRun) ...[
+        Text(s.t('realmsHint'),
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 12),
+      ],
       for (final r in _realms)
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Card(
-            child: CheckboxListTile(
-              value: _selected.contains(r.id),
-              onChanged: (v) => setState(() {
-                if (v == true) {
-                  _selected.add(r.id);
-                } else {
-                  _selected.remove(r.id);
-                }
-              }),
-              title: Text(r.label, style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (r.nameNative.isNotEmpty && r.nameNative != r.name)
-                    Text(r.name, style: theme.textTheme.bodySmall),
-                  Text(
-                    '${'★' * r.importance}  ${s.t('importanceLabel', {'n': r.importance})}'
-                    '${r.hasMaterial ? ' · ${s.t('hasMaterial')}' : ''}',
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          child: widget.firstRun
+              ? _pickTile(r, atCap)
+              : _unlockTile(r, s, theme, progress.kotoCoins),
         ),
       const SizedBox(height: 12),
-      FilledButton(
-        onPressed: _selected.isEmpty
-            ? null
-            : () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => MaterialScreen(realmId: _selected.first))),
-        child: Text(s.t('continueLabel')),
-      ),
+      if (widget.firstRun)
+        FilledButton(
+          onPressed: _selected.isEmpty ? null : _confirmFirstRun,
+          child: Text(s.t('continueLabel')),
+        ),
     ]);
   }
+
+  Widget _pickTile(Realm r, bool atCap) {
+    final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
+    final checked = _selected.contains(r.id);
+    return Card(
+      child: CheckboxListTile(
+        value: checked,
+        // Capped rather than left open: the first three are free, and
+        // letting a fourth box get checked here would silently promise
+        // something Koto Coin is supposed to gate.
+        onChanged: (!checked && atCap)
+            ? null
+            : (v) => setState(() {
+                  if (v == true) {
+                    _selected.add(r.id);
+                  } else {
+                    _selected.remove(r.id);
+                  }
+                }),
+        title: Text(r.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (r.nameNative.isNotEmpty && r.nameNative != r.name)
+              Text(r.name, style: theme.textTheme.bodySmall),
+            Text(
+              '${'★' * r.importance}  ${s.t('importanceLabel', {'n': r.importance})}'
+              '${r.hasMaterial ? ' · ${s.t('hasMaterial')}' : ''}',
+              style:
+                  theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _unlockTile(Realm r, dynamic s, ThemeData theme, int kotoCoins) => Card(
+        child: ListTile(
+          leading: Icon(
+            r.unlocked ? Icons.lock_open : Icons.lock_outline,
+            color: r.unlocked ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+          ),
+          title: Text(r.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+          subtitle: Text(
+            r.unlocked
+                ? (r.hasMaterial ? s.t('hasMaterial') : s.t('unlockedLabel'))
+                : s.t('unlockRealmCost', {'n': realmUnlockCost}),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: r.unlocked ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.primary,
+            ),
+          ),
+          // The app theme gives FilledButton an infinite minimum width
+          // (`Size.fromHeight`, meant for full-width buttons elsewhere),
+          // which a ListTile's trailing slot cannot lay out. A fixed-size
+          // override keeps it to the label's own width here.
+          trailing: r.unlocked
+              ? null
+              : FilledButton(
+                  style: FilledButton.styleFrom(minimumSize: const Size(64, 36)),
+                  onPressed: _busy ? null : () => _unlock(r),
+                  child: Text(s.t('unlockButton')),
+                ),
+          onTap: r.unlocked
+              ? () => Navigator.push(
+                  context, MaterialPageRoute(builder: (_) => MaterialScreen(realmId: r.id)))
+              : null,
+        ),
+      );
 }
 
 // ------------------------------------------------------- 5. material import

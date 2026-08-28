@@ -28,6 +28,7 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
   int _index = 0;
   int _correctCount = 0;
   int _xp = 0;
+  int _koto = 0;
   int _boost = 1;
   int _replaysLeft = 0;
   bool _answered = false;
@@ -188,6 +189,7 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
       _outcome = res;
       _streak = res.streak;
       _xp += res.xp;
+      _koto += res.koto;
       if (correct) _correctCount++;
     });
 
@@ -195,17 +197,26 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
     if (_silent) _play(countsAgainstBudget: false);
   }
 
-  void _next() {
+  Future<void> _next() async {
     _speech.stop();
     if (_index < widget.slots.length - 1) {
       setState(() => _index++);
       _prepare();
     } else {
+      // The session-length and journey-complete bonuses only make sense once
+      // the whole session is in, so they are settled here rather than
+      // per-answer.
+      final result =
+          await ref.read(repositoryProvider).finishSession(answered: widget.slots.length);
+      if (!mounted) return;
+      ref.read(progressProvider.notifier).state = result.progress;
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (_) => SummaryScreen(
             xp: _xp,
+            koto: _koto + result.bonus,
             boosted: _boost > 1,
             correct: _correctCount,
             total: widget.slots.length,
@@ -752,6 +763,7 @@ class _WordChip extends StatelessWidget {
 
 class SummaryScreen extends ConsumerStatefulWidget {
   final int xp;
+  final int koto;
   final bool boosted;
   final int correct;
   final int total;
@@ -760,6 +772,7 @@ class SummaryScreen extends ConsumerStatefulWidget {
   const SummaryScreen({
     super.key,
     required this.xp,
+    required this.koto,
     required this.boosted,
     required this.correct,
     required this.total,
@@ -831,6 +844,10 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
               const SizedBox(width: 10),
               tile('${widget.correct}/${widget.total}', s.t('correctOf')),
             ]),
+            if (widget.koto > 0) ...[
+              const SizedBox(height: 10),
+              Row(children: [tile('🪙 +${widget.koto}', s.t('kotoGained'))]),
+            ],
             const SizedBox(height: 10),
             Row(children: [
               tile('🔥 ${progress.streak}',

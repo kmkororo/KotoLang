@@ -16,6 +16,8 @@ import 'package:kotolang/app.dart';
 import 'package:kotolang/core/l10n/strings.dart';
 import 'package:kotolang/data/database.dart';
 import 'package:kotolang/data/repository.dart';
+import 'package:kotolang/domain/models.dart';
+import 'package:kotolang/domain/progress_service.dart';
 import 'package:kotolang/features/ai_links.dart';
 import 'package:kotolang/features/onboarding_screens.dart';
 import 'package:kotolang/features/paste_box.dart';
@@ -171,8 +173,11 @@ void main() {
     addTearDown(db.close);
 
     final s = S('en');
+    // Register's share of the rotation dropped when gist/reply were
+    // reweighted to lead the mix by a wide margin, so it can take more tries
+    // than the other single-format search tests in this file to come up.
     var guard = 0;
-    while (find.text(s.t('typeRegister')).evaluate().isEmpty && guard++ < 40) {
+    while (find.text(s.t('typeRegister')).evaluate().isEmpty && guard++ < 80) {
       if (find.byType(QuizScreen).evaluate().isNotEmpty) {
         await tester.tap(find.byIcon(Icons.close));
         await tester.pumpAndSettle();
@@ -291,6 +296,114 @@ void main() {
     expect(find.text(s.t('step2Title')), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text(s.t('loadProfile')), findsOneWidget);
+  });
+
+  testWidgets('onboarding caps the free realms at three, no more', (tester) async {
+    // The spec: the first three areas are free; a fourth checkbox must not
+    // even become checkable here, since that would silently promise
+    // something only Koto Coin is supposed to unlock.
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    await tester.tap(find.text(s.t('goToPaste')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField),
+      profileJson(['Work', 'Travel', 'Hobby', 'Tech', 'Music']),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.t('loadProfile')));
+    await tester.pumpAndSettle();
+
+    // Three preselected — the ones the AI rated most important — and a
+    // fourth box that does nothing when tapped.
+    final boxes = find.byType(CheckboxListTile);
+    expect(boxes, findsNWidgets(5));
+    for (var i = 0; i < 3; i++) {
+      expect(tester.widget<CheckboxListTile>(boxes.at(i)).value, isTrue);
+    }
+    expect(tester.widget<CheckboxListTile>(boxes.at(3)).value, isFalse);
+    expect(tester.widget<CheckboxListTile>(boxes.at(3)).onChanged, isNull);
+
+    await tester.tap(find.text(s.t('continueLabel')));
+    await tester.pumpAndSettle();
+
+    final realms = await repo.realms();
+    expect(realms.where((r) => r.unlocked).length, 3);
+    expect(realms.where((r) => !r.unlocked).length, 2);
+  });
+
+  testWidgets('unlocking a realm from settings spends coin and flips it',
+      (tester) async {
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+      await r.importProfile(profileJson(['Work', 'Travel']), uiLanguage: 'en');
+      await r.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'x')]),
+        uiLanguage: 'en',
+      );
+      // Enough to afford one unlock, not two.
+      await r.saveProgress(const Progress(kotoCoins: realmUnlockCost));
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    await tester.tap(find.text(s.t('settingsTitle')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text(s.t('yourRealmsButton')), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text(s.t('yourRealmsButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text(s.t('unlockButton')), findsOneWidget,
+        reason: 'exactly the one locked realm (Travel) should offer it');
+
+    await tester.tap(find.text(s.t('unlockButton')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(
+        of: find.byType(AlertDialog), matching: find.text(s.t('unlockButton'))));
+    await tester.pumpAndSettle();
+
+    final realms = await repo.realms();
+    expect(realms.every((r) => r.unlocked), isTrue);
+    expect((await repo.loadProgress()).kotoCoins, 0);
+  });
+
+  testWidgets('insufficient coin refuses the unlock without spending anything',
+      (tester) async {
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+      await r.importProfile(profileJson(['Work', 'Travel']), uiLanguage: 'en');
+      await r.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'x')]),
+        uiLanguage: 'en',
+      );
+      await r.saveProgress(Progress(kotoCoins: realmUnlockCost - 1));
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    await tester.tap(find.text(s.t('settingsTitle')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text(s.t('yourRealmsButton')), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text(s.t('yourRealmsButton')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(s.t('unlockButton')));
+    await tester.pumpAndSettle();
+
+    // No confirm dialog appears — the shortfall is reported immediately.
+    expect(find.text(s.t('unlockRealmConfirmTitle', {'realm': 'Travel'})), findsNothing);
+    final realms = await repo.realms();
+    expect(realms.any((r) => !r.unlocked), isTrue);
+    expect((await repo.loadProgress()).kotoCoins, realmUnlockCost - 1);
   });
 
   testWidgets('tapping an assistant copies the prompt before opening it',

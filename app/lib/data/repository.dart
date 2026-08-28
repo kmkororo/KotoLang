@@ -68,10 +68,12 @@ class SessionSlot {
 class AnswerOutcome {
   final bool correct;
   final int xp;
+  final int koto;
   final StreakResult streak;
   final Progress progress;
   final SrsState? srsState;
-  const AnswerOutcome(this.correct, this.xp, this.streak, this.progress, this.srsState);
+  const AnswerOutcome(
+      this.correct, this.xp, this.koto, this.streak, this.progress, this.srsState);
 }
 
 class HomeCounts {
@@ -265,6 +267,14 @@ class Repository {
     final allSentences = await sentences();
 
     // -- realm: reuse when the name already exists --
+    //
+    // `unlocked: true` unconditionally, in both branches: gating happens in
+    // the UI *before* this method is ever called (the first three free
+    // slots, `unlockRealm`, or `spendForNewRealm`), so material actually
+    // landing here is itself the proof the realm was earned. Setting it here
+    // rather than trusting each call site to have flipped it first is what
+    // keeps "has material" and "unlocked" from ever disagreeing — the same
+    // invariant the schema 3 migration's grandfathering rule relies on.
     final prevRealm = existingRealms[norm.realm.normKeyValue];
     final realm = prevRealm == null
         ? Realm(
@@ -277,6 +287,7 @@ class Repository {
             contexts: norm.realm.contexts,
             selected: true,
             hasMaterial: true,
+            unlocked: true,
           )
         : prevRealm.copyWith(
             nameNative: prevRealm.nameNative.isNotEmpty
@@ -285,6 +296,7 @@ class Repository {
             contexts: prevRealm.contexts.isNotEmpty ? prevRealm.contexts : norm.realm.contexts,
             selected: true,
             hasMaterial: true,
+            unlocked: true,
           );
 
     // -- learning items --
@@ -641,10 +653,91 @@ class Repository {
     final streak = registerStudyDay(progress, t);
     final gained = xpFor(question.type, correct, wasDue: wasDue, firstCorrect: firstCorrect) *
         (boost > 1 ? boost : 1);
-    final next = streak.progress.copyWith(xpTotal: streak.progress.xpTotal + gained);
+    final gainedKoto = kotoFor(question.type, correct, wasDue: wasDue, firstCorrect: firstCorrect);
+    // A study day advancing onto a multiple of `streakBonusEvery` pays a coin
+    // milestone once — `registerStudyDay` already guarantees the streak
+    // advances at most once per calendar day, so this cannot double-fire from
+    // answering several questions on the same day.
+    final milestone =
+        streak.result.advanced && streak.result.to % streakBonusEvery == 0 ? streakBonus : 0;
+    final next = streak.progress.copyWith(
+      xpTotal: streak.progress.xpTotal + gained,
+      kotoCoins: streak.progress.kotoCoins + gainedKoto + milestone,
+    );
     await saveProgress(next);
 
-    return AnswerOutcome(correct, gained, streak.result, next, updated);
+    return AnswerOutcome(correct, gained, gainedKoto + milestone, streak.result, next, updated);
+  }
+
+  /// Called once, right after a session ends. Applies the flat
+  /// session-length bonus, and — at most once a day — the "today's journey
+  /// complete" bonus.
+  ///
+  /// Journey completeness is derived from the answer log rather than tracked
+  /// separately: every realm that has material must have at least one
+  /// history entry for today. That means it can never drift out of sync with
+  /// what the learner actually did, and it costs nothing extra to compute —
+  /// the same `history()` the stats screen already reads.
+  Future<({Progress progress, int bonus})> finishSession({required int answered}) async {
+    final progress = await loadProgress();
+    final t = today();
+    var bonus = sessionCompletionBonus(answered);
+    var journeyDay = progress.journeyBonusDay;
+
+    if (progress.journeyBonusDay != t) {
+      final withMaterial = (await realms()).where((r) => r.hasMaterial).toList();
+      if (withMaterial.isNotEmpty) {
+        final touchedToday =
+            (await history()).where((h) => h.day == t).map((h) => h.realmId).toSet();
+        if (withMaterial.every((r) => touchedToday.contains(r.id))) {
+          bonus += journeyCompleteBonus;
+          journeyDay = t;
+        }
+      }
+    }
+
+    final next = progress.copyWith(
+      kotoCoins: progress.kotoCoins + bonus,
+      journeyBonusDay: journeyDay,
+    );
+    await saveProgress(next);
+    return (progress: next, bonus: bonus);
+  }
+
+  /// Spends `realmUnlockCost` to flip an existing (already-suggested but
+  /// still locked) realm to usable. Returns false and spends nothing if the
+  /// balance is short — the caller is expected to have already confirmed
+  /// with the learner before calling this.
+  Future<bool> unlockRealm(String realmId) async {
+    final progress = await loadProgress();
+    if (progress.kotoCoins < realmUnlockCost) return false;
+
+    await (db.update(db.realms)..where((t) => t.id.equals(realmId)))
+        .write(const RealmsCompanion(unlocked: Value(true)));
+    await saveProgress(progress.copyWith(kotoCoins: progress.kotoCoins - realmUnlockCost));
+    return true;
+  }
+
+  /// Marks realms unlocked at no cost — used once, when the learner confirms
+  /// their first three free areas at onboarding. Nothing beyond this point
+  /// grants a free unlock; every later one goes through `unlockRealm` or
+  /// `spendForNewRealm`.
+  Future<void> markRealmsUnlocked(List<String> ids) async {
+    if (ids.isEmpty) return;
+    await (db.update(db.realms)..where((t) => t.id.isIn(ids)))
+        .write(const RealmsCompanion(unlocked: Value(true)));
+  }
+
+  /// Spends `realmUnlockCost` for a realm that does not exist as a row yet —
+  /// a genuinely new domain named through the "add a new area" AI prompt,
+  /// rather than one the AI already suggested during profile import. The
+  /// realm itself is created, already unlocked, by the `importMaterial` call
+  /// that follows. Returns false and spends nothing if the balance is short.
+  Future<bool> spendForNewRealm() async {
+    final progress = await loadProgress();
+    if (progress.kotoCoins < realmUnlockCost) return false;
+    await saveProgress(progress.copyWith(kotoCoins: progress.kotoCoins - realmUnlockCost));
+    return true;
   }
 
   // ------------------------------------------------------------- library ops

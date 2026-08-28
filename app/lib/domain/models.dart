@@ -53,6 +53,13 @@ class Realm {
   final bool selected;
   final bool hasMaterial;
 
+  /// Whether this realm is usable — has it been unlocked, free (one of the
+  /// first three) or paid for with Koto Coin. A realm can exist as a row (the
+  /// AI suggested it during profile import) long before it is unlocked; that
+  /// is what lets it be listed, priced and unlocked later without re-running
+  /// profile import.
+  final bool unlocked;
+
   const Realm({
     required this.id,
     required this.name,
@@ -63,6 +70,7 @@ class Realm {
     this.contexts = const [],
     this.selected = false,
     this.hasMaterial = false,
+    this.unlocked = false,
   });
 
   String get label => nameNative.isNotEmpty ? nameNative : name;
@@ -74,6 +82,7 @@ class Realm {
     List<String>? contexts,
     bool? selected,
     bool? hasMaterial,
+    bool? unlocked,
   }) =>
       Realm(
         id: id,
@@ -85,6 +94,7 @@ class Realm {
         contexts: contexts ?? this.contexts,
         selected: selected ?? this.selected,
         hasMaterial: hasMaterial ?? this.hasMaterial,
+        unlocked: unlocked ?? this.unlocked,
       );
 }
 
@@ -479,6 +489,14 @@ class Progress {
   final int freezeUsed;
   final int streakLostFrom;
 
+  /// Koto Coin: a currency separate from XP, spent on unlocking realms rather
+  /// than earned just for showing up. See `progress_service.dart` `kotoFor`.
+  final int kotoCoins;
+
+  /// The day the "today's journey complete" bonus was last paid, so it is
+  /// never paid twice for the same day.
+  final String? journeyBonusDay;
+
   const Progress({
     this.streak = 0,
     this.bestStreak = 0,
@@ -488,6 +506,8 @@ class Progress {
     this.pendingBoost = 0,
     this.freezeUsed = 0,
     this.streakLostFrom = 0,
+    this.kotoCoins = 0,
+    this.journeyBonusDay,
   });
 
   Progress copyWith({
@@ -499,6 +519,8 @@ class Progress {
     int? pendingBoost,
     int? freezeUsed,
     int? streakLostFrom,
+    int? kotoCoins,
+    String? journeyBonusDay,
   }) =>
       Progress(
         streak: streak ?? this.streak,
@@ -509,6 +531,8 @@ class Progress {
         pendingBoost: pendingBoost ?? this.pendingBoost,
         freezeUsed: freezeUsed ?? this.freezeUsed,
         streakLostFrom: streakLostFrom ?? this.streakLostFrom,
+        kotoCoins: kotoCoins ?? this.kotoCoins,
+        journeyBonusDay: journeyBonusDay ?? this.journeyBonusDay,
       );
 
   Map<String, dynamic> toJson() => {
@@ -518,6 +542,8 @@ class Progress {
         'freezes': freezes,
         'xpTotal': xpTotal,
         'pendingBoost': pendingBoost,
+        'kotoCoins': kotoCoins,
+        'journeyBonusDay': journeyBonusDay,
       };
 
   factory Progress.fromJson(Map<String, dynamic> j) => Progress(
@@ -527,6 +553,8 @@ class Progress {
         freezes: (j['freezes'] ?? 1) as int,
         xpTotal: (j['xpTotal'] ?? 0) as int,
         pendingBoost: (j['pendingBoost'] ?? 0) as int,
+        kotoCoins: (j['kotoCoins'] ?? 0) as int,
+        journeyBonusDay: j['journeyBonusDay'] as String?,
       );
 }
 

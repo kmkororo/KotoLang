@@ -18,6 +18,7 @@ import 'package:share_plus/share_plus.dart';
 import '../app.dart';
 import '../core/l10n/languages.dart';
 import '../domain/models.dart';
+import '../domain/progress_service.dart';
 import '../domain/prompts.dart' as prompts;
 import 'onboarding_screens.dart';
 
@@ -50,6 +51,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final speech = ref.watch(speechProvider);
     final lang = ref.watch(languageProvider) ?? fallbackLanguage;
     final realms = ref.watch(_realmsProvider).value ?? const <Realm>[];
+    final progress = ref.watch(progressProvider);
     final theme = Theme.of(context);
 
     return ListView(
@@ -196,6 +198,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: Text(s.t('addMaterial')),
           ),
           const SizedBox(height: 8),
+          // Every area the AI ever suggested, lock state and unlock cost
+          // included — the home screen for the "grow your world" loop.
+          OutlinedButton(
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const RealmPickerScreen())),
+            child: Text(s.t('yourRealmsButton')),
+          ),
+          const SizedBox(height: 8),
           // Material imported before a question format existed never saw it.
           // This rebuilds the questions from the sentences already stored.
           OutlinedButton(
@@ -210,6 +220,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: () async {
+              // A brand-new domain name is not one of the realms the AI
+              // already suggested during profile import, so it cannot be
+              // unlocked through the "your areas" list — it is gated right
+              // here, before the prompt is even copied.
+              if (realms.where((r) => r.unlocked).length >= freeRealmSlots) {
+                if (progress.kotoCoins < realmUnlockCost) {
+                  showToast(context,
+                      s.t('unlockRealmNeedMore', {'n': realmUnlockCost - progress.kotoCoins}));
+                  return;
+                }
+                final ok = await confirm(
+                  context,
+                  title: s.t('unlockRealmConfirmTitle', {'realm': s.t('realmLabel')}),
+                  body: s.t('unlockRealmConfirmBody', {'n': realmUnlockCost}),
+                  confirmLabel: s.t('unlockButton'),
+                  cancelLabel: s.t('cancel'),
+                  destructive: false,
+                );
+                if (!ok || !context.mounted) return;
+                final spent = await ref.read(repositoryProvider).spendForNewRealm();
+                if (!context.mounted || !spent) return;
+                ref.read(progressProvider.notifier).state =
+                    await ref.read(repositoryProvider).loadProgress();
+              }
+
               final profile = await ref.read(repositoryProvider).loadProfile();
               if (!context.mounted) return;
               await copyToClipboard(

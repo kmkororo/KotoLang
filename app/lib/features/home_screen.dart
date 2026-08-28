@@ -9,8 +9,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
+import '../core/util.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
+import '../domain/progress_service.dart';
 import 'onboarding_screens.dart';
 import 'quiz_screen.dart';
 
@@ -21,6 +23,26 @@ final homeCountsProvider = FutureProvider.autoDispose<HomeCounts>((ref) async {
 
 final realmsProvider = FutureProvider.autoDispose<List<Realm>>(
     (ref) => ref.watch(repositoryProvider).realms());
+
+/// Everything the home screen derives from the answer log, read once rather
+/// than once per widget: how well main-idea and reply questions have gone,
+/// which realms today's journey has already touched, and the last 7 days.
+class _HomeStats {
+  final int? mastery;
+  final Set<String> touchedToday;
+  final List<bool> week;
+  const _HomeStats({required this.mastery, required this.touchedToday, required this.week});
+}
+
+final _homeStatsProvider = FutureProvider.autoDispose<_HomeStats>((ref) async {
+  final history = await ref.watch(repositoryProvider).history();
+  final t = today();
+  return _HomeStats(
+    mastery: listeningMastery(history),
+    touchedToday: history.where((h) => h.day == t).map((h) => h.realmId).toSet(),
+    week: weeklyStrip(history, t),
+  );
+});
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -34,32 +56,70 @@ class HomeScreen extends ConsumerWidget {
     final realms = ref.watch(realmsProvider).value ?? const <Realm>[];
     final withMaterial = realms.where((r) => r.hasMaterial).toList();
     final filter = ref.watch(realmFilterProvider);
+    final stats = ref.watch(_homeStatsProvider).value;
+    final locked = realms.where((r) => !r.unlocked);
+    final nextLocked = locked.isEmpty ? null : locked.first;
 
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(homeCountsProvider);
         ref.invalidate(realmsProvider);
+        ref.invalidate(_homeStatsProvider);
       },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
-          // -------- streak / xp strip --------
+          // -------- streak / xp / coin strip --------
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('KotoLang',
                   style: theme.textTheme.titleMedium
                       ?.copyWith(fontWeight: FontWeight.w800)),
-              Row(children: [
+              Wrap(spacing: 8, runSpacing: 4, children: [
                 _Pill(icon: '🔥', text: '${progress.streak}'),
-                const SizedBox(width: 8),
                 _Pill(icon: '⚡', text: '${progress.xpTotal}'),
+                _Pill(icon: '🪙', text: '${progress.kotoCoins}'),
               ]),
             ],
           ),
+          if (nextLocked != null) ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                s.t('nextGoalLabel', {
+                  'realm': nextLocked.label,
+                  'n': (realmUnlockCost - progress.kotoCoins).clamp(0, realmUnlockCost),
+                }),
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
 
           _Banner(progress: progress, due: counts.value?.due ?? 0),
+
+          if (stats?.mastery != null) ...[
+            _MasteryCard(mastery: stats!.mastery!, s: s, theme: theme),
+            const SizedBox(height: 16),
+          ],
+
+          if (withMaterial.isNotEmpty) ...[
+            _JourneyCard(
+              realms: withMaterial,
+              touchedToday: stats?.touchedToday ?? const {},
+              s: s,
+              theme: theme,
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          if (stats != null) ...[
+            _WeekStrip(week: stats.week, theme: theme),
+            const SizedBox(height: 16),
+          ],
 
           // -------- today --------
           Card(
@@ -181,6 +241,10 @@ class HomeScreen extends ConsumerWidget {
         context, MaterialPageRoute(builder: (_) => QuizScreen(slots: slots)));
     if (!context.mounted) return;
     ref.invalidate(homeCountsProvider);
+    // Otherwise Listening Mastery, today's journey and the weekly strip all
+    // read the answer log from before this session — stale until the next
+    // pull-to-refresh, which nobody does right after finishing.
+    ref.invalidate(_homeStatsProvider);
   }
 }
 
@@ -232,6 +296,116 @@ class _Banner extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// "82%" reads as "82% of English", which nothing here can honestly measure.
+/// What can be reported is accuracy on the two listening formats, captioned
+/// as exactly that — never as a fluency score.
+class _MasteryCard extends StatelessWidget {
+  final int mastery;
+  final dynamic s;
+  final ThemeData theme;
+  const _MasteryCard({required this.mastery, required this.s, required this.theme});
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Text('🎧', style: const TextStyle(fontSize: 28)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(s.t('listeningMasteryLabel'),
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(s.t('listeningMasteryCaption'),
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              Text('$mastery%',
+                  style: theme.textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w800, color: theme.colorScheme.primary)),
+            ],
+          ),
+        ),
+      );
+}
+
+/// One row per realm with material: a check once today's history has an
+/// entry for it, a hollow circle otherwise. The whole app's several worlds,
+/// treated as today's journey through them.
+class _JourneyCard extends StatelessWidget {
+  final List<Realm> realms;
+  final Set<String> touchedToday;
+  final dynamic s;
+  final ThemeData theme;
+  const _JourneyCard({
+    required this.realms,
+    required this.touchedToday,
+    required this.s,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(s.t('todaysJourneyTitle'),
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 10),
+              for (final r in realms)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        touchedToday.contains(r.id)
+                            ? Icons.check_circle
+                            : Icons.circle_outlined,
+                        size: 18,
+                        color: touchedToday.contains(r.id)
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.outlineVariant,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(r.label)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+}
+
+/// The last 7 days, derived straight from the answer log rather than tracked
+/// separately — so it never goes stale independently of a streak reset, and
+/// it never needs its own storage.
+class _WeekStrip extends StatelessWidget {
+  final List<bool> week;
+  final ThemeData theme;
+  const _WeekStrip({required this.week, required this.theme});
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          for (final answered in week)
+            Icon(
+              answered ? Icons.headphones : Icons.circle_outlined,
+              size: 20,
+              color: answered ? theme.colorScheme.primary : theme.colorScheme.outlineVariant,
+            ),
+        ],
+      );
 }
 
 class _Pill extends StatelessWidget {

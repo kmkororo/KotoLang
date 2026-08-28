@@ -1,14 +1,15 @@
-/// Upgrading an existing library from schema 1 to schema 2.
+/// Upgrading an existing library across schema versions: 1 -> 2 -> 3.
 ///
-/// Schema 2 adds the columns the conversation formats need. Someone who has
-/// been studying for months has a schema 1 database on their phone, and the
-/// upgrade runs on it unattended the first time they open the new build. If it
-/// goes wrong their material is gone, so it is worth proving rather than
-/// assuming.
+/// Someone who has been studying for months has an old database on their
+/// phone, and the upgrade runs on it unattended the first time they open the
+/// new build. If it goes wrong their material is gone, so it is worth
+/// proving rather than assuming.
 ///
-/// The schema 1 database is made by building schema 2 and taking the new
-/// columns back out again, which is both faithful and impossible to let drift
-/// out of step with the real definition.
+/// Each seed is made by building the *current* schema and taking the later
+/// columns back out again, which is both faithful and impossible to let
+/// drift out of step with the real table definitions — if a column is
+/// renamed, these `ALTER TABLE ... DROP COLUMN` statements fail loudly
+/// instead of silently seeding the wrong shape.
 library;
 
 import 'dart:io';
@@ -19,7 +20,7 @@ import 'package:kotolang/data/database.dart';
 import 'package:kotolang/data/repository.dart';
 import 'package:kotolang/domain/models.dart';
 
-const _addedToSentences = [
+const _addedInSchema2ToSentences = [
   'cue_en',
   'cue_translation_native',
   'reply_distractors_en',
@@ -28,7 +29,8 @@ const _addedToSentences = [
   'register_why_native',
   'register_correct',
 ];
-const _addedToQuestions = ['cue_text', 'cue_translation_native', 'note'];
+const _addedInSchema2ToQuestions = ['cue_text', 'cue_translation_native', 'note'];
+const _addedInSchema3ToRealms = ['unlocked'];
 
 void main() {
   late File file;
@@ -42,12 +44,9 @@ void main() {
     if (file.parent.existsSync()) file.parent.deleteSync(recursive: true);
   });
 
-  /// Builds a database that looks exactly like the previous release's, holding
-  /// one area, one expression and one sentence.
-  Future<void> seedSchemaOne() async {
-    final db = AppDatabase(NativeDatabase(file));
-    final repo = Repository(db);
-
+  /// One area, one expression, one sentence, one answered question — enough
+  /// to prove material and progress both survive an upgrade.
+  Future<void> seedContent(Repository repo) async {
     await repo.saveUiLanguage('ja');
     await repo.importProfile(
       '{"schema_version":"1.0","type":"profile",'
@@ -70,19 +69,44 @@ void main() {
       '"meaning_options_native":["確認は不要","担当者が確認","確認済み"]}]}',
       uiLanguage: 'ja',
     );
-
-    // Answer something, so there is progress to lose if the upgrade goes wrong.
     final q = (await repo.questions()).first;
     await repo.recordAnswer(question: q, correct: true, wasDue: false);
+  }
 
-    // Now wind the schema back to 1.
-    for (final c in _addedToSentences) {
+  /// Builds a database that looks exactly like the very first release's.
+  Future<void> seedSchemaOne() async {
+    final db = AppDatabase(NativeDatabase(file));
+    await seedContent(Repository(db));
+
+    for (final c in _addedInSchema2ToSentences) {
       await db.customStatement('ALTER TABLE sentences DROP COLUMN $c');
     }
-    for (final c in _addedToQuestions) {
+    for (final c in _addedInSchema2ToQuestions) {
       await db.customStatement('ALTER TABLE questions DROP COLUMN $c');
     }
+    for (final c in _addedInSchema3ToRealms) {
+      await db.customStatement('ALTER TABLE realms DROP COLUMN $c');
+    }
     await db.customStatement('PRAGMA user_version = 1');
+    await db.close();
+  }
+
+  /// Builds a database shaped like the release with the conversation formats
+  /// but no Koto Coin economy yet — the narrower slice schema 3 alone has to
+  /// upgrade correctly.
+  Future<void> seedSchemaTwo({required bool hasMaterial}) async {
+    final db = AppDatabase(NativeDatabase(file));
+    final repo = Repository(db);
+    if (hasMaterial) {
+      await seedContent(repo);
+    } else {
+      await repo.saveUiLanguage('ja');
+    }
+
+    for (final c in _addedInSchema3ToRealms) {
+      await db.customStatement('ALTER TABLE realms DROP COLUMN $c');
+    }
+    await db.customStatement('PRAGMA user_version = 2');
     await db.close();
   }
 
@@ -117,6 +141,11 @@ void main() {
     expect((await repo.history()).length, 1);
     expect((await repo.loadProgress()).streak, 1);
     expect(await repo.srsStates(), isNotEmpty);
+
+    // A realm built before Koto Coin existed is grandfathered in as unlocked
+    // rather than retroactively charged for.
+    final realm = (await repo.realms()).single;
+    expect(realm.unlocked, isTrue);
   });
 
   test('an upgraded library gains the formats it can build, and no others',
@@ -153,10 +182,70 @@ void main() {
     expect((await Repository(first).counts()).sentences, 1);
     await first.close();
 
-    // A second open finds user_version already at 2. If the migration ran
-    // again the ALTER statements would fail on columns that exist.
+    // A second open finds user_version already at the latest schema. If any
+    // migration step ran again, its ALTER statements would fail on columns
+    // that already exist.
     final second = AppDatabase(NativeDatabase(file));
     addTearDown(second.close);
     expect((await Repository(second).counts()).sentences, 1);
+  });
+
+  test('a schema 2 realm with material is grandfathered as unlocked', () async {
+    await seedSchemaTwo(hasMaterial: true);
+
+    final db = AppDatabase(NativeDatabase(file));
+    final repo = Repository(db);
+    addTearDown(db.close);
+
+    final realm = (await repo.realms()).single;
+    expect(realm.hasMaterial, isTrue);
+    expect(realm.unlocked, isTrue,
+        reason: 'a realm already built must never be charged for retroactively');
+  });
+
+  test('a schema 2 realm the AI only suggested stays locked', () async {
+    // A profile import creates a Realm row for every domain the AI names,
+    // long before any material exists for it. Only realms actually built or
+    // explicitly selected are grandfathered — an untouched suggestion is
+    // exactly the kind of realm Koto Coin is meant to gate.
+    final db = AppDatabase(NativeDatabase(file));
+    final repo = Repository(db);
+    await repo.saveUiLanguage('ja');
+    await repo.importProfile(
+      '{"schema_version":"1.0","type":"profile",'
+      '"profile":{"english_level":"B2","roles":[],"learning_priorities":[]},'
+      '"domains":[{"name":"Work","importance":5},{"name":"Travel","importance":2}]}',
+      uiLanguage: 'ja',
+    );
+    for (final c in _addedInSchema3ToRealms) {
+      await db.customStatement('ALTER TABLE realms DROP COLUMN $c');
+    }
+    await db.customStatement('PRAGMA user_version = 2');
+    await db.close();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    final reopenedRepo = Repository(reopened);
+    addTearDown(reopened.close);
+
+    final realms = await reopenedRepo.realms();
+    expect(realms, hasLength(2));
+    expect(realms.every((r) => !r.hasMaterial), isTrue,
+        reason: 'the fixture is only meaningful if neither realm was built');
+    expect(realms.every((r) => !r.unlocked), isTrue);
+  });
+
+  test('a fresh schema 3 database needs no migration at all', () async {
+    final db = AppDatabase(NativeDatabase(file));
+    await seedContent(Repository(db));
+    await db.close();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    final repo = Repository(reopened);
+    addTearDown(reopened.close);
+
+    // Built directly on the current schema: a realm with material is
+    // unlocked because `importMaterial` marks it so, not through migration
+    // grandfathering.
+    expect((await repo.realms()).single.unlocked, isTrue);
   });
 }

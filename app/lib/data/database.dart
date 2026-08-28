@@ -50,6 +50,9 @@ class Realms extends Table {
   BoolColumn get selected => boolean().withDefault(const Constant(false))();
   BoolColumn get hasMaterial => boolean().withDefault(const Constant(false))();
   IntColumn get createdAt => integer().withDefault(const Constant(0))();
+  // Added in schema 3. Defaults false so the migration can grandfather
+  // existing realms in explicitly rather than unlocking everything for free.
+  BoolColumn get unlocked => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -221,7 +224,7 @@ class AppDatabase extends _$AppDatabase {
       : super(executor ?? driftDatabase(name: 'kotolang'));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -252,6 +255,18 @@ class AppDatabase extends _$AppDatabase {
             ]) {
               await mig.addColumn(questions, column);
             }
+          }
+          // 2 -> 3 adds Koto Coin realm unlocking. A realm the learner has
+          // already built or explicitly selected is grandfathered in as
+          // unlocked — nobody who already invested in a realm should be asked
+          // to pay for it retroactively. Anything else defaults to locked,
+          // which is the correct state for a realm the AI merely suggested
+          // during profile import but the learner never touched.
+          if (from < 3) {
+            await mig.addColumn(realms, realms.unlocked);
+            await customStatement(
+              'UPDATE realms SET unlocked = 1 WHERE has_material = 1 OR selected = 1',
+            );
           }
           await _createIndexes();
         },
@@ -296,6 +311,7 @@ extension RealmRowX on RealmRow {
         contexts: contexts,
         selected: selected,
         hasMaterial: hasMaterial,
+        unlocked: unlocked,
       );
 }
 
@@ -309,6 +325,7 @@ RealmsCompanion realmToRow(m.Realm r) => RealmsCompanion.insert(
       contexts: Value(r.contexts),
       selected: Value(r.selected),
       hasMaterial: Value(r.hasMaterial),
+      unlocked: Value(r.unlocked),
     );
 
 extension ItemRowX on ItemRow {

@@ -31,19 +31,20 @@ const recognitionCap = 3;
 /// attempts/weight means a heavier format needs proportionally more attempts
 /// before the rotation moves on.
 ///
-/// `reply` sits at the top because deciding what to say is the scarcest of the
-/// skills here and the only format that trains it. `reorder` sits at the
-/// bottom because `produce` asks the same thing without playing the sentence
-/// first, which makes it the harder and more useful of the two; reorder is
-/// kept as the gentler way in rather than dropped.
+/// KotoLang is listening-first: understanding the main idea and choosing the
+/// right response matter more than any other skill here, so `gist` and
+/// `reply` lead by a wide margin rather than a narrow one. `produce` still
+/// outweighs `reorder` for the same reason as before — it asks the same thing
+/// without playing the sentence first, which makes it the harder and more
+/// useful of the two.
 const formatWeight = <QuestionType, double>{
-  QuestionType.reply: 2.2,
-  QuestionType.paraphrase: 2.0,
-  QuestionType.gist: 2.0,
-  QuestionType.produce: 1.8,
-  QuestionType.dictation: 1.2,
-  QuestionType.register: 1.0,
-  QuestionType.reorder: 0.6,
+  QuestionType.gist: 3.0,
+  QuestionType.reply: 3.0,
+  QuestionType.paraphrase: 1.6,
+  QuestionType.produce: 1.2,
+  QuestionType.dictation: 0.8,
+  QuestionType.register: 0.6,
+  QuestionType.reorder: 0.4,
 };
 
 bool isProduction(QuestionType t) => productionTypes.contains(t);
