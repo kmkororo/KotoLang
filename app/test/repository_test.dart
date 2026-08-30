@@ -989,6 +989,45 @@ void main() {
     });
   });
 
+  group('session size', () {
+    test('a size bought under the old rules is snapped to an offered one',
+        () async {
+      // Sessions used to be lengthened ten slots at a time up to forty-five.
+      // Those numbers are not on the settings screen any more, and the
+      // dropdown fell back to showing 5 without writing 5 back — so it read
+      // "5 questions" while the session went on serving twenty-five.
+      for (final (stored, expected) in const [
+        (15, 10), // a tie goes to the shorter session
+        (25, 20),
+        (35, 20),
+        (45, 20),
+        (7, 5),
+        (1, 3),
+      ]) {
+        await repo.saveSettings(AppSettings(sessionSize: stored));
+        expect((await repo.loadSettings()).sessionSize, expected,
+            reason: 'a stored $stored should become $expected');
+      }
+    });
+
+    test('a size the screen offers is left exactly as it is', () async {
+      for (final n in sessionSizes) {
+        await repo.saveSettings(AppSettings(sessionSize: n));
+        expect((await repo.loadSettings()).sessionSize, n);
+      }
+    });
+
+    test('what is loaded is always something the screen can show', () async {
+      // The property the dropdown depends on: it throws outright if handed a
+      // value with no matching item.
+      for (final stored in [0, 1, 5, 9, 12, 18, 30, 45, 999]) {
+        await repo.saveSettings(AppSettings(sessionSize: stored));
+        expect(sessionSizes.contains((await repo.loadSettings()).sessionSize),
+            isTrue);
+      }
+    });
+  });
+
   group('perfect run', () {
     test('a clean session pays the perfect-run bonus as well', () async {
       await repo.saveProgress(const Progress());

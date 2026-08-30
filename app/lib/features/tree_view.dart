@@ -248,8 +248,9 @@ class _TreePainter extends CustomPainter {
   static const _stem = Color(0xFF4C8C3A);
   static const _stemOnDark = Color(0xFF6FA85C);
 
-  /// 0 at the first answer, 1 by the time there is a real trunk.
-  double get _woodiness => ((data.shape.answers - 2) / 45).clamp(0.0, 1.0);
+  /// Green at the start, fully barked a few hundred answers in. It used to
+  /// finish inside fifty, which is a couple of days.
+  double get _woodiness => ((data.shape.answers - 8) / 240).clamp(0.0, 1.0);
 
   Color get _stemColour => Color.lerp(dark ? _stemOnDark : _stem,
       dark ? _barkOnDark : _bark, _woodiness)!;
@@ -608,11 +609,12 @@ class _TreePainter extends CustomPainter {
           width,
           width * 0.42,
           // A seedling is one unbranched stem with leaves on it; forking comes
-          // later. Branching from the very first answer is what made the early
-          // stages look like miniature trees rather than seedlings.
-          b.answers > 24
+          // much later. These used to be six and twenty-four answers, which is
+          // an evening — the tree had a full branching structure before the
+          // learner had finished their first sitting.
+          b.answers > 130
               ? 2
-              : b.answers > 6
+              : b.answers > 40
                   ? 1
                   : 0,
           i * 100 + j * 7 + 3,

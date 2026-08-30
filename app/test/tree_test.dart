@@ -154,11 +154,21 @@ void main() {
       expect(trunkGrowth(100000), 1.0);
     });
 
-    test('the first answer is a sprout, not half a tree', () {
-      // The old curve was referenced so far out that a single answer bought
-      // four tenths of the full height, and the seedling stage never existed.
-      expect(trunkGrowth(1), lessThan(0.15));
-      expect(trunkGrowth(10), lessThan(0.40));
+    test('the seedling stage lasts long enough to be a stage', () {
+      // Two curves have been wrong here. The first was referenced so far out
+      // that one answer bought four tenths of the height. The second was a
+      // plain log against a thousand, which still handed a third of it over
+      // inside ten answers — cotyledons on Monday, a tree on Tuesday, then a
+      // year of nothing. A sitting is a handful of answers, so the first
+      // hundred of them have to still look like a plant.
+      expect(trunkGrowth(1), lessThan(0.02));
+      expect(trunkGrowth(10), lessThan(0.12));
+      expect(trunkGrowth(50), lessThan(0.35));
+      expect(trunkGrowth(100), lessThan(0.45));
+
+      // And it must not stall either: by a few hundred it is plainly a tree.
+      expect(trunkGrowth(250), greaterThan(0.50));
+      expect(trunkGrowth(600), greaterThan(0.80));
     });
 
     test('girth keeps going after height has stopped', () {

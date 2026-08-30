@@ -68,16 +68,18 @@ class TreeShape {
   const TreeShape({required this.answers, required this.branches});
 }
 
-/// How far the tree has come, from 0 (a seed) to 1 (as big as it draws).
+/// How far the tree has come, from 0 (nothing answered) to 1 (as big as it
+/// draws).
 ///
-/// Logarithmic, and referenced to a thousand answers rather than a hundred
-/// thousand. The old curve reached four tenths of full height on the very
-/// first answer, so a seedling became a tree in one question and then barely
-/// moved for the next ten thousand — the growth was all spent before the
-/// learner saw any of it.
+/// Logarithmic against a thousand answers, then raised to a power to flatten
+/// the start. The plain log curve gave a third of the full height away inside
+/// ten answers, so a learner who had seen two cotyledons on Monday had a tree
+/// by Tuesday and then watched it barely move for a year. The seedling stage
+/// has to last long enough to be a stage.
 double trunkGrowth(int answers) {
   if (answers <= 0) return 0;
-  return (log(answers + 1) / log(1001)).clamp(0.0, 1.0);
+  final log10k = (log(answers + 1) / log(1001)).clamp(0.0, 1.0);
+  return pow(log10k, 2.1).toDouble();
 }
 
 /// Girth keeps creeping up past the point where height stops, so that someone

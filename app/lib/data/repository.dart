@@ -104,6 +104,21 @@ class HomeCounts {
 
 // --------------------------------------------------------------- repository
 
+/// The nearest size the settings screen actually offers.
+///
+/// `sessionSizeAll` means "everything there is" rather than a number, so it is
+/// only ever kept when it was stored deliberately — nothing snaps to it.
+int _offeredSessionSize(int stored) {
+  if (sessionSizes.contains(stored)) return stored;
+  final numbered = sessionSizes.where((n) => n != sessionSizeAll).toList()
+    ..sort();
+  // Ties go to the shorter session. Someone whose stored size no longer exists
+  // is better served by a run that ends early than by one that outstays.
+  return numbered.reduce((a, b) =>
+      (a - stored).abs() <= (b - stored).abs() ? a : b);
+}
+
+
 class Repository {
   final AppDatabase db;
   final Random? rng;
@@ -140,7 +155,11 @@ class Repository {
       dailyGoal: (j['dailyGoal'] ?? 1) as int,
       theme: (j['theme'] ?? 'system') as String,
       batchSize: (j['batchSize'] ?? 'standard') as String,
-      sessionSize: (j['sessionSize'] ?? baseSessionSize) as int,
+      // A size bought under the old rules — sessions used to be lengthened ten
+      // slots at a time, up to forty-five — is not one the settings screen can
+      // offer any more. Snapped to the nearest size that is, because the
+      // dropdown was showing "5" while the session still served twenty-five.
+      sessionSize: _offeredSessionSize((j['sessionSize'] ?? baseSessionSize) as int),
       haptics: (j['haptics'] ?? true) as bool,
     );
   }

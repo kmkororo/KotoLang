@@ -61,36 +61,40 @@ _Phase _phase(String name, TreeShape shape,
 
 final _phases = <_Phase>[
   _phase('00_seed', const TreeShape(answers: 0, branches: [])),
-  _phase('01_first_answer',
-      TreeShape(answers: 1, branches: [_branch('a', '仕事', 1)])),
-  _phase('02_six_answers',
-      TreeShape(answers: 6, branches: [_branch('a', '仕事', 6)])),
+  _phase('01_one', TreeShape(answers: 1, branches: [_branch('a', '仕事', 1)])),
+  _phase('02_five', TreeShape(answers: 5, branches: [_branch('a', '仕事', 5)])),
+  _phase('03_ten', TreeShape(answers: 10, branches: [_branch('a', '仕事', 10)])),
   _phase(
-    '03_twenty',
+    '04_twenty_five',
     TreeShape(
-        answers: 20,
-        branches: [_branch('a', '仕事', 14), _branch('b', '旅行', 6)]),
+        answers: 25,
+        branches: [_branch('a', '仕事', 18), _branch('b', '旅行', 7)]),
   ),
   _phase(
-    '04_sixty',
-    TreeShape(answers: 60, branches: [
-      _branch('a', '仕事', 34, learned: 1),
-      _branch('b', '旅行', 18),
-      _branch('c', '料理', 8),
+    '05_fifty',
+    TreeShape(
+        answers: 50,
+        branches: [_branch('a', '仕事', 34), _branch('b', '旅行', 16)]),
+  ),
+  _phase(
+    '06_hundred',
+    TreeShape(answers: 100, branches: [
+      _branch('a', '仕事', 55, learned: 1),
+      _branch('b', '旅行', 30),
+      _branch('c', '料理', 15),
     ]),
   ),
   _phase(
-    '05_two_hundred',
-    TreeShape(answers: 200, branches: [
-      _branch('a', '仕事', 96, learned: 4),
-      _branch('b', '旅行', 60, learned: 2),
-      _branch('c', '料理', 30),
-      _branch('d', '健康', 14),
+    '07_two_fifty',
+    TreeShape(answers: 250, branches: [
+      _branch('a', '仕事', 120, learned: 4),
+      _branch('b', '旅行', 80, learned: 2),
+      _branch('c', '料理', 50),
     ]),
     ornaments: ['ribbon'],
   ),
   _phase(
-    '06_six_hundred',
+    '08_six_hundred',
     TreeShape(answers: 600, branches: [
       _branch('a', '仕事', 240, learned: 9),
       _branch('b', '旅行', 160, learned: 5),
@@ -100,7 +104,7 @@ final _phases = <_Phase>[
     ornaments: ['ribbon', 'star'],
   ),
   _phase(
-    '07_one_thousand',
+    '09_one_thousand',
     TreeShape(answers: 1000, branches: [
       _branch('a', '仕事', 400, learned: 14),
       _branch('b', '旅行', 260, learned: 8),
@@ -110,7 +114,7 @@ final _phases = <_Phase>[
     ornaments: ['ribbon', 'star', 'lantern'],
   ),
   _phase(
-    '08_five_thousand',
+    '10_five_thousand',
     TreeShape(answers: 5000, branches: [
       _branch('a', '仕事', 1800, learned: 30),
       _branch('b', '旅行', 1400, learned: 22),
@@ -121,7 +125,7 @@ final _phases = <_Phase>[
   ),
   // The states that are not about size at all.
   _phase(
-    '09_neglected_area',
+    '11_neglected_area',
     TreeShape(answers: 200, branches: [
       _branch('a', '仕事', 120, learned: 5),
       _branch('b', '旅行', 60, thirsty: true),
@@ -129,7 +133,7 @@ final _phases = <_Phase>[
     ]),
   ),
   _phase(
-    '10_untouched_area',
+    '12_untouched_area',
     TreeShape(answers: 90, branches: [
       _branch('a', '仕事', 70, learned: 2),
       _branch('b', '旅行', 20),
@@ -140,7 +144,7 @@ final _phases = <_Phase>[
   _phase(
     // A streak on the line and nothing answered today: a bug turns up on the
     // tree until one question is done.
-    '11_pest',
+    '13_pest',
     TreeShape(answers: 150, branches: [
       _branch('a', '仕事', 90, learned: 3),
       _branch('b', '旅行', 60, learned: 1),
