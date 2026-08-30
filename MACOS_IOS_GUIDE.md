@@ -1,7 +1,7 @@
 # Running KotoLang on a MacBook (iOS)
 
 Everything in `app/lib` is already shared with the Android build and is covered
-by 136 tests. What has never been compiled is the iOS half, because Xcode only
+by 258 tests. What has never been compiled is the iOS half, because Xcode only
 runs on macOS. This is the sequence from a clean Mac to a running iPhone app.
 
 ---
@@ -91,7 +91,7 @@ genuinely differs per device.
 ## 5. Run the tests
 
 ```bash
-flutter test                                   # 136 host tests, no device needed
+flutter test                                   # 258 host tests, no device needed
 flutter test integration_test/device_test.dart # on the connected iPhone
 ```
 
@@ -120,6 +120,46 @@ The archive lands in `build/ios/archive/`. Upload it with Xcode's Organizer or
 Apple ID can only sideload to your own device.
 
 ---
+
+## What was fixed before this ever reached a Mac
+
+Three things behaved correctly on Android and would have been wrong on iOS.
+None of them are visible from Windows, so they were found by reading the
+platform rules rather than by running anything. They are pinned by
+`test/platform_config_test.dart`, which fails if a later change drops them.
+
+### Interface language
+
+iOS hands an app only the locales its bundle claims to support. Without a
+`CFBundleLocalizations` list, a Japanese iPhone reports `en`, and the first
+screen preselects English for someone whose phone is not in English.
+
+All ten languages are now declared in `ios/Runner/Info.plist`. Simplified
+Chinese is spelled `zh-Hans` there and `zh-CN` in the app; the test knows about
+that one difference.
+
+### Opening ChatGPT and Claude
+
+`canOpenURL` returns false on iOS for any scheme not listed in
+`LSApplicationQueriesSchemes`, and `lib/features/ai_links.dart` asks before it
+opens. Undeclared, the assistant's own app is never opened even when installed
+— the setup screens silently fall back to the web address every time.
+
+`chatgpt` and `claude` are now declared, mirroring the `<queries>` block in the
+Android manifest.
+
+### The ring/silent switch
+
+The default audio session category is silenced by the hardware switch. For an
+app whose main exercise is listening, that is the whole thing broken with no
+explanation on screen.
+
+`lib/core/speech.dart` now sets the `playback` category on iOS only, with
+`duckOthers` so a podcast in the background drops rather than being cut off.
+The methods do not exist on Android, so the call is behind a platform check.
+
+**Worth confirming on the phone:** flip the ring/silent switch to silent and
+play a sentence. It should still speak.
 
 ## Things to check first on the Mac
 
@@ -153,11 +193,11 @@ check on an iPad if you have one.
 
 ### Privacy manifest
 
-Recent App Store submissions require `ios/Runner/PrivacyInfo.xcprivacy`
-declaring "required reason" API usage. KotoLang collects nothing and makes no
-network requests, but the file must still exist and declare the APIs its
-dependencies touch — typically file timestamps (`C617.1`) and user defaults
-(`CA92.1`). Xcode will tell you at validation time if anything is missing.
+Written and in place: `ios/Runner/PrivacyInfo.xcprivacy`. It declares no
+collection and no tracking, and gives reasons for the three required-reason
+APIs the dependencies touch — user defaults (`CA92.1`), file timestamps
+(`C617.1`) and free disk space (`E174.1`). Xcode will say at validation time
+if a new dependency has added a fourth.
 
 ### Share target — Android only so far
 
@@ -190,5 +230,5 @@ should not have been — check the new dependency before adding it.
 | `pod install` fails on Apple Silicon | `sudo arch -x86_64 gem install ffi`, then `arch -x86_64 pod install` |
 | "Signing for Runner requires a development team" | Step 4 above was skipped |
 | App installs then immediately closes | The developer certificate is untrusted — step 6 above |
-| No sound, no error | No English voice downloaded on the phone. Settings → Accessibility → Spoken Content → Voices → English |
+| No sound, no error | No English voice downloaded on the phone. Settings → Accessibility → Spoken Content → Voices → English. The ring/silent switch is no longer a cause — the audio category is set for it |
 | `CocoaPods could not find compatible versions` | `pod repo update`, then `pod install` again |

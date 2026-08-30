@@ -481,7 +481,6 @@ class Progress {
   final int bestStreak;
   final String? lastStudyDay;
   final int freezes;
-  final int xpTotal;
   final int pendingBoost;
 
   /// Set during start-up reconciliation so the home screen can explain what
@@ -489,25 +488,43 @@ class Progress {
   final int freezeUsed;
   final int streakLostFrom;
 
-  /// Koto Coin: a currency separate from XP, spent on unlocking realms rather
-  /// than earned just for showing up. See `progress_service.dart` `kotoFor`.
-  final int kotoCoins;
+  /// Koto Seeds: what studying grows, and the only thing that buys a wider
+  /// world — another area to study, a longer daily session. Studying itself
+  /// never costs any. See `progress_service.dart` `seedsFor`.
+  final int seeds;
 
   /// The day the "today's journey complete" bonus was last paid, so it is
   /// never paid twice for the same day.
   final String? journeyBonusDay;
+
+  /// Items whose breakthrough has already been paid for. Kept as a plain
+  /// list in the same JSON blob as the rest of progress, so it needs no
+  /// schema change — and so a restored backup carries it along.
+  final List<String> breakthroughs;
+
+  /// Ornaments bought and hung on the tree, in the order they were bought.
+  /// Decoration only — they do not change any number the app keeps.
+  final List<String> ornaments;
+
+  /// A new area paid for but not yet imported. The charge happens when the
+  /// prompt is copied, long before the material comes back, so without this
+  /// the app could not tell "already paid, still waiting" from "not paid" —
+  /// and copying the prompt a second time charged all over again.
+  final int realmCredits;
 
   const Progress({
     this.streak = 0,
     this.bestStreak = 0,
     this.lastStudyDay,
     this.freezes = 1, // one in hand, so the first slip is survivable
-    this.xpTotal = 0,
     this.pendingBoost = 0,
     this.freezeUsed = 0,
     this.streakLostFrom = 0,
-    this.kotoCoins = 0,
+    this.seeds = 0,
     this.journeyBonusDay,
+    this.realmCredits = 0,
+    this.breakthroughs = const [],
+    this.ornaments = const [],
   });
 
   Progress copyWith({
@@ -515,24 +532,28 @@ class Progress {
     int? bestStreak,
     String? lastStudyDay,
     int? freezes,
-    int? xpTotal,
     int? pendingBoost,
     int? freezeUsed,
     int? streakLostFrom,
-    int? kotoCoins,
+    int? seeds,
     String? journeyBonusDay,
+    List<String>? breakthroughs,
+    List<String>? ornaments,
+    int? realmCredits,
   }) =>
       Progress(
         streak: streak ?? this.streak,
         bestStreak: bestStreak ?? this.bestStreak,
         lastStudyDay: lastStudyDay ?? this.lastStudyDay,
         freezes: freezes ?? this.freezes,
-        xpTotal: xpTotal ?? this.xpTotal,
         pendingBoost: pendingBoost ?? this.pendingBoost,
         freezeUsed: freezeUsed ?? this.freezeUsed,
         streakLostFrom: streakLostFrom ?? this.streakLostFrom,
-        kotoCoins: kotoCoins ?? this.kotoCoins,
+        seeds: seeds ?? this.seeds,
         journeyBonusDay: journeyBonusDay ?? this.journeyBonusDay,
+        realmCredits: realmCredits ?? this.realmCredits,
+        breakthroughs: breakthroughs ?? this.breakthroughs,
+        ornaments: ornaments ?? this.ornaments,
       );
 
   Map<String, dynamic> toJson() => {
@@ -540,10 +561,12 @@ class Progress {
         'bestStreak': bestStreak,
         'lastStudyDay': lastStudyDay,
         'freezes': freezes,
-        'xpTotal': xpTotal,
         'pendingBoost': pendingBoost,
-        'kotoCoins': kotoCoins,
+        'seeds': seeds,
         'journeyBonusDay': journeyBonusDay,
+        'realmCredits': realmCredits,
+        'breakthroughs': breakthroughs,
+        'ornaments': ornaments,
       };
 
   factory Progress.fromJson(Map<String, dynamic> j) => Progress(
@@ -551,10 +574,15 @@ class Progress {
         bestStreak: (j['bestStreak'] ?? 0) as int,
         lastStudyDay: j['lastStudyDay'] as String?,
         freezes: (j['freezes'] ?? 1) as int,
-        xpTotal: (j['xpTotal'] ?? 0) as int,
         pendingBoost: (j['pendingBoost'] ?? 0) as int,
-        kotoCoins: (j['kotoCoins'] ?? 0) as int,
+        // Seeds were called Koto Coin. Same balance, read from whichever key
+        // the stored blob happens to carry.
+        seeds: (j['seeds'] ?? j['kotoCoins'] ?? 0) as int,
         journeyBonusDay: j['journeyBonusDay'] as String?,
+        realmCredits: (j['realmCredits'] ?? 0) as int,
+        breakthroughs:
+            ((j['breakthroughs'] as List?) ?? const []).cast<String>(),
+        ornaments: ((j['ornaments'] as List?) ?? const []).cast<String>(),
       );
 }
 

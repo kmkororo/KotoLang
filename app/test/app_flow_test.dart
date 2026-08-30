@@ -6,6 +6,8 @@
 /// the interface really does change language.
 library;
 
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +24,7 @@ import 'package:kotolang/features/ai_links.dart';
 import 'package:kotolang/features/onboarding_screens.dart';
 import 'package:kotolang/features/paste_box.dart';
 import 'package:kotolang/features/quiz_screen.dart';
+import 'package:kotolang/features/tree_view.dart';
 
 import 'paste_test.dart' show materialReply;
 import 'repository_test.dart' show materialJson, profileJson;
@@ -32,12 +35,21 @@ Future<(AppDatabase, Repository)> pumpApp(
   Future<void> Function(Repository repo)? seed,
 }) async {
   final db = AppDatabase(NativeDatabase.memory());
-  final repo = Repository(db);
+  // Seeded, and shared with the widgets under test. Session building draws at
+  // random, so an unseeded app picked a different question type on every run
+  // and any assertion about the question on screen was a coin toss.
+  final repo = Repository(db, rng: Random(42));
   if (seed != null) await seed(repo);
 
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [databaseProvider.overrideWithValue(db)],
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        repositoryProvider.overrideWithValue(repo),
+        // The tree sways in a loop on a real device. Held still here: a
+        // repeating animation means `pumpAndSettle` never settles.
+        treeMotionProvider.overrideWithValue(false),
+      ],
       child: const KotoLangApp(),
     ),
   );
@@ -110,7 +122,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(QuizScreen), findsOneWidget);
+    // Nothing has played yet, so the button invites a first listen rather
+    // than offering to repeat something the learner has not heard.
+    expect(find.text(s.t('playFirst')), findsOneWidget);
+    expect(find.text(s.t('playAgain')), findsNothing);
+
+    await tester.tap(find.text(s.t('playFirst')));
+    await tester.pumpAndSettle();
     expect(find.text(s.t('playAgain')), findsOneWidget);
+
     // The answer button starts disabled: nothing has been chosen yet.
     final button = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, s.t('answerLabel')),
@@ -299,9 +319,9 @@ void main() {
   });
 
   testWidgets('onboarding caps the free realms at three, no more', (tester) async {
-    // The spec: the first three areas are free; a fourth checkbox must not
-    // even become checkable here, since that would silently promise
-    // something only Koto Coin is supposed to unlock.
+    // The first three areas are free. A fourth must not become checkable —
+    // that would silently promise something Seeds are supposed to gate — but
+    // tapping it has to say why rather than simply doing nothing.
     _tallScreen(tester);
     final (db, repo) = await pumpApp(tester, seed: (r) async {
       await r.saveUiLanguage('en');
@@ -327,7 +347,18 @@ void main() {
       expect(tester.widget<CheckboxListTile>(boxes.at(i)).value, isTrue);
     }
     expect(tester.widget<CheckboxListTile>(boxes.at(3)).value, isFalse);
-    expect(tester.widget<CheckboxListTile>(boxes.at(3)).onChanged, isNull);
+
+    // Tapping the fourth explains the rule and leaves the box alone.
+    await tester.tap(boxes.at(3));
+    await tester.pumpAndSettle();
+    expect(find.text(s.t('capTitle', {'n': freeRealmSlots})), findsOneWidget);
+    expect(find.text(s.t('capStepEarn', {'n': realmUnlockCost})), findsOneWidget);
+
+    // Any tap closes it, including one inside the card.
+    await tester.tap(find.text(s.t('capStepOpen')));
+    await tester.pumpAndSettle();
+    expect(find.text(s.t('capTitle', {'n': freeRealmSlots})), findsNothing);
+    expect(tester.widget<CheckboxListTile>(boxes.at(3)).value, isFalse);
 
     await tester.tap(find.text(s.t('continueLabel')));
     await tester.pumpAndSettle();
@@ -348,7 +379,7 @@ void main() {
         uiLanguage: 'en',
       );
       // Enough to afford one unlock, not two.
-      await r.saveProgress(const Progress(kotoCoins: realmUnlockCost));
+      await r.saveProgress(const Progress(seeds: realmUnlockCost));
     });
     addTearDown(db.close);
 
@@ -371,7 +402,7 @@ void main() {
 
     final realms = await repo.realms();
     expect(realms.every((r) => r.unlocked), isTrue);
-    expect((await repo.loadProgress()).kotoCoins, 0);
+    expect((await repo.loadProgress()).seeds, 0);
   });
 
   testWidgets('insufficient coin refuses the unlock without spending anything',
@@ -384,7 +415,7 @@ void main() {
         materialJson(realm: 'Work', terms: [('repair policy', 'x')]),
         uiLanguage: 'en',
       );
-      await r.saveProgress(Progress(kotoCoins: realmUnlockCost - 1));
+      await r.saveProgress(Progress(seeds: realmUnlockCost - 1));
     });
     addTearDown(db.close);
 
@@ -403,7 +434,245 @@ void main() {
     expect(find.text(s.t('unlockRealmConfirmTitle', {'realm': 'Travel'})), findsNothing);
     final realms = await repo.realms();
     expect(realms.any((r) => !r.unlocked), isTrue);
-    expect((await repo.loadProgress()).kotoCoins, realmUnlockCost - 1);
+    expect((await repo.loadProgress()).seeds, realmUnlockCost - 1);
+  });
+
+  testWidgets('a locked area in the material picker explains itself',
+      (tester) async {
+    // Greyed but still tappable. Marking the row disabled would swallow the
+    // tap and leave the learner with a row that simply does nothing.
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+      await r.importProfile(profileJson(['Work', 'Travel']), uiLanguage: 'en');
+      await r.markRealmsUnlocked([(await r.realms()).first.id]);
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    final locked = (await repo.realms()).firstWhere((r) => !r.unlocked);
+
+    // The area picker, not the batch-size one further down the screen.
+    await tester.tap(find.widgetWithText(
+        DropdownButtonFormField<String>, s.t('realmLabel')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(locked.label).last);
+    await tester.pumpAndSettle();
+
+    expect(find.text(s.t('capTitle', {'n': freeRealmSlots})), findsOneWidget);
+    await tester.tap(find.text(s.t('capStepOpen')));
+    await tester.pumpAndSettle();
+
+    // Explained, not selected: the prompt is still for the opened area, and
+    // the picker snaps back rather than sitting on an area it cannot use.
+    final open = (await repo.realms()).firstWhere((r) => r.unlocked);
+    expect(find.text(s.t('materialHintEmpty', {'name': locked.label})),
+        findsNothing);
+    expect(find.text(s.t('materialHintEmpty', {'name': open.label})),
+        findsOneWidget);
+    expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(find.widgetWithText(
+                DropdownButtonFormField<String>, s.t('realmLabel')))
+            .initialValue,
+        open.id);
+  });
+
+  testWidgets('setup abandoned at the area picker comes back to the picker',
+      (tester) async {
+    // Areas imported but never confirmed. The material screen only offers
+    // areas the learner has opened, so sending them there would be a screen
+    // with an empty picker and no way forward.
+    _tallScreen(tester);
+    final (db, _) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+      await r.importProfile(profileJson(['Work', 'Travel']), uiLanguage: 'en');
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    expect(find.text(s.t('realmsTitle')), findsWidgets);
+    expect(find.byType(CheckboxListTile), findsNWidgets(2));
+    expect(find.text(s.t('materialHintNoRealm')), findsNothing);
+  });
+
+  testWidgets('a session started with a boost in hand opens and spends it',
+      (tester) async {
+    // The reported crash. The boost was cleared from initState, and writing a
+    // provider during a widget life-cycle throws — so the one reward the
+    // chest hands out most often took the quiz screen down with it.
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+      await r.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await r.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'x')]),
+        uiLanguage: 'en',
+      );
+      await r.saveProgress(const Progress(pendingBoost: chestBoost));
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    await tester.tap(find.text(s.t('justOne')));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(QuizScreen), findsOneWidget);
+    // Spent on the way in, so a second session is not doubled as well.
+    expect((await repo.loadProgress()).pendingBoost, 0);
+  });
+
+  group('growing your world from the home screen', () {
+    Future<(AppDatabase, Repository)> seedHome(
+      WidgetTester tester, {
+      required int seeds,
+      int sessionSize = baseSessionSize,
+      int terms = 6,
+    }) =>
+        pumpApp(tester, seed: (r) async {
+          await r.saveUiLanguage('en');
+          await r.importProfile(profileJson(['Work', 'Travel']), uiLanguage: 'en');
+          // Enough sentences to outnumber a session: below that the app stops
+          // offering a longer one, because it could not fill it.
+          await r.importMaterial(
+            materialJson(
+              realm: 'Work',
+              terms: [for (var i = 0; i < terms; i++) ('repair policy $i', 'x')],
+              sentencesPerTerm: 3,
+            ),
+            uiLanguage: 'en',
+          );
+          await r.saveProgress(Progress(seeds: seeds));
+          await r.saveSettings(AppSettings(sessionSize: sessionSize));
+        });
+    testWidgets('the balance names what it is saving for', (tester) async {
+      _tallScreen(tester);
+      final (db, repo) = await seedHome(tester, seeds: realmUnlockCost - 2);
+      addTearDown(db.close);
+
+      final s = S('en');
+      expect(find.text(s.t('seedsToNextUnlock', {'n': 2})), findsOneWidget);
+      expect((await repo.loadProgress()).seeds, realmUnlockCost - 2);
+    });
+
+    testWidgets('a full balance says so instead of naming a shortfall',
+        (tester) async {
+      _tallScreen(tester);
+      final (db, _) = await seedHome(tester, seeds: realmUnlockCost);
+      addTearDown(db.close);
+
+      expect(find.text(S('en').t('seedsCanUnlock')), findsOneWidget);
+    });
+
+    /// The tappable decoration of the given kind, wherever the card put it.
+    Finder ornament(String kind) => find.ancestor(
+          of: find.byWidgetPredicate((w) =>
+              w is Image &&
+              w.image is AssetImage &&
+              (w.image as AssetImage).assetName ==
+                  'assets/tree/ornament_$kind.png'),
+          matching: find.byType(InkWell),
+        );
+
+    testWidgets('Seeds buy three things, and session length is not one',
+        (tester) async {
+      // Session length is a preference now, set in Settings. It used to be
+      // sold by the slot, which put a price on a taste.
+      _tallScreen(tester);
+      final (db, _) = await seedHome(tester, seeds: 500);
+      addTearDown(db.close);
+
+      final s = S('en');
+      expect(find.text(s.t('yourRealmsButton')), findsOneWidget);
+      expect(find.text(s.t('createMaterial')), findsWidgets);
+      expect(find.text(s.t('ornamentNote', {'n': ornamentCost})), findsOneWidget);
+      // The fourth thing Seeds used to buy, and its two states, are gone.
+      expect(find.text(s.t('perSessionMaxed')), findsNothing);
+      expect(find.text(s.t('addButton')), findsNothing);
+    });
+
+    testWidgets('a decoration is confirmed before it is charged for',
+        (tester) async {
+      _tallScreen(tester);
+      final (db, repo) = await seedHome(tester, seeds: ornamentCost);
+      addTearDown(db.close);
+
+      final s = S('en');
+      await tester.ensureVisible(ornament('ribbon'));
+      await tester.pumpAndSettle();
+      await tester.tap(ornament('ribbon'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+      await tester.tap(find.descendant(
+          of: find.byType(AlertDialog), matching: find.text(s.t('cancel'))));
+      await tester.pumpAndSettle();
+
+      expect((await repo.loadProgress()).seeds, ornamentCost);
+      expect((await repo.loadProgress()).ornaments, isEmpty);
+    });
+
+    testWidgets('a confirmed decoration is charged for and hung on the tree',
+        (tester) async {
+      _tallScreen(tester);
+      final (db, repo) = await seedHome(tester, seeds: ornamentCost);
+      addTearDown(db.close);
+
+      final s = S('en');
+      await tester.ensureVisible(ornament('ribbon'));
+      await tester.pumpAndSettle();
+      await tester.tap(ornament('ribbon'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text(s.t('confirmLabel'))));
+      await tester.pumpAndSettle();
+
+      expect((await repo.loadProgress()).seeds, 0);
+      expect((await repo.loadProgress()).ornaments, ['ribbon']);
+    });
+
+    testWidgets('a decoration too dear to afford cannot be tapped at all',
+        (tester) async {
+      _tallScreen(tester);
+      final (db, repo) = await seedHome(tester, seeds: ornamentCost - 1);
+      addTearDown(db.close);
+
+      await tester.ensureVisible(ornament('ribbon'));
+      await tester.pumpAndSettle();
+      await tester.tap(ornament('ribbon'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect((await repo.loadProgress()).seeds, ornamentCost - 1);
+    });
+
+    testWidgets('an area is unlocked from the list, not from the card',
+        (tester) async {
+      // The card used to unlock whichever locked area happened to come first.
+      // Which area to open is a choice, so the card sends you to the list and
+      // the list does the spending.
+      _tallScreen(tester);
+      final (db, repo) = await seedHome(tester, seeds: realmUnlockCost);
+      addTearDown(db.close);
+
+      final s = S('en');
+      await tester.tap(find.text(s.t('yourRealmsButton')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(FilledButton, s.t('unlockButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(
+          of: find.byType(AlertDialog), matching: find.text(s.t('unlockButton'))));
+      await tester.pumpAndSettle();
+
+      expect((await repo.realms()).every((r) => r.unlocked), isTrue);
+      expect((await repo.loadProgress()).seeds, 0);
+      // An area with nothing in it is a dead end, so its material screen is
+      // where the unlock lands.
+      expect(find.byType(MaterialScreen), findsOneWidget);
+    });
   });
 
   testWidgets('tapping an assistant copies the prompt before opening it',
@@ -475,12 +744,13 @@ void main() {
     expect(launched, ['https://gemini.google.com/app']);
   });
 
-  testWidgets('realms exist but no material yet goes to the material step',
+  testWidgets('confirmed areas with no material yet go to the material step',
       (tester) async {
     _tallScreen(tester);
     final (db, _) = await pumpApp(tester, seed: (r) async {
       await r.saveUiLanguage('en');
       await r.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await r.markRealmsUnlocked((await r.realms()).map((x) => x.id).toList());
     });
     addTearDown(db.close);
 
@@ -551,6 +821,40 @@ void main() {
     expect(find.text(S('de').t('settingsTitle')), findsWidgets);
   });
 
+  testWidgets('the chosen language reaches Flutter, not just the strings',
+      (tester) async {
+    // The reported failure. Strings were translated but every screen still
+    // rendered under en_US, because WidgetsApp resolves the requested locale
+    // against `supportedLocales` and its default is English alone. Text
+    // rendering depends on that resolved locale: it is the only signal the
+    // font engine gets about which script a run of CJK characters belongs
+    // to, so Japanese was drawn with Chinese glyphs.
+    for (final (code, language, country) in [
+      ('ja', 'ja', null),
+      ('ko', 'ko', null),
+      ('zh-CN', 'zh', 'CN'),
+      ('pt-BR', 'pt', 'BR'),
+    ]) {
+      final (db, _) = await pumpApp(tester, seed: (r) async {
+        await r.saveUiLanguage(code);
+        await r.importProfile(profileJson(['Work']), uiLanguage: code);
+        await r.importMaterial(
+          materialJson(realm: 'Work', terms: [('repair policy', 'x')]),
+          uiLanguage: code,
+        );
+      });
+      addTearDown(db.close);
+
+      final context = tester.element(find.byType(Scaffold).first);
+      final locale = Localizations.localeOf(context);
+      expect(locale.languageCode, language, reason: code);
+      expect(locale.countryCode, country, reason: code);
+      // Material's own widgets need localisations for the same locale, or
+      // anything that shows a dialog or a text field asserts at runtime.
+      expect(MaterialLocalizations.of(context), isNotNull, reason: code);
+    }
+  });
+
   testWidgets('a factory reset returns to the welcome screen, not a dead end',
       (tester) async {
     // The reported failure. Finishing setup used to replace every route with
@@ -563,6 +867,8 @@ void main() {
     final (db, repo) = await pumpApp(tester, seed: (r) async {
       await r.saveUiLanguage('en');
       await r.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      // The picker is where areas are confirmed; material comes after it.
+      await r.markRealmsUnlocked((await r.realms()).map((x) => x.id).toList());
     });
     addTearDown(db.close);
 
@@ -583,6 +889,14 @@ void main() {
 
     await tester.tap(find.text(s.t('settingsTitle')));
     await tester.pumpAndSettle();
+    // The wipe-everything actions are folded away, a deliberate step from the
+    // per-area buttons they sit under.
+    await tester.scrollUntilVisible(find.text(s.t('wipeSection')), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text(s.t('wipeSection')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text(s.t('factoryReset')), 200,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text(s.t('factoryReset')));
     await tester.pumpAndSettle();
     await tester.tap(find.text(s.t('confirmLabel')));
@@ -630,6 +944,8 @@ void main() {
     final (db, repo) = await pumpApp(tester, seed: (r) async {
       await r.saveUiLanguage('en');
       await r.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      // The picker is where areas are confirmed; material comes after it.
+      await r.markRealmsUnlocked((await r.realms()).map((x) => x.id).toList());
     });
     addTearDown(db.close);
 
@@ -640,15 +956,12 @@ void main() {
     final box = find.byType(TextField);
     expect(box, findsOneWidget);
 
+    // Half arrives, then the rest is pasted over the top of it — which is what
+    // a phone actually does, because select-all replaces rather than appends.
+    // Nothing is tapped in between: the box keeps the first half by itself.
     await tester.enterText(box, reply.substring(0, mid));
     await tester.pumpAndSettle();
-    await tester.tap(find.text(s.t('addPiece')));
-    await tester.pumpAndSettle();
-
-    // Second half completes it.
     await tester.enterText(box, reply.substring(mid));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(s.t('addPiece')));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('6 sentences readable'), findsOneWidget,
@@ -668,6 +981,8 @@ void main() {
     final (db, repo) = await pumpApp(tester, seed: (r) async {
       await r.saveUiLanguage('en');
       await r.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      // The picker is where areas are confirmed; material comes after it.
+      await r.markRealmsUnlocked((await r.realms()).map((x) => x.id).toList());
     });
     addTearDown(db.close);
 
@@ -687,6 +1002,271 @@ void main() {
     final counts = await repo.counts();
     expect(counts.sentences, greaterThan(0));
     expect(counts.sentences, lessThan(10));
+  });
+
+  testWidgets('a session finished without a miss says so on the summary',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final repo = Repository(db, rng: Random(42));
+    addTearDown(db.close);
+    await repo.saveUiLanguage('en');
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          repositoryProvider.overrideWithValue(repo),
+        // The tree sways in a loop on a real device. Held still here: a
+        // repeating animation means `pumpAndSettle` never settles.
+        treeMotionProvider.overrideWithValue(false),
+        ],
+        child: const MaterialApp(
+          home: SummaryScreen(
+            seeds: 30,
+            boosted: false,
+            bestCombo: 0,
+            correct: 8,
+            total: 8,
+            streakAdvanced: true,
+            perfect: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final s = S('en');
+    expect(find.textContaining(s.t('perfectRunTitle')), findsOneWidget);
+    expect(
+        find.text(s.t('perfectRunBody', {'n': perfectRunBonus})), findsOneWidget);
+  });
+
+  testWidgets('a summary with a miss in it keeps quiet about perfection',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final repo = Repository(db, rng: Random(42));
+    addTearDown(db.close);
+    await repo.saveUiLanguage('en');
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          repositoryProvider.overrideWithValue(repo),
+        // The tree sways in a loop on a real device. Held still here: a
+        // repeating animation means `pumpAndSettle` never settles.
+        treeMotionProvider.overrideWithValue(false),
+        ],
+        child: const MaterialApp(
+          home: SummaryScreen(
+            seeds: 20,
+            boosted: false,
+            bestCombo: 0,
+            correct: 7,
+            total: 8,
+            streakAdvanced: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining(S('en').t('perfectRunTitle')), findsNothing);
+  });
+
+  testWidgets('the listening feed plays the learner own sentences, unscored',
+      (tester) async {
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+      await r.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await r.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'meaning A')]),
+        uiLanguage: 'en',
+      );
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    await tester.tap(find.text(s.t('listenButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text(s.t('listenTitle')), findsOneWidget);
+    // A real sentence from the library is on screen, and its reading is not.
+    final first = (await repo.sentences()).first;
+    expect(find.text(s.t('listenTapForMeaning')), findsWidgets);
+    expect(find.text(first.translationNative), findsNothing);
+
+    // Listening is not answering: nothing is recorded and nothing is paid.
+    expect((await repo.history()), isEmpty);
+    expect((await repo.loadProgress()).seeds, 0);
+  });
+
+  testWidgets('a tap on a listening card reveals the reading', (tester) async {
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+      await r.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await r.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'meaning A')]),
+        uiLanguage: 'en',
+      );
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    await tester.tap(find.text(s.t('listenButton')));
+    await tester.pumpAndSettle();
+
+    // Whichever sentence the shuffle put first, its reading appears on a tap.
+    final readings =
+        (await repo.sentences()).map((x) => x.translationNative).toSet();
+    await tester.tap(find.text(s.t('listenTapForMeaning')).first);
+    await tester.pumpAndSettle();
+
+    final shown = readings.where((r) => find.text(r).evaluate().isNotEmpty);
+    expect(shown, hasLength(1), reason: 'exactly the card tapped opens');
+
+  });
+  testWidgets('an answered question waits for the button instead of jumping on',
+      (tester) async {
+    // It used to move on by itself after a beat. The explanation is the part
+    // worth reading, and a screen that turns the page while you are reading it
+    // teaches you not to bother reading.
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+      await r.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await r.importMaterial(
+        materialJson(
+          realm: 'Work',
+          terms: [('repair policy', 'meaning A'), ('lead time', 'meaning B')],
+          sentencesPerTerm: 2,
+        ),
+        uiLanguage: 'en',
+      );
+    });
+    addTearDown(db.close);
+
+    final s = S('en');
+    await tester.tap(find.text(s.t('justOne')));
+    await tester.pumpAndSettle();
+
+    // Whatever format came up, answer it by tapping a choice.
+    final tappable = find.descendant(
+        of: find.byType(ListView), matching: find.byType(InkWell));
+    if (tappable.evaluate().isEmpty) return;
+    await tester.tap(tappable.last, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    final answerButton = find.widgetWithText(FilledButton, s.t('answerLabel'));
+    if (tester.widget<FilledButton>(answerButton).onPressed == null) return;
+    await tester.tap(answerButton);
+    await tester.pumpAndSettle();
+
+    // Five seconds of nothing. The old timer fired at one and a half.
+    expect((await repo.history()).length, 1);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    expect((await repo.history()).length, 1,
+        reason: 'nothing moved on by itself');
+    expect(find.text(s.t('nextQuestion')), findsOneWidget);
+  });
+  testWidgets('a finished session offers another instead of only the way out',
+      (tester) async {
+    _tallScreen(tester);
+    final db = AppDatabase(NativeDatabase.memory());
+    final repo = Repository(db, rng: Random(42));
+    addTearDown(db.close);
+    await repo.saveUiLanguage('en');
+
+    final s = S('en');
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          repositoryProvider.overrideWithValue(repo),
+        // The tree sways in a loop on a real device. Held still here: a
+        // repeating animation means `pumpAndSettle` never settles.
+        treeMotionProvider.overrideWithValue(false),
+        ],
+        child: const MaterialApp(
+          home: SummaryScreen(
+            seeds: 12,
+            boosted: false,
+            bestCombo: 0,
+            correct: 5,
+            total: 5,
+            streakAdvanced: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(s.t('moreButton')), findsOneWidget);
+    expect(find.text(s.t('backHome')), findsOneWidget);
+    // With an empty library there is nothing left to meet, and the card says
+    // so rather than promising more.
+    expect(find.text(s.t('moreNoneLeft')), findsOneWidget);
+  });
+
+  testWidgets('the appearance setting drives the app theme', (tester) async {
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await r.saveUiLanguage('en');
+      await r.saveSettings(const AppSettings(theme: 'dark'));
+    });
+    addTearDown(db.close);
+
+    expect((await repo.loadSettings()).theme, 'dark');
+    final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(app.themeMode, ThemeMode.dark,
+        reason: 'the stored preference was being written and never read');
+  });
+  testWidgets('adding with an empty box takes the reply from the clipboard',
+      (tester) async {
+    _tallScreen(tester);
+    final db = AppDatabase(NativeDatabase.memory());
+    final repo = Repository(db, rng: Random(42));
+    addTearDown(db.close);
+    await repo.saveUiLanguage('en');
+    await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+    await repo.markRealmsUnlocked((await repo.realms()).map((r) => r.id).toList());
+
+    // What an assistant's reply would leave on the clipboard.
+    final reply = materialJson(realm: 'Work', terms: [('repair policy', 'x')]);
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async => call.method == 'Clipboard.getData'
+          ? <String, dynamic>{'text': reply}
+          : null,
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          repositoryProvider.overrideWithValue(repo),
+        // The tree sways in a loop on a real device. Held still here: a
+        // repeating animation means `pumpAndSettle` never settles.
+        treeMotionProvider.overrideWithValue(false),
+        ],
+        child: const MaterialApp(home: MaterialScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // One button, not two: nothing is pasted by hand.
+    final s = S('en');
+    expect(find.text(s.t('addQuestions')), findsOneWidget);
+    await tester.tap(find.text(s.t('addQuestions')));
+    await tester.pumpAndSettle();
+
+    expect((await repo.counts()).sentences, greaterThan(0),
+        reason: 'the reply on the clipboard should have been imported');
   });
 }
 

@@ -137,6 +137,7 @@ String materialPrompt({
   List<String> priorities = const [],
   List<String> contexts = const [],
   List<String> existingItems = const [],
+  List<String> existingSentences = const [],
   BatchSize batch = BatchSize.standard,
   int round = 1,
 }) {
@@ -147,6 +148,17 @@ String materialPrompt({
   final existing = existingItems.isEmpty
       ? '(none)'
       : existingItems.take(120).join(', ');
+  // Sentences too, not just the expressions. Without them a later batch about
+  // the same area comes back with the same handful of sentences reworded, and
+  // the importer drops them as duplicates — so the library stops growing while
+  // looking like it grew. Trimmed to an opening fragment: enough to recognise,
+  // short enough that fifty of them do not swamp the prompt.
+  final seen = existingSentences.isEmpty
+      ? '(none)'
+      : existingSentences
+          .take(50)
+          .map((s) => '- ${s.split(' ').take(9).join(' ')}')
+          .join('\n');
 
   return '''
 You are writing English study material for one specific person.
@@ -160,8 +172,11 @@ THE AREA
 Area: $realmName${realmNative.isNotEmpty ? ' ($realmNative)' : ''}
 Situations: $ctxText
 
-ALREADY STORED — do not repeat these
+ALREADY STORED — do not repeat these expressions
 $existing
+
+SENTENCES ALREADY STORED — write different ones, in different situations
+$seen
 
 THIS IS BATCH $round
 The user builds their library a batch at a time and will ask you again for the

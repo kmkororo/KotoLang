@@ -32,21 +32,49 @@ class PasteController extends ChangeNotifier {
 
   bool get isEmpty => text.trim().isEmpty;
   bool get hasBuffer => _buffer.trim().isNotEmpty;
-  bool get fieldHasText => field.text.trim().isNotEmpty;
 
+  bool get fieldHasText => field.text.trim().isNotEmpty;
   String? _lastPreviewed;
 
-  void _onFieldChanged() => _refresh();
+  /// What the box held last time it changed, so a wholesale replacement can be
+  /// told apart from ordinary editing.
+  String _lastField = '';
 
+  void _onFieldChanged() {
+    final now = field.text;
+    final was = _lastField;
+    _lastField = now;
+
+    // A second paste over the top of a long first one is the phone case: the
+    // reply could not be selected in one go, so it arrives in halves. Keeping
+    // the earlier half means nobody has to press a button to say "there is
+    // more coming" — a button that read almost exactly like the import one
+    // and was taken for it.
+    //
+    // Editing is left alone: growing the text, or cutting it back, both leave
+    // one string a prefix of the other.
+    if (was.length > 40 &&
+        now.trim().isNotEmpty &&
+        !now.startsWith(was) &&
+        !was.startsWith(now)) {
+      _buffer = imp.appendPiece(_buffer, was);
+    }
+    _refresh();
+  }
+
+  /// Folds whatever is in the box into the collected text. The box does this
+  /// by itself now; kept for callers that need it explicitly.
   void addPiece() {
     if (!fieldHasText) return;
     _buffer = imp.appendPiece(_buffer, field.text);
+    _lastField = '';
     field.clear(); // also fires the listener, which refreshes the preview
     _refresh();
   }
 
   void clear() {
     _buffer = '';
+    _lastField = '';
     field.clear();
     _refresh();
   }
@@ -104,30 +132,23 @@ class PasteBox extends StatelessWidget {
           children: [
             TextField(
               controller: controller.field,
-              maxLines: 10,
-              minLines: 6,
+              // Deliberately short. The reply comes in through the clipboard
+              // now, so this box is a place to check what arrived rather than
+              // a place to read it — and a tall text field on a scrolling page
+              // swallows the scroll.
+              maxLines: 3,
+              minLines: 2,
               keyboardType: TextInputType.multiline,
               decoration: InputDecoration(hintText: s.t('pastePlaceholder')),
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                // Expanded, not bare: the app theme gives outlined buttons an
-                // infinite minimum width, which a Row cannot resolve.
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.playlist_add, size: 18),
-                    onPressed: controller.fieldHasText ? controller.addPiece : null,
-                    label: Text(s.t('addPiece'), overflow: TextOverflow.ellipsis),
-                  ),
-                ),
-                if (chars > 0) ...[
-                  const SizedBox(width: 8),
+                if (chars > 0)
                   TextButton(
                     onPressed: controller.clear,
                     child: Text(s.t('clearPaste')),
                   ),
-                ],
               ],
             ),
             if (chars > 0) ...[

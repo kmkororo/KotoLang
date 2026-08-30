@@ -35,7 +35,10 @@ class _Page extends StatelessWidget {
                 // arrow would sit there doing nothing.
                 leading: Navigator.canPop(context) ? const BackButton() : null,
                 automaticallyImplyLeading: false,
-                title: Text(back!),
+                // Two lines rather than an ellipsis: these titles are a whole
+                // short sentence, and cutting one off mid-word tells the
+                // reader nothing about the screen they are on.
+                title: Text(back!, maxLines: 2, style: const TextStyle(fontSize: 18)),
               ),
         body: SafeArea(
           child: ListView(
@@ -44,6 +47,54 @@ class _Page extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// Why an area is not available yet, and what opens it. Shown wherever a
+/// locked area is tapped, so the answer is the same everywhere.
+///
+/// Any tap dismisses it — inside the card as much as outside. It is something
+/// to read, not a decision, and hunting for a small button to acknowledge a
+/// notice is friction for nothing.
+Future<void> explainSeedGate(BuildContext context, WidgetRef ref) {
+  final s = ref.read(stringsProvider);
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) {
+      final t = Theme.of(ctx);
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.pop(ctx),
+        child: AlertDialog(
+          title: Text(s.t('capTitle', {'n': freeRealmSlots})),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(s.t('capBody', {'n': freeRealmSlots})),
+              const SizedBox(height: 14),
+              // The loop, as three steps rather than a paragraph.
+              for (final step in [
+                ('📚', s.t('capStepStudy')),
+                ('🌱', s.t('capStepEarn', {'n': realmUnlockCost})),
+                ('🌎', s.t('capStepOpen')),
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(step.$1, style: const TextStyle(fontSize: 18)),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(step.$2, style: t.textTheme.bodyMedium)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 Future<void> copyToClipboard(BuildContext context, String text, String toast) async {
@@ -482,9 +533,9 @@ class _RealmPickerScreenState extends ConsumerState<RealmPickerScreen> {
   Future<void> _unlock(Realm r) async {
     final s = ref.read(stringsProvider);
     final progress = ref.read(progressProvider);
-    if (progress.kotoCoins < realmUnlockCost) {
+    if (progress.seeds < realmUnlockCost) {
       showToast(
-          context, s.t('unlockRealmNeedMore', {'n': realmUnlockCost - progress.kotoCoins}));
+          context, s.t('unlockRealmNeedMore', {'n': realmUnlockCost - progress.seeds}));
       return;
     }
     final ok = await confirm(
@@ -535,37 +586,111 @@ class _RealmPickerScreenState extends ConsumerState<RealmPickerScreen> {
           padding: const EdgeInsets.only(bottom: 8),
           child: widget.firstRun
               ? _pickTile(r, atCap)
-              : _unlockTile(r, s, theme, progress.kotoCoins),
+              : _unlockTile(r, s, theme, progress.seeds),
         ),
       const SizedBox(height: 12),
       if (widget.firstRun)
         FilledButton(
           onPressed: _selected.isEmpty ? null : _confirmFirstRun,
           child: Text(s.t('continueLabel')),
+        )
+      else ...[
+        // Asking the AI for an area nobody has suggested yet. It lives here
+        // rather than in settings because it is the same job as the list
+        // above — getting one more area to study.
+        const Divider(height: 24),
+        Text(s.t('newRealmHint'),
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.add),
+          onPressed: _busy ? null : _copyNewRealmPrompt,
+          label: Text(s.t('newRealmPrompt')),
         ),
+      ],
     ]);
+  }
+
+  /// Charges for a brand-new area, then hands over the prompt that asks the
+  /// AI to invent it. A name the AI never suggested cannot be opened through
+  /// the list above, so it is gated here instead — before the prompt is
+  /// copied, so nobody goes to their assistant and comes back to a refusal.
+  Future<void> _copyNewRealmPrompt() async {
+    final s = ref.read(stringsProvider);
+    final repo = ref.read(repositoryProvider);
+    final lang = ref.read(languageProvider) ?? fallbackLanguage;
+    final settings = ref.read(settingsProvider);
+
+    if (_realms.where((r) => r.unlocked).length >= freeRealmSlots) {
+      final seeds = ref.read(progressProvider).seeds;
+      if (seeds < realmUnlockCost) {
+        showToast(context, s.t('unlockRealmNeedMore', {'n': realmUnlockCost - seeds}));
+        return;
+      }
+      final ok = await confirm(
+        context,
+        title: s.t('unlockRealmConfirmTitle', {'realm': s.t('realmLabel')}),
+        body: s.t('unlockRealmConfirmBody', {'n': realmUnlockCost}),
+        confirmLabel: s.t('unlockButton'),
+        cancelLabel: s.t('cancel'),
+        destructive: false,
+      );
+      if (!ok || !mounted) return;
+
+      final spent = await repo.spendForNewRealm();
+      final after = await repo.loadProgress();
+      if (!mounted || !spent) return;
+      ref.read(progressProvider.notifier).state = after;
+    }
+
+    final profile = await repo.loadProfile();
+    if (!mounted) return;
+    await copyToClipboard(
+      context,
+      prompts.addRealmPrompt(
+        uiLanguage: lang,
+        existingRealms: _realms.map((r) => r.name).toList(),
+        level: profile?.englishLevel ?? 'B1',
+        batch: prompts.BatchSize.byName(settings.batchSize),
+      ),
+      s.t('copied'),
+    );
   }
 
   Widget _pickTile(Realm r, bool atCap) {
     final theme = Theme.of(context);
     final s = ref.watch(stringsProvider);
     final checked = _selected.contains(r.id);
+    // Beyond the free three the tile stays tappable, but the tap explains the
+    // rule instead of ticking the box. A dead checkbox says "no" without ever
+    // saying why, and the why — study, earn Seeds, open more — is the part
+    // worth knowing on this screen.
+    final gated = !checked && atCap;
     return Card(
       child: CheckboxListTile(
         value: checked,
-        // Capped rather than left open: the first three are free, and
-        // letting a fourth box get checked here would silently promise
-        // something Koto Coin is supposed to gate.
-        onChanged: (!checked && atCap)
-            ? null
-            : (v) => setState(() {
-                  if (v == true) {
-                    _selected.add(r.id);
-                  } else {
-                    _selected.remove(r.id);
-                  }
-                }),
-        title: Text(r.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        secondary: gated
+            ? Icon(Icons.lock_outline, color: theme.colorScheme.onSurfaceVariant)
+            : null,
+        onChanged: (v) {
+          if (gated) {
+            _explainCap();
+            return;
+          }
+          setState(() {
+            if (v == true) {
+              _selected.add(r.id);
+            } else {
+              _selected.remove(r.id);
+            }
+          });
+        },
+        title: Text(r.label,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: gated ? theme.colorScheme.onSurfaceVariant : null,
+            )),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -577,13 +702,19 @@ class _RealmPickerScreenState extends ConsumerState<RealmPickerScreen> {
               style:
                   theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
+            if (gated)
+              Text(s.t('capTileNote', {'n': realmUnlockCost}),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.primary)),
           ],
         ),
       ),
     );
   }
 
-  Widget _unlockTile(Realm r, dynamic s, ThemeData theme, int kotoCoins) => Card(
+  Future<void> _explainCap() => explainSeedGate(context, ref);
+
+  Widget _unlockTile(Realm r, dynamic s, ThemeData theme, int seeds) => Card(
         child: ListTile(
           leading: Icon(
             r.unlocked ? Icons.lock_open : Icons.lock_outline,
@@ -638,9 +769,14 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
   String? _error;
   bool _busy = false;
   int _sentenceCount = 0;
+  /// Bumped whenever a locked area is tapped, to rebuild the picker so its
+  /// selection snaps back to the area actually in use.
+  int _rejectedPicks = 0;
 
-  prompts.BatchSize get _batch =>
-      prompts.BatchSize.byName(ref.read(settingsProvider).batchSize);
+  /// Fixed rather than chosen. The size that matters is the one a phone can
+  /// copy in a single tap, and asking the learner to pick it made them decide
+  /// something they have no way to judge.
+  prompts.BatchSize get _batch => prompts.BatchSize.standard;
 
   /// Purely informational, and derived rather than stored: it tells the AI
   /// roughly where in the sequence this request sits.
@@ -663,12 +799,18 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
 
   Future<void> _load() async {
     final repo = ref.read(repositoryProvider);
+    // Every area is listed, so the learner can see what is waiting for them,
+    // but only an opened one can be selected — building material for a locked
+    // area would open it for nothing.
     final list = await repo.realms();
     final sentences = await repo.sentences();
     if (!mounted) return;
     setState(() {
       _realms = list;
-      _realmId ??= list.isEmpty ? null : list.first.id;
+      final usable = list.where((r) => r.unlocked);
+      if (_realmId == null || !usable.any((r) => r.id == _realmId)) {
+        _realmId = usable.isEmpty ? null : usable.first.id;
+      }
       _sentenceCount = sentences.where((s) => s.realmId == _realmId).length;
     });
   }
@@ -690,6 +832,13 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
         .where((i) => i.realmIds.contains(realm.id))
         .map((i) => i.text)
         .toList();
+    // What has already been written for this area, so the next batch is not a
+    // rewording of it. The importer would drop the duplicates silently, which
+    // is how a library can stop growing without anyone being told.
+    final seenSentences = (await repo.sentences())
+        .where((x) => x.realmId == realm.id)
+        .map((x) => x.text)
+        .toList();
 
     return prompts.materialPrompt(
       uiLanguage: lang,
@@ -700,6 +849,7 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
       priorities: profile?.learningPriorities ?? const [],
       contexts: realm.contexts,
       existingItems: existing,
+      existingSentences: seenSentences,
       batch: _batch,
       round: _round,
     );
@@ -712,17 +862,54 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
     await copyToClipboard(context, text, s.t('copied'));
   }
 
+  /// Imports what has been collected — and when nothing has, takes the reply
+  /// straight off the clipboard instead. One button rather than two: the
+  /// learner has just copied the reply out of their assistant, so "add" and
+  /// "paste then add" are the same intention.
+  ///
+  /// The clipboard is read only on this tap, never on resume: helping itself
+  /// to whatever had been copied last is not something an app should do
+  /// unasked.
   Future<void> _import() async {
+    if (_paste.isEmpty) {
+      final s = ref.read(stringsProvider);
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = data?.text ?? '';
+      if (!mounted) return;
+      if (text.trim().isEmpty) {
+        setState(() => _error = s.t('clipboardEmpty'));
+        return;
+      }
+      _paste.field.text = text;
+    }
+    await _importCollected();
+  }
+
+  Future<void> _importCollected() async {
     final s = ref.read(stringsProvider);
+    final repo = ref.read(repositoryProvider);
     final lang = ref.read(languageProvider) ?? fallbackLanguage;
+
+    // Charged on what is actually being imported, judged before the trip is
+    // finished rather than after: being told the price once the reply is
+    // already pasted is the worst moment to hear it.
+    final costs = await repo.materialWouldCost(_paste.text);
+    if (!mounted) return;
+    if (costs) {
+      final seeds = ref.read(progressProvider).seeds;
+      if (seeds < extraMaterialCost) {
+        setState(() =>
+            _error = s.t('seedsNeedMore', {'n': extraMaterialCost - seeds}));
+        return;
+      }
+    }
+
     setState(() {
       _busy = true;
       _error = null;
     });
 
-    final res = await ref
-        .read(repositoryProvider)
-        .importMaterial(_paste.text, uiLanguage: lang);
+    final res = await repo.importMaterial(_paste.text, uiLanguage: lang);
 
     if (!mounted) return;
     setState(() => _busy = false);
@@ -730,6 +917,12 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
     if (!res.ok) {
       setState(() => _error = s.t('importFailedHint'));
       return;
+    }
+    if (costs) {
+      await repo.spendForExtraMaterial();
+      final spent = await repo.loadProgress();
+      if (!mounted) return;
+      ref.read(progressProvider.notifier).state = spent;
     }
     _paste.clear();
     if (res.partial) {
@@ -753,7 +946,6 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
     final theme = Theme.of(context);
-    final settings = ref.watch(settingsProvider);
     final realm = _realm;
 
     final hint = realm == null
@@ -782,13 +974,46 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
       ],
       if (_realms.isNotEmpty)
         DropdownButtonFormField<String>(
+          // The field keeps its own idea of what is selected and updates it
+          // before this callback runs, so refusing a locked area is not
+          // enough — the key rebuilds the field from `_realmId` and puts the
+          // selection back where it was.
+          key: ValueKey('realm-$_realmId-$_rejectedPicks'),
           initialValue: _realmId,
+          // Realm names come from the AI and run long.
+          isExpanded: true,
           decoration: InputDecoration(labelText: s.t('realmLabel')),
           items: [
             for (final r in _realms)
-              DropdownMenuItem(value: r.id, child: Text(r.label)),
+              DropdownMenuItem(
+                value: r.id,
+                // Locked areas are shown, greyed, rather than hidden: seeing
+                // what is still to come is the point of the list. They stay
+                // selectable so the tap can explain what opens them —
+                // `enabled: false` would swallow it and leave a dead row.
+                child: Row(children: [
+                  if (!r.unlocked) ...[
+                    Icon(Icons.lock_outline,
+                        size: 16, color: theme.colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 6),
+                  ],
+                  Expanded(
+                    child: Text(r.label,
+                        overflow: TextOverflow.ellipsis,
+                        style: r.unlocked
+                            ? null
+                            : TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+                  ),
+                ]),
+              ),
           ],
           onChanged: (v) {
+            final picked = _realms.where((r) => r.id == v).firstOrNull;
+            if (picked != null && !picked.unlocked) {
+              setState(() => _rejectedPicks++);
+              explainSeedGate(context, ref);
+              return;
+            }
             setState(() => _realmId = v);
             _load();
           },
@@ -811,28 +1036,6 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
       ],
       const SizedBox(height: 14),
 
-      // How much to ask for. Kept next to the copy button rather than buried in
-      // settings, because this is the control that decides whether the reply
-      // can be copied at all on the device in the learner's hand.
-      DropdownButtonFormField<String>(
-        initialValue: settings.batchSize,
-        isExpanded: true,
-        decoration: InputDecoration(labelText: s.t('batchSizeLabel'), isDense: true),
-        items: [
-          DropdownMenuItem(value: 'small', child: Text(s.t('batchSmall'))),
-          DropdownMenuItem(value: 'standard', child: Text(s.t('batchStandard'))),
-          DropdownMenuItem(value: 'large', child: Text(s.t('batchLarge'))),
-        ],
-        onChanged: (v) async {
-          if (v == null) return;
-          await updateSettings(ref, settings.copyWith(batchSize: v));
-          if (mounted) setState(() {});
-        },
-      ),
-      const SizedBox(height: 6),
-      Text(s.t('batchNote'),
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-      const SizedBox(height: 12),
       _StepHeader(1, s.t('step1Title')),
       FilledButton.icon(
         icon: const Icon(Icons.copy_all),
@@ -841,6 +1044,18 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
       ),
       const SizedBox(height: 16),
       AiLinks(s: s, enabled: realm != null, prompt: _promptText),
+      const SizedBox(height: 10),
+      // Material is a long reply, and an assistant can sit on it for minutes.
+      // Said here, waiting is expected rather than a sign something broke.
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Icons.schedule, size: 16, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(s.t('aiTakesTime'),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ),
+      ]),
 
       const SizedBox(height: 24),
       const Divider(),
@@ -871,6 +1086,19 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
         ),
       ],
       const SizedBox(height: 14),
+      // What this import will cost, before the button is pressed rather than
+      // after. The first batch in an area is free.
+      if (realm != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            realm.hasMaterial
+                ? s.t('materialCostMore', {'n': extraMaterialCost})
+                : s.t('materialCostFirst'),
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ),
       FilledButton(
         onPressed: _busy ? null : _import,
         child: _busy

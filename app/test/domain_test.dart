@@ -334,22 +334,8 @@ void main() {
     });
   });
 
-  // ================================================================ xp
-  group('xp and chest', () {
-    test('every award lands inside 2..10', () {
-      for (final t in QuestionType.values) {
-        for (final c in [true, false]) {
-          final v = xpFor(t, c, wasDue: true, firstCorrect: true);
-          expect(v, inInclusiveRange(2, 10));
-        }
-      }
-    });
-
-    test('production pays more than recognition, wrong still pays', () {
-      expect(xpFor(QuestionType.dictation, true), greaterThan(xpFor(QuestionType.gist, true)));
-      expect(xpFor(QuestionType.gist, false), 2);
-    });
-
+  // ============================================================= chest
+  group('chest', () {
     test('all three chest rewards occur and each has an effect', () {
       final ids = <String>{};
       for (var i = 0; i < 3000; i++) {
@@ -359,41 +345,402 @@ void main() {
 
       const p = Progress();
       expect(applyChest(p, chestTable[0]).freezes, p.freezes + 1);
-      expect(applyChest(p, chestTable[1]).pendingBoost, 2);
-      expect(applyChest(p, chestTable[2]).xpTotal, p.xpTotal + 20);
+      expect(applyChest(p, chestTable[1]).pendingBoost, chestBoost);
+      expect(applyChest(p, chestTable[2]).seeds, p.seeds + chestSeedBonus);
+    });
+
+    test('every reward is denominated in something that still exists', () {
+      // The chest used to pay in XP, which the app no longer has. A reward
+      // nobody can see is worse than no reward at all.
+      for (final r in chestTable) {
+        expect(applyChest(const Progress(), r), isNot(const Progress()),
+            reason: r.id);
+      }
     });
   });
 
-  group('koto coin', () {
+  group('dragging a word into place', () {
+    /// The list operation the quiz screen performs, so the index arithmetic
+    /// can be checked without a widget test.
+    List<String> drop(List<String> words, String word, int gap) {
+      final out = [...words];
+      final from = out.indexOf(word);
+      final at = reinsertIndex(from, gap);
+      if (from >= 0) out.removeAt(from);
+      out.insert(at.clamp(0, out.length), word);
+      return out;
+    }
+
+    test('a new word goes in at the gap it was dropped on', () {
+      expect(drop(['b', 'c'], 'a', 0), ['a', 'b', 'c']);
+      expect(drop(['a', 'c'], 'b', 1), ['a', 'b', 'c']);
+      expect(drop(['a', 'b'], 'c', 2), ['a', 'b', 'c']);
+    });
+
+    test('moving a word to its right does not land one place short', () {
+      // The off-by-one: removing the word first shifts every later gap down.
+      expect(drop(['a', 'b', 'c'], 'a', 3), ['b', 'c', 'a']);
+      expect(drop(['a', 'b', 'c'], 'a', 2), ['b', 'a', 'c']);
+    });
+
+    test('moving a word to its left lands exactly on the gap', () {
+      expect(drop(['a', 'b', 'c'], 'c', 0), ['c', 'a', 'b']);
+      expect(drop(['a', 'b', 'c'], 'c', 1), ['a', 'c', 'b']);
+    });
+
+    test('dropping a word back where it already is changes nothing', () {
+      expect(drop(['a', 'b', 'c'], 'b', 1), ['a', 'b', 'c']);
+      expect(drop(['a', 'b', 'c'], 'b', 2), ['a', 'b', 'c']);
+    });
+
+    test('fixing the first word does not disturb the rest', () {
+      // The reported pain: a wrong word early on used to mean clearing
+      // everything after it.
+      expect(drop(['wrong', 'should', 'set'], 'We', 0),
+          ['We', 'wrong', 'should', 'set']);
+    });
+  });
+
+  group('the next thing worth finishing', () {
+    HistoryEntry entry(String day, {bool correct = true, QuestionType? type}) =>
+        HistoryEntry(
+          day: day,
+          at: DateTime.now(),
+          questionId: 'q$day${type?.name ?? ''}${correct ? 'c' : 'w'}',
+          realmId: 'r1',
+          type: type ?? QuestionType.gist,
+          correct: correct,
+          wasDue: false,
+        );
+
+    test('a streak milestone one day away comes first', () {
+      final goal = nextGoal(
+          history: [entry('2026-08-28')],
+          streak: 2,
+          today: '2026-08-29',
+          studiedToday: false);
+      expect(goal?.kind, 'streak');
+      expect(goal?.remaining, 1);
+      expect(goal?.target, 3);
+    });
+
+    test('a streak already claimed today is not offered again', () {
+      final goal = nextGoal(
+          history: [entry('2026-08-29')],
+          streak: 2,
+          today: '2026-08-29',
+          studiedToday: true);
+      expect(goal?.kind, isNot('streak'));
+    });
+
+    test('beating last week is named while it is within reach', () {
+      final history = [
+        for (var i = 7; i <= 11; i++) entry(addDays('2026-08-29', -i)),
+        entry('2026-08-28'),
+        entry('2026-08-29'),
+      ];
+      final goal = nextGoal(
+          history: history, streak: 9, today: '2026-08-29', studiedToday: true);
+      expect(goal?.kind, 'week');
+      // Five last week, two so far: four more would pass it.
+      expect(goal?.remaining, 4);
+      expect(goal?.target, 6);
+    });
+
+    test('a week too far ahead is not dangled', () {
+      final history = [for (var i = 7; i <= 13; i++) ...[entry(addDays('2026-08-29', -i)), entry(addDays('2026-08-29', -i))]];
+      final goal = nextGoal(
+          history: [...history, entry('2026-08-29')],
+          streak: 9,
+          today: '2026-08-29',
+          studiedToday: true);
+      expect(goal?.kind, isNot('week'), reason: '14 answers behind is not one more question');
+    });
+
+    test('with nothing else close, today rounds up to the next five', () {
+      final goal = nextGoal(
+          history: [for (var i = 0; i < 7; i++) entry('2026-08-29')],
+          streak: 9,
+          today: '2026-08-29',
+          studiedToday: true);
+      expect(goal?.kind, 'today');
+      expect(goal?.target, 10);
+      expect(goal?.remaining, 3);
+    });
+
+    test('a day with nothing on it offers nothing', () {
+      expect(
+          nextGoal(history: const [], streak: 0, today: '2026-08-29', studiedToday: true),
+          isNull);
+    });
+  });
+
+  group('badges', () {
+    test('a threshold reached is earned, and progress never overshoots', () {
+      final history = [
+        for (var i = 0; i < 12; i++)
+          HistoryEntry(
+            day: '2026-08-29',
+            at: DateTime.now(),
+            questionId: 'q$i',
+            realmId: 'r1',
+            type: QuestionType.gist,
+            correct: true,
+            wasDue: false,
+          ),
+      ];
+      final shelf = badges(
+          history: history, bestStreak: 0, masteredItems: 0, realmsWithMaterial: 0);
+      final ten = shelf.firstWhere((b) => b.id == 'answers10');
+      expect(ten.earned, isTrue);
+      expect(ten.ratio, 1.0);
+
+      final hundred = shelf.firstWhere((b) => b.id == 'answers100');
+      expect(hundred.earned, isFalse);
+      expect(hundred.progress, 12);
+    });
+
+    test('a perfect day needs five answers and no mistakes', () {
+      HistoryEntry e(String day, bool ok, int i) => HistoryEntry(
+            day: day,
+            at: DateTime.now(),
+            questionId: 'q$day$i',
+            realmId: 'r1',
+            type: QuestionType.gist,
+            correct: ok,
+            wasDue: false,
+          );
+      final spoiled = [for (var i = 0; i < 5; i++) e('2026-08-29', i != 2, i)];
+      expect(
+          badges(history: spoiled, bestStreak: 0, masteredItems: 0, realmsWithMaterial: 0)
+              .firstWhere((b) => b.id == 'perfectDay')
+              .earned,
+          isFalse);
+
+      final clean = [for (var i = 0; i < 5; i++) e('2026-08-29', true, i)];
+      expect(
+          badges(history: clean, bestStreak: 0, masteredItems: 0, realmsWithMaterial: 0)
+              .firstWhere((b) => b.id == 'perfectDay')
+              .earned,
+          isTrue);
+    });
+
+    test('the shelf shows locked badges too, so they read as goals', () {
+      final shelf = badges(
+          history: const [], bestStreak: 0, masteredItems: 0, realmsWithMaterial: 0);
+      expect(shelf, isNotEmpty);
+      expect(shelf.every((b) => !b.earned), isTrue);
+    });
+  });
+
+  group('combo', () {
+    test('a short run pays nothing, a long one is capped', () {
+      expect(comboBonus(0), 0);
+      expect(comboBonus(2), 0);
+      expect(comboBonus(3), 1);
+      expect(comboBonus(5), 3);
+      expect(comboBonus(50), maxComboBonus);
+    });
+
+    test('the bonus only ever adds', () {
+      for (var i = 0; i < 30; i++) {
+        expect(comboBonus(i), greaterThanOrEqualTo(0));
+      }
+    });
+  });
+
+  group('mastery stages', () {
+    SrsState at(int box, {bool introduced = true}) =>
+        SrsState(itemId: 'i1', due: today(), box: box, introduced: introduced);
+
+    test('an untouched item is still a seed', () {
+      expect(stageFor(null), MasteryStage.seed);
+      expect(stageFor(at(0, introduced: false)), MasteryStage.seed);
+    });
+
+    test('the stages climb with the box and never skip backwards', () {
+      final seen = [for (var box = 0; box <= maxBox; box++) stageFor(at(box))];
+      expect(seen.first, MasteryStage.seed);
+      expect(seen.last, MasteryStage.star);
+      for (var i = 1; i < seen.length; i++) {
+        expect(seen[i].index, greaterThanOrEqualTo(seen[i - 1].index),
+            reason: 'box $i dropped a stage');
+      }
+    });
+
+    test('only the top box is fully grown', () {
+      expect(stageFor(at(maxBox - 1)), isNot(MasteryStage.star));
+      expect(stageFor(at(maxBox)), MasteryStage.star);
+    });
+
+    test('every stage has a label and an emoji', () {
+      for (final stage in MasteryStage.values) {
+        expect(stageEmoji[stage], isNotNull);
+        expect(stageKey[stage], isNotNull);
+      }
+    });
+  });
+
+  group('perfect run', () {
+    test('a clean session of a decent length counts', () {
+      expect(isPerfectRun(answered: perfectRunMin, missed: 0), isTrue);
+      expect(isPerfectRun(answered: 10, missed: 0), isTrue);
+    });
+
+    test('one miss is enough to end it', () {
+      expect(isPerfectRun(answered: 10, missed: 1), isFalse);
+    });
+
+    test('a session too short to be an achievement does not count', () {
+      expect(isPerfectRun(answered: perfectRunMin - 1, missed: 0), isFalse);
+    });
+  });
+
+  group('format filter', () {
+    test('each filter names real question types and they do not overlap', () {
+      final seen = <QuestionType>{};
+      for (final entry in formatFilters.entries) {
+        expect(entry.value, isNotEmpty, reason: '${entry.key} draws from nothing');
+        for (final t in entry.value) {
+          expect(seen.add(t), isTrue, reason: '$t is in two filters');
+        }
+      }
+      // Between them the filters have to cover everything, or a type could
+      // only ever be reached by choosing "all".
+      expect(seen, QuestionType.values.toSet());
+    });
+
+    test('an unknown filter means no restriction', () {
+      expect(typesFor('all'), isNull);
+      expect(typesFor('nonsense'), isNull);
+      expect(typesFor('listening'), contains(QuestionType.gist));
+    });
+  });
+
+  group('breakthrough', () {
+    SrsState at({required int box, required int lapses}) =>
+        SrsState(itemId: 'i1', due: today(), box: box, lapses: lapses);
+
+    test('crossing the line after repeated failures counts', () {
+      expect(
+          isBreakthrough(at(box: 3, lapses: 3), at(box: 4, lapses: 3)), isTrue);
+    });
+
+    test('an item that never gave trouble does not', () {
+      expect(
+          isBreakthrough(at(box: 3, lapses: 1), at(box: 4, lapses: 1)), isFalse);
+    });
+
+    test('staying above the line is not a second breakthrough', () {
+      expect(
+          isBreakthrough(at(box: 4, lapses: 5), at(box: 5, lapses: 5)), isFalse);
+    });
+
+    test('a correct answer below the line is not one yet', () {
+      expect(
+          isBreakthrough(at(box: 2, lapses: 4), at(box: 3, lapses: 4)), isFalse);
+    });
+
+    test('nothing to judge means no bonus', () {
+      // An answer that produced no schedule at all — a question with no
+      // learning item behind it — cannot be a breakthrough.
+      expect(isBreakthrough(at(box: 3, lapses: 3), null), isFalse);
+    });
+  });
+
+  group('listening hint', () {
+    test('hides the content words and keeps the scaffolding', () {
+      final hint = blankedHint('We should set the delivery date.');
+      expect(hint, 'We ______ ___ the ________ ____.');
+    });
+
+    test('word lengths and punctuation survive, so the shape still shows', () {
+      final hint = blankedHint('Could you confirm the repair policy?');
+      // Same number of words, same trailing mark.
+      expect(hint.split(' ').length, 6);
+      expect(hint.endsWith('?'), isTrue);
+      expect(hint.contains('the'), isTrue);
+    });
+
+    test('a sentence of nothing but function words still hides something', () {
+      final hint = blankedHint('It is on the desk');
+      expect(hint, isNot('It is on the desk'));
+      expect(hint.contains('_'), isTrue);
+    });
+
+    test('an empty sentence is left alone rather than crashing', () {
+      expect(blankedHint(''), '');
+      expect(blankedHint('   '), '   ');
+    });
+  });
+
+  group('koto seeds', () {
+    test('a balance saved as Koto Coin comes back as the same many Seeds', () {
+      // The rename must not cost anybody what they earned. Old blobs carry
+      // `kotoCoins` and an `xpTotal` the app no longer has.
+      final old = Progress.fromJson({
+        'streak': 4,
+        'bestStreak': 9,
+        'lastStudyDay': '2026-08-28',
+        'freezes': 2,
+        'xpTotal': 350,
+        'pendingBoost': 2,
+        'kotoCoins': 142,
+        'journeyBonusDay': '2026-08-28',
+      });
+
+      expect(old.seeds, 142);
+      expect(old.streak, 4);
+      expect(old.bestStreak, 9);
+      expect(old.freezes, 2);
+      expect(old.pendingBoost, 2);
+      expect(old.journeyBonusDay, '2026-08-28');
+
+      // Saved again, it is written under the new name and reads back the same.
+      expect(Progress.fromJson(old.toJson()).seeds, 142);
+      expect(old.toJson()['seeds'], 142);
+    });
+
+    test('the new name wins when a blob somehow carries both', () {
+      expect(
+          Progress.fromJson({'seeds': 7, 'kotoCoins': 142}).seeds, 7);
+    });
+
     test('a wrong answer earns nothing, regardless of format', () {
-      // Quality over quantity: XP still pays a small amount for the attempt,
-      // but Koto Coin only rewards genuine understanding.
+      // Quality over quantity: Seeds only reward genuine understanding.
       for (final t in QuestionType.values) {
-        expect(kotoFor(t, false), 0);
-        expect(kotoFor(t, false, wasDue: true, firstCorrect: true), 0);
+        expect(seedsFor(t, false), 0);
+        expect(seedsFor(t, false, wasDue: true, firstCorrect: true), 0);
       }
     });
 
     test('the two listening formats pay more than the rest', () {
-      expect(kotoFor(QuestionType.gist, true), greaterThan(kotoFor(QuestionType.dictation, true)));
-      expect(kotoFor(QuestionType.reply, true), greaterThan(kotoFor(QuestionType.produce, true)));
-      expect(kotoFor(QuestionType.gist, true), kotoFor(QuestionType.reply, true));
+      expect(seedsFor(QuestionType.gist, true), greaterThan(seedsFor(QuestionType.dictation, true)));
+      expect(seedsFor(QuestionType.reply, true), greaterThan(seedsFor(QuestionType.produce, true)));
+      expect(seedsFor(QuestionType.gist, true), seedsFor(QuestionType.reply, true));
     });
 
     test('firstCorrect and wasDue stack on top of the base amount', () {
-      final base = kotoFor(QuestionType.dictation, true);
-      expect(kotoFor(QuestionType.dictation, true, firstCorrect: true), base + 2);
-      expect(kotoFor(QuestionType.dictation, true, wasDue: true), base + 1);
-      expect(kotoFor(QuestionType.dictation, true, firstCorrect: true, wasDue: true), base + 3);
+      final base = seedsFor(QuestionType.dictation, true);
+      expect(seedsFor(QuestionType.dictation, true, firstCorrect: true), base + 4);
+      expect(seedsFor(QuestionType.dictation, true, wasDue: true), base + 2);
+      expect(seedsFor(QuestionType.dictation, true, firstCorrect: true, wasDue: true), base + 6);
     });
 
-    test('session completion pays the larger threshold only, never both', () {
-      expect(sessionCompletionBonus(1), 0);
-      expect(sessionCompletionBonus(4), 0);
-      expect(sessionCompletionBonus(5), sessionBonus5);
-      expect(sessionCompletionBonus(9), sessionBonus5);
-      expect(sessionCompletionBonus(10), sessionBonus10);
-      expect(sessionCompletionBonus(20), sessionBonus10);
+    test('the completion bonus is paid for finishing what was started', () {
+      // The size of a session is now a setting rather than a purchase, so the
+      // bonus is flat and the target is whatever the learner chose.
+      expect(sessionCompletionBonus(0, 5), 0);
+      expect(sessionCompletionBonus(4, 5), 0);
+      expect(sessionCompletionBonus(5, 5), sessionBonus);
+      expect(sessionCompletionBonus(9, 5), sessionBonus);
+    });
+
+    test('a run to the end of the material counts as finished', () {
+      // Target zero means "everything there is", and the run ends when the
+      // questions do — refusing the bonus there would punish a small library.
+      expect(sessionCompletionBonus(3, 0), sessionBonus);
+      expect(sessionCompletionBonus(0, 0), 0);
     });
 
     test('listening mastery reads accuracy on gist and reply only', () {

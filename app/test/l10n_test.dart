@@ -2,6 +2,8 @@
 /// every supported language must define every key, with no leftovers, no empty
 /// values, and no placeholder drift between locales.
 library;
+import 'dart:io';
+
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kotolang/core/l10n/languages.dart';
@@ -15,6 +17,30 @@ void main() {
       // If the catalogue were absent it would silently fall back to English.
       expect(s.t('continueLabel'), isNotEmpty);
     }
+  });
+
+  test('every key the code asks for exists in the catalogue', () {
+    // The catalogue falls back to English, and a key that is in no catalogue
+    // at all falls back to itself — so a typo shows up on screen as a raw
+    // identifier like "close" rather than as a crash. This is the only thing
+    // that catches it.
+    final asked = <String, List<String>>{};
+    final pattern = RegExp(r"""\.t\(\s*'([A-Za-z_][A-Za-z0-9_]*)'""");
+    for (final file in Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'))) {
+      for (final m in pattern.allMatches(file.readAsStringSync())) {
+        (asked[m.group(1)!] ??= []).add(file.path);
+      }
+    }
+    expect(asked, isNotEmpty, reason: 'the scan found nothing to check');
+
+    final unknown = {
+      for (final e in asked.entries)
+        if (!S.keys.contains(e.key)) e.key: e.value.toSet().toList()
+    };
+    expect(unknown, isEmpty, reason: 'keys with no catalogue entry: $unknown');
   });
 
   test('every language defines every key, non-empty', () {
@@ -37,6 +63,21 @@ void main() {
 
     expect(missing, isEmpty, reason: 'keys resolving to their own name: $missing');
     expect(blank, isEmpty, reason: 'empty values: $blank');
+  });
+
+  test('every language actually carries every key, not just English', () {
+    // The test above cannot see this: t() falls back to English, so a key
+    // nobody translated still returns a real sentence — in the wrong language,
+    // on a screen that otherwise reads correctly. Only the catalogue itself
+    // knows the difference.
+    final untranslated = <String, int>{};
+    for (final lang in supportedLanguages) {
+      final have = S.debugKeysFor(lang.code);
+      final gaps = S.keys.where((k) => !have.contains(k)).toList();
+      if (gaps.isNotEmpty) untranslated[lang.code] = gaps.length;
+    }
+    expect(untranslated, isEmpty,
+        reason: 'keys falling back to English: $untranslated');
   });
 
   test('no language carries keys the app never asks for', () {
@@ -75,6 +116,16 @@ void main() {
     expect(out.contains('2'), isTrue);
     expect(out.contains('9'), isTrue);
     expect(out.contains('{'), isFalse, reason: 'a placeholder was left unfilled');
+  });
+
+  test('substitution accepts a value whose type is only known at runtime', () {
+    // Screens hold the catalogue in a `dynamic`, so `s.t(...)` returns dynamic
+    // and a literal built from one infers Map<String, dynamic>. That used to
+    // fail the cast inside t() and take the quiz screen down mid-session.
+    final dynamic s = S('en');
+    final out = s.t('stageUpBody', {'stage': s.t('stageSprout')});
+    expect(out.contains('{'), isFalse, reason: 'a placeholder was left unfilled');
+    expect(out.contains(S('en').t('stageSprout')), isTrue);
   });
 
   test('an unknown language falls back to English rather than breaking', () {

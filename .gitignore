@@ -55,3 +55,10 @@ app/ios/Flutter/Generated.xcconfig
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ------------------------------------------------------------------ artwork
+# The originals the tree and icon art were cut from — 30 MB of JPGs that no
+# build reads. What the app actually ships is app/assets/tree/, which is
+# tracked. Keep these locally; they do not belong in every clone.
+art_in/
+icon_preview.png

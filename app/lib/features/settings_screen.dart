@@ -35,6 +35,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String? _resetRealmId;
   bool _auditOpen = false;
+  bool _wipeOpen = false;
   final _auditController = TextEditingController();
   String? _note;
 
@@ -51,7 +52,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final speech = ref.watch(speechProvider);
     final lang = ref.watch(languageProvider) ?? fallbackLanguage;
     final realms = ref.watch(_realmsProvider).value ?? const <Realm>[];
-    final progress = ref.watch(progressProvider);
     final theme = Theme.of(context);
 
     return ListView(
@@ -75,8 +75,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Text(s.t('uiLanguageNote'),
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<String>(
+            initialValue: settings.theme,
+            isExpanded: true,
+            decoration: InputDecoration(labelText: s.t('themeLabel'), isDense: true),
+            items: [
+              DropdownMenuItem(value: 'system', child: Text(s.t('themeSystem'))),
+              DropdownMenuItem(value: 'light', child: Text(s.t('themeLight'))),
+              DropdownMenuItem(value: 'dark', child: Text(s.t('themeDark'))),
+            ],
+            onChanged: (v) =>
+                v == null ? null : updateSettings(ref, settings.copyWith(theme: v)),
+          ),
         ]),
-
         // ---------------------------------------------------------- audio
         _Section(title: s.t('audioSection'), children: [
           if (!speech.available)
@@ -142,13 +154,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
         // ------------------------------------------------------- learning
         _Section(title: s.t('learningSection'), children: [
+          // These dropdowns take the full width and ellipsise. Several of the
+          // labels are a short sentence, and in the longer languages an
+          // unconstrained one was cut off mid-word with nothing to show for it.
           DropdownButtonFormField<String>(
             initialValue: settings.difficulty,
+            isExpanded: true,
             decoration: InputDecoration(labelText: s.t('difficultyLabel'), isDense: true),
             items: [
-              DropdownMenuItem(value: 'easy', child: Text(s.t('diffEasy'))),
-              DropdownMenuItem(value: 'normal', child: Text(s.t('diffNormal'))),
-              DropdownMenuItem(value: 'hard', child: Text(s.t('diffHard'))),
+              DropdownMenuItem(
+                  value: 'easy',
+                  child: Text(s.t('diffEasy'), overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(
+                  value: 'normal',
+                  child: Text(s.t('diffNormal'), overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(
+                  value: 'hard',
+                  child: Text(s.t('diffHard'), overflow: TextOverflow.ellipsis)),
             ],
             onChanged: (v) =>
                 v == null ? null : updateSettings(ref, settings.copyWith(difficulty: v)),
@@ -169,8 +191,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             isExpanded: true,
             decoration: InputDecoration(labelText: s.t('inputModeLabel'), isDense: true),
             items: [
-              DropdownMenuItem(value: 'tap', child: Text(s.t('inputTap'))),
-              DropdownMenuItem(value: 'keyboard', child: Text(s.t('inputKeyboard'))),
+              DropdownMenuItem(
+                  value: 'tap',
+                  child: Text(s.t('inputTap'), overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(
+                  value: 'keyboard',
+                  child: Text(s.t('inputKeyboard'), overflow: TextOverflow.ellipsis)),
             ],
             onChanged: (v) =>
                 v == null ? null : updateSettings(ref, settings.copyWith(inputMode: v)),
@@ -178,9 +204,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 14),
           DropdownButtonFormField<int>(
             initialValue: settings.dailyGoal,
+            isExpanded: true,
             decoration: InputDecoration(labelText: s.t('dailyGoalLabel'), isDense: true),
             items: [
-              DropdownMenuItem(value: 1, child: Text(s.t('goalOne'))),
+              DropdownMenuItem(
+                  value: 1,
+                  child: Text(s.t('goalOne'), overflow: TextOverflow.ellipsis)),
               const DropdownMenuItem(value: 5, child: Text('5')),
               const DropdownMenuItem(value: 10, child: Text('10')),
               const DropdownMenuItem(value: 20, child: Text('20')),
@@ -188,9 +217,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onChanged: (v) =>
                 v == null ? null : updateSettings(ref, settings.copyWith(dailyGoal: v)),
           ),
+          // The first thing somebody who dislikes it will come looking for.
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: settings.haptics,
+            title: Text(s.t('hapticsLabel')),
+            subtitle: Text(s.t('hapticsHint'), style: theme.textTheme.bodySmall),
+            onChanged: (v) => updateSettings(ref, settings.copyWith(haptics: v)),
+          ),
+          const SizedBox(height: 14),
+          // A preference, not a purchase. It used to cost Seeds, which turned
+          // "how long do I want to study for" into a price list.
+          DropdownButtonFormField<int>(
+            initialValue: sessionSizes.contains(settings.sessionSize)
+                ? settings.sessionSize
+                : baseSessionSize,
+            isExpanded: true,
+            decoration:
+                InputDecoration(labelText: s.t('sessionSizeLabel'), isDense: true),
+            items: [
+              for (final n in sessionSizes)
+                DropdownMenuItem(
+                  value: n,
+                  child: Text(n == sessionSizeAll
+                      ? s.t('sessionSizeAll')
+                      : s.t('sessionSizeN', {'n': n})),
+                ),
+            ],
+            onChanged: (v) =>
+                v == null ? null : updateSettings(ref, settings.copyWith(sessionSize: v)),
+          ),
         ]),
-
-        // ------------------------------------------------------- material
         _Section(title: s.t('materialSection'), children: [
           OutlinedButton(
             onPressed: () => Navigator.push(
@@ -206,66 +263,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: Text(s.t('yourRealmsButton')),
           ),
           const SizedBox(height: 8),
-          // Material imported before a question format existed never saw it.
-          // This rebuilds the questions from the sentences already stored.
-          OutlinedButton(
-            onPressed: () async {
-              final n = await ref.read(repositoryProvider).regenerateQuestions();
-              if (!context.mounted) return;
-              showToast(context, s.t('regeneratedLabel', {'n': n}));
-              await reload(ref);
-            },
-            child: Text(s.t('regenerateQuestions')),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () async {
-              // A brand-new domain name is not one of the realms the AI
-              // already suggested during profile import, so it cannot be
-              // unlocked through the "your areas" list — it is gated right
-              // here, before the prompt is even copied.
-              if (realms.where((r) => r.unlocked).length >= freeRealmSlots) {
-                if (progress.kotoCoins < realmUnlockCost) {
-                  showToast(context,
-                      s.t('unlockRealmNeedMore', {'n': realmUnlockCost - progress.kotoCoins}));
-                  return;
-                }
-                final ok = await confirm(
-                  context,
-                  title: s.t('unlockRealmConfirmTitle', {'realm': s.t('realmLabel')}),
-                  body: s.t('unlockRealmConfirmBody', {'n': realmUnlockCost}),
-                  confirmLabel: s.t('unlockButton'),
-                  cancelLabel: s.t('cancel'),
-                  destructive: false,
-                );
-                if (!ok || !context.mounted) return;
-                final spent = await ref.read(repositoryProvider).spendForNewRealm();
-                if (!context.mounted || !spent) return;
-                ref.read(progressProvider.notifier).state =
-                    await ref.read(repositoryProvider).loadProgress();
-              }
-
-              final profile = await ref.read(repositoryProvider).loadProfile();
-              if (!context.mounted) return;
-              await copyToClipboard(
-                context,
-                prompts.addRealmPrompt(
-                  uiLanguage: lang,
-                  existingRealms: realms.map((r) => r.name).toList(),
-                  level: profile?.englishLevel ?? 'B1',
-                  batch: prompts.BatchSize.byName(settings.batchSize),
-                ),
-                s.t('copied'),
-              );
-            },
-            child: Text(s.t('newRealmPrompt')),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () => setState(() => _auditOpen = !_auditOpen),
-            child: Text(s.t('auditButton')),
+          // Everything else here is a repair tool, not part of studying.
+          // Folded away so the two things anyone actually comes to this
+          // section for are the two things they see.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              icon: Icon(_auditOpen ? Icons.expand_less : Icons.expand_more),
+              onPressed: () => setState(() => _auditOpen = !_auditOpen),
+              label: Text(s.t('advancedSection')),
+            ),
           ),
           if (_auditOpen) ...[
+            const SizedBox(height: 4),
+            // Material imported before a question format existed never saw it.
+            // This rebuilds the questions from the sentences already stored.
+            OutlinedButton(
+              onPressed: () async {
+                final n = await ref.read(repositoryProvider).regenerateQuestions();
+                if (!context.mounted) return;
+                showToast(context, s.t('regeneratedLabel', {'n': n}));
+                await reload(ref);
+              },
+              child: Text(s.t('regenerateQuestions')),
+            ),
             const SizedBox(height: 10),
             Text(s.t('auditHint'),
                 style: theme.textTheme.bodySmall
@@ -356,7 +377,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               decoration: InputDecoration(labelText: s.t('resetRealmLabel'), isDense: true),
               items: [
                 for (final r in realms)
-                  DropdownMenuItem(value: r.id, child: Text(r.label)),
+                  DropdownMenuItem(
+                      value: r.id,
+                      child: Text(r.label, overflow: TextOverflow.ellipsis)),
               ],
               onChanged: (v) => setState(() => _resetRealmId = v),
             ),
@@ -371,54 +394,83 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Text(s.t('deleteRealmEntirely')),
             ),
           ],
+          // Everything below wipes more than one area. Rarely wanted, and
+          // permanent, so it is folded away rather than sitting one stray tap
+          // from the per-area buttons above.
           const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () => _confirmed(
-              title: s.t('deleteAllMaterial'),
-              action: () => ref.read(repositoryProvider).deleteAllMaterial(),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              icon: Icon(_wipeOpen ? Icons.expand_less : Icons.expand_more),
+              onPressed: () => setState(() => _wipeOpen = !_wipeOpen),
+              label: Text(s.t('wipeSection')),
             ),
-            child: Text(s.t('deleteAllMaterial')),
           ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () => _confirmed(
-              title: s.t('resetProgressOnly'),
-              action: () => ref.read(repositoryProvider).resetProgress(),
+          if (_wipeOpen) ...[
+            const SizedBox(height: 4),
+            OutlinedButton(
+              onPressed: () => _confirmed(
+                title: s.t('deleteAllMaterial'),
+                action: () => ref.read(repositoryProvider).deleteAllMaterial(),
+              ),
+              child: Text(s.t('deleteAllMaterial')),
             ),
-            child: Text(s.t('resetProgressOnly')),
-          ),
-          const Divider(height: 28),
-          OutlinedButton(
-            onPressed: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const PasteProfileScreen())),
-            child: Text(s.t('reprofile')),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () => _confirmed(
-              title: s.t('resetProfile'),
-              action: () => ref.read(repositoryProvider).resetProfileAndRealms(),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () => _confirmed(
+                title: s.t('resetProgressOnly'),
+                action: () => ref.read(repositoryProvider).resetProgress(),
+              ),
+              child: Text(s.t('resetProgressOnly')),
             ),
-            child: Text(s.t('resetProfile')),
-          ),
-          const SizedBox(height: 8),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: theme.colorScheme.errorContainer,
-              foregroundColor: theme.colorScheme.onErrorContainer,
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const PasteProfileScreen())),
+              child: Text(s.t('reprofile')),
             ),
-            onPressed: () => _confirmed(
-              title: s.t('factoryReset'),
-              action: () => ref.read(repositoryProvider).factoryReset(),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () => _confirmed(
+                title: s.t('resetProfile'),
+                action: () => ref.read(repositoryProvider).resetProfileAndRealms(),
+              ),
+              child: Text(s.t('resetProfile')),
             ),
-            child: Text(s.t('factoryReset')),
-          ),
+            const SizedBox(height: 8),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.colorScheme.errorContainer,
+                foregroundColor: theme.colorScheme.onErrorContainer,
+              ),
+              onPressed: () => _confirmed(
+                title: s.t('factoryReset'),
+                action: () => ref.read(repositoryProvider).factoryReset(),
+              ),
+              child: Text(s.t('factoryReset')),
+            ),
+          ],
         ]),
 
         const SizedBox(height: 8),
         Text(s.t('privacyNote'),
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        // Both stores expect a policy to be reachable. Kept in the app rather
+        // than behind a link, so it is readable with no connection and cannot
+        // rot when a URL moves.
+        Wrap(children: [
+          TextButton(
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const DocScreen.privacy())),
+            child: Text(s.t('privacyPolicy')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const DocScreen.terms())),
+            child: Text(s.t('termsTitle')),
+          ),
+        ]),
       ],
     );
   }
@@ -554,4 +606,70 @@ class _Section extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// The privacy policy and the terms, in the app itself.
+///
+/// Both stores expect these to exist and be reachable. Keeping the text in the
+/// app as well as on the web means it reads with no connection, and cannot go
+/// stale when a hosting URL moves.
+class DocScreen extends ConsumerWidget {
+  /// Heading/body key pairs, in order.
+  final List<(String, String)> sections;
+  final String titleKey;
+
+  const DocScreen.privacy({super.key})
+      : titleKey = 'privacyPolicy',
+        sections = const [
+          ('privacyCollectTitle', 'privacyCollectBody'),
+          ('privacyStoredTitle', 'privacyStoredBody'),
+          ('privacyAiTitle', 'privacyAiBody'),
+          ('privacyPermissionsTitle', 'privacyPermissionsBody'),
+          ('privacyContactTitle', 'privacyContactBody'),
+        ];
+
+  const DocScreen.terms({super.key})
+      : titleKey = 'termsTitle',
+        sections = const [
+          ('termsUseTitle', 'termsUseBody'),
+          ('termsMaterialTitle', 'termsMaterialBody'),
+          ('termsAiTitle', 'termsAiBody'),
+          ('termsDataTitle', 'termsDataBody'),
+          ('termsWarrantyTitle', 'termsWarrantyBody'),
+          ('privacyContactTitle', 'privacyContactBody'),
+        ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        leading: const BackButton(),
+        title: Text(s.t(titleKey), maxLines: 2, style: const TextStyle(fontSize: 18)),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          children: [
+            for (final (heading, body) in sections)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(s.t(heading),
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Text(s.t(body),
+                        style: theme.textTheme.bodyMedium?.copyWith(height: 1.6)),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }

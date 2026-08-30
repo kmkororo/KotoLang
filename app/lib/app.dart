@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/l10n/languages.dart';
@@ -42,9 +43,15 @@ class Boot {
   final Progress progress;
   final UserProfile? profile;
   final int realmCount;
+
+  /// Areas the learner has actually opened. Material can only be built for
+  /// one of these, so a profile whose areas were never confirmed has to go
+  /// back to the picker rather than to a material screen with nothing to
+  /// build for.
+  final int unlockedRealmCount;
   final int questionCount;
   const Boot(this.uiLanguage, this.settings, this.progress, this.profile,
-      this.realmCount, this.questionCount);
+      this.realmCount, this.unlockedRealmCount, this.questionCount);
 }
 
 final bootProvider = FutureProvider<Boot>((ref) async {
@@ -58,6 +65,7 @@ final bootProvider = FutureProvider<Boot>((ref) async {
   await repo.saveProgress(progress);
 
   final counts = await repo.counts();
+  final unlocked = (await repo.realms()).where((r) => r.unlocked).length;
 
   // Speech is warmed up alongside, never awaited. Audio is not needed to show
   // the first screen, and a slow or unresponsive TTS engine must not be able
@@ -70,6 +78,7 @@ final bootProvider = FutureProvider<Boot>((ref) async {
     progress,
     await repo.loadProfile(),
     counts.realms,
+    unlocked,
     counts.questions,
   );
 });
@@ -89,6 +98,22 @@ final progressProvider = StateProvider<Progress>(
 
 /// The active realm filter: `null` means every realm.
 final realmFilterProvider = StateProvider<String?>((ref) => null);
+
+/// Which kinds of question the next session draws from: all | listening |
+/// phrasing | speaking. Held in memory rather than saved, because it is a
+/// choice for one session — someone who wanted to drill listening on Tuesday
+/// should not find the app still refusing to say anything on Friday.
+final formatFilterProvider = StateProvider<String>((ref) => 'all');
+
+/// What the home screen counts, and the areas it lists. Here rather than on
+/// the screen itself because the quiz has to refresh both when it ends.
+final homeCountsProvider = FutureProvider.autoDispose<HomeCounts>((ref) async {
+  final realm = ref.watch(realmFilterProvider);
+  return ref.watch(repositoryProvider).homeCounts(realm ?? 'all');
+});
+
+final realmsProvider = FutureProvider.autoDispose<List<Realm>>(
+    (ref) => ref.watch(repositoryProvider).realms());
 
 /// Strings for the current language.
 final stringsProvider = Provider<S>((ref) {
@@ -220,8 +245,23 @@ class _KotoLangAppState extends ConsumerState<KotoLangApp>
       debugShowCheckedModeBanner: false,
       theme: _theme(Brightness.light),
       darkTheme: _theme(Brightness.dark),
-      themeMode: ThemeMode.system,
-      locale: lang == null ? null : Locale(languageFor(lang).languageCode),
+      // The stored preference, which until now was written and never read.
+      themeMode: switch (ref.watch(settingsProvider).theme) {
+        'light' => ThemeMode.light,
+        'dark' => ThemeMode.dark,
+        _ => ThemeMode.system,
+      },
+      locale: lang == null ? null : languageFor(lang).locale,
+      // Every interface language has to be listed. WidgetsApp resolves the
+      // requested locale against this list, and its default is English alone —
+      // which silently reduced every language to English and left Japanese
+      // text without the hint Android needs to pick Japanese glyphs.
+      supportedLocales: [for (final l in supportedLanguages) l.locale],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: const _Root(),
     );
   }
@@ -260,7 +300,14 @@ class _Root extends ConsumerWidget {
         }
         if (b.profile == null && b.realmCount == 0) return const WelcomeScreen();
         if (b.questionCount == 0) {
-          return b.realmCount > 0 ? const MaterialScreen() : const WelcomeScreen();
+          if (b.realmCount == 0) return const WelcomeScreen();
+          // Areas exist but none was ever confirmed — setup was abandoned at
+          // the picker. Sending them on to the material screen would offer a
+          // list with nothing in it and no way forward.
+          if (b.unlockedRealmCount == 0) {
+            return const RealmPickerScreen(firstRun: true);
+          }
+          return const MaterialScreen();
         }
         return const HomeShell();
       },
@@ -327,6 +374,32 @@ void showToast(BuildContext context, String message) {
     ..showSnackBar(SnackBar(content: Text(message)));
 }
 
+
+/// A plain "what is this?" popup, for the counters and badges whose names
+/// cannot carry their own explanation. Dismissed by a tap anywhere.
+Future<void> explainNote(
+  BuildContext context, {
+  required String title,
+  required String body,
+  required String closeLabel,
+}) =>
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.pop(ctx),
+        child: AlertDialog(
+          title: Text(title),
+          content: Text(body),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(closeLabel),
+            ),
+          ],
+        ),
+      ),
+    );
 /// Confirmation used before anything destructive. Returns false when dismissed.
 Future<bool> confirm(
   BuildContext context, {

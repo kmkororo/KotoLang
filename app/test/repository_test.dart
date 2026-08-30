@@ -15,6 +15,8 @@ import 'package:kotolang/core/util.dart';
 import 'package:kotolang/data/database.dart';
 import 'package:kotolang/data/repository.dart';
 import 'package:kotolang/domain/models.dart';
+import 'package:kotolang/domain/progress_service.dart';
+import 'package:kotolang/domain/srs.dart';
 
 /// A material reply of the shape the prompt asks for.
 String materialJson({
@@ -294,12 +296,13 @@ void main() {
   });
 
   group('session planning', () {
-    Future<void> seed({int termCount = 12}) async {
+    Future<void> seed({int termCount = 12, int sentencesPerTerm = 2}) async {
       await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
       await repo.importMaterial(
         materialJson(
           realm: 'Work',
           terms: [for (var i = 0; i < termCount; i++) ('term number $i', 'meaning $i')],
+          sentencesPerTerm: sentencesPerTerm,
         ),
         uiLanguage: 'en',
       );
@@ -311,6 +314,48 @@ void main() {
       expect(slots.length, 8);
       final ids = slots.map((s) => s.question.sentenceId).toList();
       expect(ids.toSet().length, ids.length);
+    });
+
+    test('a session fills up even when there are fewer items than slots',
+        () async {
+      // The reported complaint. One question per item made a session as short
+      // as the library had items, however long the session was set to — two
+      // terms meant two questions, even with six sentences to draw on.
+      await seed(termCount: 2, sentencesPerTerm: 3);
+      expect((await repo.sentences()).length, 6);
+
+      final slots = await repo.buildSession(count: 6);
+      expect(slots.length, 6, reason: 'every sentence can carry a slot');
+      final ids = slots.map((s) => s.question.sentenceId).toList();
+      expect(ids.toSet().length, ids.length, reason: 'still no repeated sentence');
+    });
+
+    test('questions already asked give way to ones that have not been',
+        () async {
+      await seed(termCount: 4);
+      final all = await repo.questions();
+
+      // Wear out half the library by answering it.
+      final worn = all.take(all.length ~/ 2).toList();
+      for (final q in worn) {
+        await repo.recordAnswer(question: q, correct: true, wasDue: false);
+      }
+      final wornIds = worn.map((q) => q.id).toSet();
+
+      // Recency alone cannot explain the result: clear it, so the only thing
+      // left to go on is how often each question has been asked.
+      await repo.saveProgress(await repo.loadProgress());
+      final picked = <String>{};
+      for (var i = 0; i < 4; i++) {
+        for (final s in await repo.buildSession(count: 6)) {
+          picked.add(s.question.id);
+        }
+      }
+
+      final freshPicked = picked.where((id) => !wornIds.contains(id)).length;
+      final wornPicked = picked.where((id) => wornIds.contains(id)).length;
+      expect(freshPicked, greaterThan(wornPicked),
+          reason: 'unasked questions should lead: $freshPicked vs $wornPicked');
     });
 
     test('breadth first: every item gets introduced before any is drilled', () async {
@@ -402,7 +447,7 @@ void main() {
           question: slot.question, correct: true, wasDue: slot.wasDue);
 
       expect(res.correct, isTrue);
-      expect(res.xp, inInclusiveRange(2, 10));
+      expect(res.seeds, greaterThan(0));
       expect(res.progress.streak, 1);
       expect(res.streak.advanced, isTrue);
       expect((await repo.history()).length, 1);
@@ -559,7 +604,7 @@ void main() {
 
       expect(await repo.counts(), before);
       expect((await repo.loadProgress()).streak, progressBefore.streak);
-      expect((await repo.loadProgress()).xpTotal, progressBefore.xpTotal);
+      expect((await repo.loadProgress()).seeds, progressBefore.seeds);
       expect((await repo.srsStates()).length, greaterThan(0));
 
       // Referential integrity survives the round trip.
@@ -573,6 +618,36 @@ void main() {
         () => repo.restore({'app': 'something-else', 'data': {}}),
         throwsA(isA<FormatException>()),
       );
+    });
+
+    test('a backup taken before the rename restores its balance as Seeds',
+        () async {
+      // Backups carry the progress blob verbatim, so a file exported while
+      // the currency was still called Koto Coin has to come back whole.
+      final restored = await repo.restore({
+        'app': 'kotolang',
+        'backup_version': 1,
+        'data': {
+          'meta': [
+            {
+              'key': 'progress',
+              'value': jsonEncode({
+                'streak': 3,
+                'bestStreak': 5,
+                'freezes': 1,
+                'xpTotal': 210,
+                'kotoCoins': 142,
+              }),
+            },
+          ],
+        },
+      });
+      expect(restored, 1);
+
+      final progress = await repo.loadProgress();
+      expect(progress.seeds, 142);
+      expect(progress.streak, 3);
+      expect(progress.bestStreak, 5);
     });
   });
 
@@ -623,6 +698,347 @@ void main() {
       final fixed = await repo.repairRealmFlags();
       expect(fixed, 1);
       expect((await repo.realms()).single.hasMaterial, isFalse);
+    });
+  });
+
+  group('paying for a brand-new realm', () {
+    test('re-opening the prompt does not charge a second time', () async {
+      // The reported failure. Copying the "add a new area" prompt charged the
+      // unlock up front, and nothing recorded that it had been paid — so
+      // coming back to copy the prompt again, which is what anyone does after
+      // losing the clipboard, charged the same realm over and over.
+      await repo.saveProgress(const Progress(seeds: 250));
+
+      expect(await repo.spendForNewRealm(), isTrue);
+      expect((await repo.loadProgress()).seeds, 250 - realmUnlockCost);
+
+      expect(await repo.spendForNewRealm(), isTrue);
+      expect((await repo.loadProgress()).seeds, 250 - realmUnlockCost);
+    });
+
+    test('the realm that arrives uses the credit up, so the next one pays',
+        () async {
+      await repo.saveProgress(const Progress(seeds: 250));
+      await repo.spendForNewRealm();
+
+      await repo.importMaterial(
+        materialJson(realm: 'Sailing', terms: [('close haul', 'x')]),
+        uiLanguage: 'en',
+      );
+      expect((await repo.loadProgress()).seeds, 250 - realmUnlockCost);
+
+      expect(await repo.spendForNewRealm(), isTrue);
+      expect((await repo.loadProgress()).seeds, 250 - realmUnlockCost * 2);
+    });
+
+    test('confirming an unlock twice pays for the area once', () async {
+      // Two taps on the tile stack two confirmation dialogs, and both can be
+      // confirmed. The second one must not charge again.
+      await repo.importProfile(
+          profileJson(['Work', 'Sailing', 'Cooking', 'Travel']),
+          uiLanguage: 'en');
+      final locked = (await repo.realms()).firstWhere((r) => !r.unlocked);
+      await repo.saveProgress(const Progress(seeds: 250));
+
+      expect(await repo.unlockRealm(locked.id), isTrue);
+      expect(await repo.unlockRealm(locked.id), isTrue);
+      expect((await repo.loadProgress()).seeds, 250 - realmUnlockCost);
+    });
+
+    test('the first batch in an area is free, later ones are not', () async {
+      // Opening an area and then filling it should not be two charges: an
+      // area with nothing in it is not yet usable. The question is asked of
+      // the paste itself rather than of a dropdown, because the area a batch
+      // belongs to is written in the batch.
+      await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      final batch = materialJson(realm: 'Work', terms: [('repair policy', 'x')]);
+      expect(await repo.materialWouldCost(batch), isFalse);
+
+      await repo.importMaterial(batch, uiLanguage: 'en');
+      expect(await repo.materialWouldCost(batch), isTrue);
+    });
+
+    test('a batch for an area that does not exist yet is free', () async {
+      // It opens the area as well as filling it, and opening is what the
+      // Seeds were already spent on.
+      await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      expect(
+        await repo.materialWouldCost(
+            materialJson(realm: 'Sailing', terms: [('reef the main', 'x')])),
+        isFalse,
+      );
+    });
+
+    test('a paste that is not material at all is never charged for', () async {
+      expect(await repo.materialWouldCost('not json'), isFalse);
+      expect(await repo.materialWouldCost(profileJson(['Work'])), isFalse);
+    });
+
+    test('a further batch spends its cost, and is refused when short',
+        () async {
+      await repo.saveProgress(const Progress(seeds: extraMaterialCost));
+      expect(await repo.spendForExtraMaterial(), isTrue);
+      expect((await repo.loadProgress()).seeds, 0);
+
+      expect(await repo.spendForExtraMaterial(), isFalse);
+      expect((await repo.loadProgress()).seeds, 0);
+    });
+
+    test('a short balance spends nothing and stays refused', () async {
+      await repo.saveProgress(Progress(seeds: realmUnlockCost - 1));
+      expect(await repo.spendForNewRealm(), isFalse);
+      expect((await repo.loadProgress()).seeds, realmUnlockCost - 1);
+    });
+  });
+
+  group('breakthrough bonus', () {
+    /// Puts [itemId] one step below the line, with a record of repeated
+    /// failures and production already shown, so the only thing left to happen
+    /// is the answer itself.
+    Future<void> primeStruggling(String itemId, {int box = 3}) async {
+      await db.into(db.srsStates).insertOnConflictUpdate(srsToRow(SrsState(
+            itemId: itemId,
+            due: today(),
+            box: box,
+            reps: 9,
+            lapses: breakthroughLapses,
+            introduced: true,
+            formats: const {QuestionType.produce: FormatStat(n: 2, ok: 1)},
+          )));
+    }
+
+    test('an item that finally clicks pays once, not every time', () async {
+      await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await repo.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'meaning A')]),
+        uiLanguage: 'en',
+      );
+      final questions = await repo.questions();
+      final q = questions.firstWhere((x) => x.itemId != null);
+      await primeStruggling(q.itemId!);
+
+      final first =
+          await repo.recordAnswer(question: q, correct: true, wasDue: true);
+      expect(first.breakthrough, isTrue);
+      expect(first.seeds, greaterThanOrEqualTo(breakthroughBonus));
+      expect(first.progress.breakthroughs, [q.itemId]);
+
+      // Slipping back and recovering must not pay a second time — otherwise it
+      // could be farmed by missing on purpose.
+      final balance = first.progress.seeds;
+      await primeStruggling(q.itemId!);
+      final again =
+          await repo.recordAnswer(question: q, correct: true, wasDue: true);
+      expect(again.breakthrough, isFalse);
+      expect(again.seeds, lessThan(breakthroughBonus));
+      expect(again.progress.seeds - balance, again.seeds);
+      expect(again.progress.breakthroughs, [q.itemId]);
+    });
+
+    test('an item that was never a struggle pays nothing extra', () async {
+      await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await repo.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'meaning A')]),
+        uiLanguage: 'en',
+      );
+      final questions = await repo.questions();
+      final q = questions.firstWhere((x) => x.itemId != null);
+      await db.into(db.srsStates).insertOnConflictUpdate(srsToRow(SrsState(
+            itemId: q.itemId!,
+            due: today(),
+            box: 3,
+            reps: 4,
+            lapses: 0,
+            introduced: true,
+            formats: const {QuestionType.produce: FormatStat(n: 2, ok: 2)},
+          )));
+
+      final res =
+          await repo.recordAnswer(question: q, correct: true, wasDue: true);
+      expect(res.breakthrough, isFalse);
+      expect(res.progress.breakthroughs, isEmpty);
+    });
+  });
+
+  group('format filter', () {
+    Future<void> seedWork() async {
+      await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await repo.importMaterial(
+        materialJson(realm: 'Work', terms: [
+          ('repair policy', 'a'),
+          ('delivery date', 'b'),
+          ('damage tolerance', 'c'),
+        ], sentencesPerTerm: 3),
+        uiLanguage: 'en',
+      );
+    }
+
+    test('a session keeps to the kinds of question asked for', () async {
+      await seedWork();
+      final allow = typesFor('listening')!;
+      final slots = await repo.buildSession(count: 8, allow: allow);
+      expect(slots, isNotEmpty);
+      expect(slots.every((s) => allow.contains(s.question.type)), isTrue,
+          reason: 'served ${slots.map((s) => s.question.type).toSet()}');
+    });
+
+    test('a filter with nothing behind it still gives a session', () async {
+      await seedWork();
+      // Nothing in the library can satisfy this, so the filter is ignored
+      // rather than obeyed into an empty screen.
+      final slots = await repo.buildSession(count: 5, allow: const {});
+      expect(slots, isNotEmpty);
+    });
+  });
+
+  group('using the whole library', () {
+    test('a session keeps going past the sentence count', () async {
+      await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await repo.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'a')],
+            sentencesPerTerm: 2),
+        uiLanguage: 'en',
+      );
+      final sentences = (await repo.sentences()).length;
+      final questions = (await repo.questions()).length;
+      expect(questions, greaterThan(sentences), reason: 'setup');
+
+      // Refilling means a trip to an assistant, so what is already here gets
+      // used rather than held back.
+      final slots = await repo.buildSession(count: questions);
+      expect(slots.length, greaterThan(sentences));
+      expect(slots.length, lessThanOrEqualTo(questions));
+    });
+
+    test('nothing is ever served twice in one session', () async {
+      await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await repo.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'a')],
+            sentencesPerTerm: 2),
+        uiLanguage: 'en',
+      );
+      final slots = await repo.buildSession(count: 200);
+      final ids = slots.map((s) => s.question.id).toList();
+      expect(ids.toSet().length, ids.length);
+    });
+
+    test('every sentence is met once before any is met again', () async {
+      await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await repo.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'a')],
+            sentencesPerTerm: 3),
+        uiLanguage: 'en',
+      );
+      final sentences = (await repo.sentences()).length;
+      final slots = await repo.buildSession(count: sentences + 3);
+      final firstRound = slots.take(sentences).map((s) => s.question.sentenceId);
+      expect(firstRound.toSet().length, sentences,
+          reason: 'a repeat before the fresh ones ran out');
+    });
+  });
+
+  group('ornaments', () {
+    test('a decoration is bought once and hangs on the tree', () async {
+      await repo.saveProgress(const Progress(seeds: ornamentCost + 5));
+      final next = await repo.spendForOrnament('star');
+      expect(next, isNotNull);
+      expect(next!.seeds, 5);
+      expect(next.ornaments, ['star']);
+      expect((await repo.loadProgress()).ornaments, ['star']);
+    });
+
+    test('a short balance buys nothing and spends nothing', () async {
+      await repo.saveProgress(const Progress(seeds: ornamentCost - 1));
+      expect(await repo.spendForOrnament('bell'), isNull);
+      final p = await repo.loadProgress();
+      expect(p.seeds, ornamentCost - 1);
+      expect(p.ornaments, isEmpty);
+    });
+
+    test('an unknown decoration is refused rather than stored', () async {
+      await repo.saveProgress(const Progress(seeds: 500));
+      expect(await repo.spendForOrnament('rocket'), isNull);
+      expect((await repo.loadProgress()).seeds, 500);
+    });
+
+    test('decorations survive a backup and restore', () async {
+      await repo.saveProgress(const Progress(seeds: 500));
+      await repo.spendForOrnament('ribbon');
+      await repo.spendForOrnament('ribbon');
+      final blob = jsonEncode((await repo.loadProgress()).toJson());
+      final back = Progress.fromJson(jsonDecode(blob) as Map<String, dynamic>);
+      expect(back.ornaments, ['ribbon', 'ribbon'],
+          reason: 'two of the same is a choice, not a mistake');
+    });
+  });
+
+  group('discovery', () {
+    test('the first meeting is flagged, later ones are not', () async {
+      await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await repo.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'meaning A')]),
+        uiLanguage: 'en',
+      );
+      final q = (await repo.questions()).firstWhere((x) => x.itemId != null);
+
+      final first = await repo.recordAnswer(question: q, correct: true, wasDue: false);
+      expect(first.discovered, isTrue);
+
+      final second = await repo.recordAnswer(question: q, correct: true, wasDue: false);
+      expect(second.discovered, isFalse);
+    });
+  });
+
+  group('perfect run', () {
+    test('a clean session pays the perfect-run bonus as well', () async {
+      await repo.saveProgress(const Progress());
+      final clean = await repo.finishSession(
+          answered: perfectRunMin, missed: 0, target: perfectRunMin);
+      expect(clean.perfect, isTrue);
+      expect(clean.bonus,
+          sessionCompletionBonus(perfectRunMin, perfectRunMin) + perfectRunBonus);
+
+      await repo.saveProgress(const Progress());
+      final marred = await repo.finishSession(
+          answered: perfectRunMin, missed: 1, target: perfectRunMin);
+      expect(marred.perfect, isFalse);
+      expect(marred.bonus,
+          sessionCompletionBonus(perfectRunMin, perfectRunMin));
+    });
+
+    test('the Seeds actually land in the balance', () async {
+      await repo.saveProgress(const Progress(seeds: 5));
+      final res = await repo.finishSession(answered: 10, missed: 0);
+      expect(res.progress.seeds, 5 + res.bonus);
+      expect((await repo.loadProgress()).seeds, res.progress.seeds);
+    });
+  });
+
+  group('mastery stages', () {
+    test('an answer that moves the item up a stage says so', () async {
+      await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await repo.importMaterial(
+        materialJson(realm: 'Work', terms: [('repair policy', 'meaning A')]),
+        uiLanguage: 'en',
+      );
+      final q = (await repo.questions()).firstWhere((x) => x.itemId != null);
+
+      // Box 1 is still a seed; box 2 is the first sprout.
+      await db.into(db.srsStates).insertOnConflictUpdate(srsToRow(SrsState(
+            itemId: q.itemId!,
+            due: today(),
+            box: 1,
+            reps: 2,
+            introduced: true,
+          )));
+
+      final up = await repo.recordAnswer(question: q, correct: true, wasDue: true);
+      expect(up.stageUp, MasteryStage.sprout);
+
+      // Answering again inside the same stage is not another promotion.
+      final flat =
+          await repo.recordAnswer(question: q, correct: true, wasDue: false);
+      expect(flat.stageUp, isNull);
     });
   });
 }

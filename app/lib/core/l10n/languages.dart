@@ -7,6 +7,8 @@
 /// Spanish glosses rather than Japanese ones.
 library;
 
+import 'dart:ui' show Locale;
+
 class UiLanguage {
   /// BCP-47 tag used for the Flutter locale and for addressing the AI.
   final String code;
@@ -33,6 +35,11 @@ class UiLanguage {
     final parts = code.split('-');
     return parts.length > 1 ? parts.last : null;
   }
+
+  /// The locale handed to Flutter. Text rendering depends on this: it is the
+  /// only signal the font engine gets about which script a run of CJK
+  /// characters belongs to.
+  Locale get locale => Locale(languageCode, countryCode);
 }
 
 const supportedLanguages = <UiLanguage>[

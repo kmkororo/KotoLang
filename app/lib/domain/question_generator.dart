@@ -493,6 +493,63 @@ int _editDistance(String a, String b) {
 bool gradeReorder(List<String> arranged, Question q) =>
     arranged.join(' ') == q.tokens.join(' ');
 
+/// Where a dragged word has to be inserted so it lands in the gap the learner
+/// dropped it on.
+///
+/// Gaps are numbered by the word they sit before, so gap 2 of `[a, b, c]` is
+/// between `b` and `c`. Moving a word that is already placed removes it first,
+/// which shifts every gap after it down by one — the off-by-one that makes a
+/// word dropped to its own right land one place short.
+int reinsertIndex(int from, int gap) => from >= 0 && from < gap ? gap - 1 : gap;
+
+/// The spoken sentence with some of it blanked out — a hint for a learner who
+/// caught the shape of a sentence but not all of it.
+///
+/// Function words are given away and content words are hidden, because the
+/// hard part of listening is rarely "the" or "to". The blanks keep each word's
+/// length so the gap still says how much was missed, and at least one word is
+/// always hidden, or the hint would just be the answer.
+String blankedHint(String sentence) {
+  const giveaway = {
+    'a', 'an', 'the', 'to', 'of', 'in', 'on', 'at', 'for', 'and', 'or', 'but',
+    'is', 'are', 'was', 'were', 'be', 'do', 'does', 'did', 'we', 'i', 'you',
+    'he', 'she', 'it', 'they', 'this', 'that', 'with', 'as', 'by', 'from',
+  };
+
+  final words = sentence.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+  if (words.isEmpty) return sentence;
+
+  String mask(String w) {
+    // Punctuation stays: it is part of the shape, not of the answer.
+    final letters = w.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+    final tail = w.substring(w.length - (w.length - w.indexOf(letters) - letters.length));
+    return '${'_' * letters.length}$tail';
+  }
+
+  var hidden = 0;
+  final out = <String>[];
+  for (final w in words) {
+    final bare = w.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
+    if (bare.isNotEmpty && !giveaway.contains(bare)) {
+      out.add(mask(w));
+      hidden++;
+    } else {
+      out.add(w);
+    }
+  }
+
+  // An all-function-word sentence would come back untouched, which is no hint
+  // at all — hide the longest word instead.
+  if (hidden == 0) {
+    var longest = 0;
+    for (var i = 1; i < words.length; i++) {
+      if (words[i].length > words[longest].length) longest = i;
+    }
+    out[longest] = mask(words[longest]);
+  }
+  return out.join(' ');
+}
+
 /// Integrity checks used after import.
 List<String> validateQuestion(Question q, Map<String, Sentence>? sentencesById) {
   final problems = <String>[];

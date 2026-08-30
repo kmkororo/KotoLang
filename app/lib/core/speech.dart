@@ -34,6 +34,7 @@ class SpeechService {
     if (_ready) return;
     _ready = true;
     try {
+      await _iosAudioSession();
       await _tts.setLanguage('en-US');
       await _tts.setSpeechRate(0.5); // flutter_tts scale, adjusted per call
       await _tts.awaitSpeakCompletion(true);
@@ -65,6 +66,37 @@ class SpeechService {
     } catch (e) {
       _supported = false;
       debugPrint('[KotoLang] speech unavailable: $e');
+    }
+  }
+
+
+  /// Puts iOS into the audio category this app actually needs.
+  ///
+  /// Without it the reading is governed by the ring/silent switch: a learner
+  /// with the switch down hears nothing at all and is given no reason why,
+  /// which for a listening app is the whole thing broken. `playback` keeps the
+  /// speech audible with the switch down and the screen locked, and ducking
+  /// means a podcast in the background drops instead of being cut off.
+  ///
+  /// Android needs none of this, and the methods do not exist there.
+  Future<void> _iosAudioSession() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
+    try {
+      await _tts.setSharedInstance(true);
+      await _tts.setIosAudioCategory(
+        IosTextToSpeechAudioCategory.playback,
+        [
+          IosTextToSpeechAudioCategoryOptions.duckOthers,
+          IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+          IosTextToSpeechAudioCategoryOptions.allowAirPlay,
+          IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+        ],
+        IosTextToSpeechAudioMode.voicePrompt,
+      );
+    } catch (e) {
+      // A session we could not configure still speaks, just under whatever
+      // category the system picked. Not worth failing the whole service for.
+      debugPrint('[KotoLang] iOS audio session not configured: $e');
     }
   }
 

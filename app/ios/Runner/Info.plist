@@ -6,8 +6,30 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<!-- The interface languages KotoLang ships. iOS filters the locales it
+	     reports to an app down to the ones the bundle claims, so without this
+	     list a Japanese iPhone tells Flutter "en" and the first screen
+	     preselects English. The order is the fallback order. -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>ja</string>
+		<string>es</string>
+		<string>pt-BR</string>
+		<string>fr</string>
+		<string>de</string>
+		<string>ko</string>
+		<string>zh-Hans</string>
+		<string>hi</string>
+		<string>id</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>KotoLang</string>
+	<!-- KotoLang adds no encryption of its own beyond what iOS itself
+	     provides, so the export-compliance question does not have to be
+	     answered by hand on every upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -24,6 +46,16 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- The assistants' own URL schemes. iOS answers `canOpenURL` with false
+	     for any scheme not listed here, so without it the setup screens can
+	     never tell that ChatGPT or Claude is installed and always fall back to
+	     the web address. Visibility only: it grants no access to those apps.
+	     The Android manifest carries the same list in its <queries> block. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>chatgpt</string>
+		<string>claude</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

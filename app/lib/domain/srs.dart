@@ -112,6 +112,38 @@ bool isDue(SrsState? s, [String? day]) {
 /// unreachable without production evidence.
 bool isMastered(SrsState? s) => s != null && s.box >= maxBox;
 
+/// How far an expression has come, as the learner sees it.
+///
+/// This is a reading of [SrsState.box] and nothing more: the schedule is
+/// unchanged, and no new state is stored. A box number tells someone when the
+/// item comes round again; a stage tells them the item is growing, which is
+/// the part worth looking forward to.
+enum MasteryStage { seed, sprout, tree, star }
+
+MasteryStage stageFor(SrsState? s) {
+  if (s == null || !s.introduced) return MasteryStage.seed;
+  if (s.box >= maxBox) return MasteryStage.star;
+  if (s.box >= 4) return MasteryStage.tree;
+  if (s.box >= 2) return MasteryStage.sprout;
+  return MasteryStage.seed;
+}
+
+/// The l10n key naming each stage. Kept beside the enum so the four screens
+/// that show a stage cannot drift apart on what to call it.
+const stageKey = <MasteryStage, String>{
+  MasteryStage.seed: 'stageSeed',
+  MasteryStage.sprout: 'stageSprout',
+  MasteryStage.tree: 'stageTree',
+  MasteryStage.star: 'stageStar',
+};
+
+const stageEmoji = <MasteryStage, String>{
+  MasteryStage.seed: '🌱',
+  MasteryStage.sprout: '🌿',
+  MasteryStage.tree: '🌳',
+  MasteryStage.star: '⭐',
+};
+
 ({int n, int ok, int pct}) accuracy(SrsState s) {
   var n = 0, ok = 0;
   for (final t in QuestionType.values) {

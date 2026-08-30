@@ -42,6 +42,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   String _query = '';
   String? _realmId;
 
+  /// all | learning | done — the collection filter.
+  String _mastery = 'all';
+
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
@@ -60,6 +63,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         if (_realmId != null) {
           items = items.where((i) => i.realmIds.contains(_realmId)).toList();
           sentences = sentences.where((x) => x.realmId == _realmId).toList();
+        }
+        // The collection meter counts the whole area, before the filters. It
+        // is a measure of how much has been learned, not a readout of what the
+        // list happens to be showing — filtering to what is learned and being
+        // told it is all of it would be a lie.
+        final owned = items.length;
+        final done = items.where((i) => srs.isMastered(d.states[i.id])).length;
+
+        if (_mastery != 'all') {
+          items = items.where((i) {
+            final done = srs.isMastered(d.states[i.id]);
+            return _mastery == 'done' ? done : !done;
+          }).toList();
         }
         if (q.isNotEmpty) {
           items = items
@@ -83,11 +99,17 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             if (withMaterial.length > 1)
               DropdownButtonFormField<String?>(
                 initialValue: _realmId,
+                // Realm names come from the AI and run long.
+                isExpanded: true,
                 decoration: InputDecoration(labelText: s.t('realmLabel'), isDense: true),
                 items: [
-                  DropdownMenuItem(value: null, child: Text(s.t('allRealms'))),
+                  DropdownMenuItem(
+                      value: null,
+                      child: Text(s.t('allRealms'), overflow: TextOverflow.ellipsis)),
                   for (final r in withMaterial)
-                    DropdownMenuItem(value: r.id, child: Text(r.label)),
+                    DropdownMenuItem(
+                        value: r.id,
+                        child: Text(r.label, overflow: TextOverflow.ellipsis)),
                 ],
                 onChanged: (v) => setState(() => _realmId = v),
               ),
@@ -110,6 +132,29 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               onChanged: (v) => setState(() => _query = v),
             ),
             const SizedBox(height: 12),
+            // The collection line: how much of this area is actually yours.
+            // A count of what has been imported is inventory; this is the part
+            // worth coming back to look at.
+            if (!_showSentences) ...[
+              _CollectionBar(
+                learned: done,
+                total: owned,
+                s: s,
+                theme: theme,
+              ),
+              const SizedBox(height: 10),
+              SegmentedButton<String>(
+                segments: [
+                  ButtonSegment(value: 'all', label: Text(s.t('collAll'))),
+                  ButtonSegment(value: 'learning', label: Text(s.t('collLearning'))),
+                  ButtonSegment(value: 'done', label: Text(s.t('collDone'))),
+                ],
+                selected: {_mastery},
+                showSelectedIcon: false,
+                onSelectionChanged: (v) => setState(() => _mastery = v.first),
+              ),
+              const SizedBox(height: 12),
+            ],
             if (_showSentences)
               ...sentences.take(300).map((x) => _sentenceTile(x, s, theme))
             else
@@ -130,13 +175,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   Widget _itemTile(LearningItem i, SrsState? st, dynamic s, ThemeData theme) {
     final acc = st == null ? null : srs.accuracy(st);
+    // Where this expression has got to. Being due for review is a separate
+    // fact, shown beside it — hiding the stage whenever an item came round
+    // would hide it most of the time.
+    final stage = srs.stageFor(st);
     final badge = st == null || !st.introduced
         ? s.t('notStudied')
-        : srs.isMastered(st)
-            ? s.t('mastered')
-            : srs.isDue(st)
-                ? s.t('dueNow')
-                : s.t('boxLabel', {'n': st.box, 'date': st.due});
+        : '${srs.stageEmoji[stage]!} ${s.t(srs.stageKey[stage]!)}';
 
     return Opacity(
       opacity: i.disabled ? 0.5 : 1,
@@ -158,6 +203,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     label: Text(badge),
                     visualDensity: VisualDensity.compact,
                     side: BorderSide.none),
+                if (st != null && st.introduced && srs.isDue(st))
+                  Chip(
+                      label: Text(s.t('dueNow')),
+                      visualDensity: VisualDensity.compact,
+                      side: BorderSide.none),
                 if (acc != null && acc.n > 0)
                   Chip(
                       label: Text(s.t('accuracyLabel', {'pct': acc.pct, 'n': acc.n})),
@@ -238,6 +288,50 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 ]),
               ],
             ),
+          ),
+        ),
+      );
+}
+
+/// How much of the area has actually been learned, as a bar rather than a
+/// number: "23 / 50" alone reads as a statistic, and the point here is that
+/// the collection is filling up.
+class _CollectionBar extends StatelessWidget {
+  final int learned;
+  final int total;
+  final dynamic s;
+  final ThemeData theme;
+  const _CollectionBar(
+      {required this.learned,
+      required this.total,
+      required this.s,
+      required this.theme});
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(
+                  child: Text(s.t('collectionTitle'),
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                ),
+                Text('$learned / $total',
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
+              ]),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: total == 0 ? 0 : learned / total,
+                  minHeight: 8,
+                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                ),
+              ),
+            ],
           ),
         ),
       );

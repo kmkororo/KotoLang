@@ -67,13 +67,25 @@ class SessionSlot {
 
 class AnswerOutcome {
   final bool correct;
-  final int xp;
-  final int koto;
+  final int seeds;
+
+  /// Set when this answer turned a struggling item around. The screen shows
+  /// it; nothing else depends on it.
+  final bool breakthrough;
   final StreakResult streak;
   final Progress progress;
   final SrsState? srsState;
-  const AnswerOutcome(
-      this.correct, this.xp, this.koto, this.streak, this.progress, this.srsState);
+
+  /// The stage this answer moved the item up to, when it moved one. Null when
+  /// the item stayed where it was.
+  final srs.MasteryStage? stageUp;
+
+  /// This answer was the learner's first meeting with the expression. The
+  /// reason to come back is what has not been met yet, so it is worth saying.
+  final bool discovered;
+  const AnswerOutcome(this.correct, this.seeds, this.streak, this.progress,
+      this.srsState,
+      {this.breakthrough = false, this.stageUp, this.discovered = false});
 }
 
 class HomeCounts {
@@ -81,7 +93,13 @@ class HomeCounts {
   final int fresh;
   final int total;
   final int questions;
-  const HomeCounts(this.due, this.fresh, this.total, this.questions);
+
+  /// Distinct sentences available. A session prefers a fresh sentence for every
+  /// slot and only doubles up once it has run out of them, so this is what
+  /// decides whether a run feels varied or repetitive.
+  final int sentences;
+  const HomeCounts(
+      this.due, this.fresh, this.total, this.questions, this.sentences);
 }
 
 // --------------------------------------------------------------- repository
@@ -122,6 +140,8 @@ class Repository {
       dailyGoal: (j['dailyGoal'] ?? 1) as int,
       theme: (j['theme'] ?? 'system') as String,
       batchSize: (j['batchSize'] ?? 'standard') as String,
+      sessionSize: (j['sessionSize'] ?? baseSessionSize) as int,
+      haptics: (j['haptics'] ?? true) as bool,
     );
   }
 
@@ -135,6 +155,8 @@ class Repository {
         'dailyGoal': s.dailyGoal,
         'theme': s.theme,
         'batchSize': s.batchSize,
+        'sessionSize': s.sessionSize,
+        'haptics': s.haptics,
       }));
 
   /// null until the learner has chosen one, which is what triggers the very
@@ -433,6 +455,16 @@ class Repository {
           ));
     });
 
+    // The area that was paid for has arrived, so the credit is used up and
+    // the next new area is charged again.
+    if (prevRealm == null) {
+      final progress = await loadProgress();
+      if (progress.realmCredits > 0) {
+        await saveProgress(
+            progress.copyWith(realmCredits: progress.realmCredits - 1));
+      }
+    }
+
     return ImportOutcome(
       ok: true,
       realmName: realm.label,
@@ -514,13 +546,32 @@ class Repository {
         fresh.add(key);
       }
     }
-    return HomeCounts(due.length, fresh.length, total.length, qs.length);
+    return HomeCounts(due.length, fresh.length, total.length, qs.length,
+        qs.map((q) => q.sentenceId).toSet().length);
   }
 
   /// Builds a session. Read-only: nothing is recorded until an answer arrives.
-  Future<List<SessionSlot>> buildSession({String? realmId, int count = 5}) async {
-    final qs = await _usableQuestions(realmId);
+  ///
+  /// Reviews that have come due lead, and everything else follows in an order
+  /// weighted towards what has been asked least. The schedule is the point of
+  /// the app, so it is never shuffled away — but beyond it the order is loose,
+  /// because the same five questions in the same order every evening is what
+  /// makes a library feel smaller than it is.
+  Future<List<SessionSlot>> buildSession(
+      {String? realmId, int count = 5, Set<QuestionType>? allow}) async {
+    // ignore: parameter_assignments
+    var qs = await _usableQuestions(realmId);
+    // A format filter narrows the pool, but never empties it: someone who has
+    // asked for listening only and has no listening questions left is better
+    // served a session than a blank screen.
+    if (allow != null) {
+      final narrowed = qs.where((q) => allow.contains(q.type)).toList();
+      if (narrowed.isNotEmpty) qs = narrowed;
+    }
     if (qs.isEmpty) return const [];
+    // Zero means everything the library can offer, which is what the longest
+    // setting asks for.
+    if (count <= 0) count = qs.length;
 
     final itemById = {for (final i in await items()) i.id: i};
     final realmById = {for (final r in await realms()) r.id: r};
@@ -530,6 +581,13 @@ class Repository {
     for (var i = 0; i < recentList.length; i++) {
       recent[recentList[i]] = i;
     }
+    // How often each question has actually been served. The recency list only
+    // remembers the last `recentLimit` sentences, so on a small library it
+    // fills up and stops discriminating — this is what keeps the rotation
+    // honest after that: least-asked first.
+    final asked = {
+      for (final row in await db.select(db.questionStats).get()) row.questionId: row.n
+    };
     final t = today();
 
     // One slot per learning item, so a session probes breadth.
@@ -580,16 +638,7 @@ class Repository {
         if (varied.isNotEmpty) candidates = varied;
       }
 
-      // Skip sentences served in the last few sessions; if everything is recent
-      // fall back to the least recently used rather than refusing to ask.
-      final unseen = candidates.where((q) => !recent.containsKey(q.sentenceId)).toList();
-      if (unseen.isNotEmpty) {
-        candidates = unseen;
-      } else {
-        candidates.sort((a, b) =>
-            (recent[b.sentenceId] ?? 0).compareTo(recent[a.sentenceId] ?? 0));
-        candidates = take(candidates, 3);
-      }
+      candidates = _leastWorn(candidates, recent, asked);
 
       final chosen = sample(candidates, r);
       if (chosen == null) continue;
@@ -599,20 +648,99 @@ class Repository {
       lastType = chosen.type;
     }
 
+    // A second helping. The first pass takes one question per learning item,
+    // which is what makes a session broad — but it also caps the session at
+    // however many items the library holds. On a small library that turned a
+    // ten-question session into three, and the same few sentences came round
+    // again and again.
+    if (picked.length < count) {
+      final takenIds = picked.map((p) => p.question.id).toSet();
+      var pool = qs
+          .where((q) => !takenIds.contains(q.id) && !usedSentences.contains(q.sentenceId))
+          .toList();
+      pool.shuffle(r);
+      pool = _leastWorn(pool, recent, asked);
+
+      for (final q in pool) {
+        if (picked.length >= count) break;
+        if (usedSentences.contains(q.sentenceId)) continue;
+        final state = q.itemId == null ? null : states[q.itemId];
+        usedSentences.add(q.sentenceId);
+        picked.add(SessionSlot(
+            q, q.itemId, state != null && state.introduced && srs.isDue(state, t)));
+      }
+    }
+
+    // A third helping, once every sentence has been used once. The library is
+    // finite and refilling it means a trip to an assistant, so a session that
+    // stops early rather than asking a sentence again in a different format is
+    // holding material back for no one's benefit. Kept strictly last: a
+    // sentence met earlier in the same session makes its second question
+    // easier, and that is a fair price only after the fresh ones are gone.
+    if (picked.length < count) {
+      final takenIds = picked.map((p) => p.question.id).toSet();
+      final usedTypes = {
+        for (final p in picked) '${p.question.sentenceId}|${p.question.type.name}'
+      };
+      var pool = qs
+          .where((q) =>
+              !takenIds.contains(q.id) &&
+              !usedTypes.contains('${q.sentenceId}|${q.type.name}'))
+          .toList();
+      pool.shuffle(r);
+      pool = _leastWorn(pool, recent, asked);
+
+      for (final q in pool) {
+        if (picked.length >= count) break;
+        final state = q.itemId == null ? null : states[q.itemId];
+        picked.add(SessionSlot(
+            q, q.itemId, state != null && state.introduced && srs.isDue(state, t)));
+      }
+    }
+
     return picked;
   }
 
-  /// Records one answer: schedule, per-question stats, history, streak and XP.
-  /// The streak advances here rather than at session start, because a day counts
-  /// only once a question has actually been answered.
+  /// The questions that have been shown least: unseen sentences first, and
+  /// among those the ones asked fewest times. Falls back to the least recently
+  /// seen rather than refusing to ask anything.
+  List<Question> _leastWorn(
+    List<Question> candidates,
+    Map<String, int> recent,
+    Map<String, int> asked,
+  ) {
+    if (candidates.length <= 1) return candidates;
+
+    var pool = candidates.where((q) => !recent.containsKey(q.sentenceId)).toList();
+    if (pool.isEmpty) {
+      pool = [...candidates]..sort((a, b) =>
+          (recent[b.sentenceId] ?? 0).compareTo(recent[a.sentenceId] ?? 0));
+      pool = take(pool, 3);
+    }
+
+    // Among what is left, the ones asked fewest times — all of them, so the
+    // caller still has something to pick at random from.
+    final fewest = pool.map((q) => asked[q.id] ?? 0).reduce((a, b) => a < b ? a : b);
+    return pool.where((q) => (asked[q.id] ?? 0) == fewest).toList();
+  }
+
+  /// Records one answer: schedule, per-question stats, history, streak and
+  /// Seeds. The streak advances here rather than at session start, because a
+  /// day counts only once a question has actually been answered.
+  ///
+  /// [bonusSeeds] is added on top of what the answer itself earns — the
+  /// session's combo run. It is passed in rather than computed here because
+  /// the run belongs to the session on screen, not to the stored record.
   Future<AnswerOutcome> recordAnswer({
     required Question question,
     required bool correct,
     required bool wasDue,
     int boost = 1,
+    int bonusSeeds = 0,
   }) async {
     final t = today();
     SrsState? updated;
+    SrsState? before;
     var firstCorrect = false;
 
     if (question.itemId != null) {
@@ -620,6 +748,7 @@ class Repository {
             ..where((x) => x.itemId.equals(question.itemId!)))
           .getSingleOrNull();
       final state = existing?.toDomain() ?? SrsState.blank(question.itemId!);
+      before = existing?.toDomain();
       firstCorrect = correct && srs.accuracy(state).ok == 0;
       updated = srs.applyAnswer(state, question.type, correct,
           sentenceId: question.sentenceId, at: t);
@@ -651,22 +780,46 @@ class Repository {
 
     final progress = await loadProgress();
     final streak = registerStudyDay(progress, t);
-    final gained = xpFor(question.type, correct, wasDue: wasDue, firstCorrect: firstCorrect) *
-        (boost > 1 ? boost : 1);
-    final gainedKoto = kotoFor(question.type, correct, wasDue: wasDue, firstCorrect: firstCorrect);
-    // A study day advancing onto a multiple of `streakBonusEvery` pays a coin
+    final gained =
+        seedsFor(question.type, correct, wasDue: wasDue, firstCorrect: firstCorrect) *
+            (boost > 1 ? boost : 1);
+    // A study day advancing onto a multiple of `streakBonusEvery` pays a
     // milestone once — `registerStudyDay` already guarantees the streak
     // advances at most once per calendar day, so this cannot double-fire from
     // answering several questions on the same day.
     final milestone =
         streak.result.advanced && streak.result.to % streakBonusEvery == 0 ? streakBonus : 0;
+
+    // The item that kept going wrong and finally stopped. Paid once, so a
+    // later slip and recovery is not a second payday — and so nobody can
+    // farm it by missing on purpose.
+    final itemId = question.itemId;
+    final broke = itemId != null &&
+        !streak.progress.breakthroughs.contains(itemId) &&
+        isBreakthrough(before, updated);
+    final breakthrough = broke ? breakthroughBonus : 0;
     final next = streak.progress.copyWith(
-      xpTotal: streak.progress.xpTotal + gained,
-      kotoCoins: streak.progress.kotoCoins + gainedKoto + milestone,
+      seeds: streak.progress.seeds + gained + milestone + bonusSeeds + breakthrough,
+      breakthroughs: broke
+          ? [...streak.progress.breakthroughs, itemId]
+          : streak.progress.breakthroughs,
     );
     await saveProgress(next);
 
-    return AnswerOutcome(correct, gained, gainedKoto + milestone, streak.result, next, updated);
+    // Growing a stage is its own reward — no Seeds attached, or it would
+    // simply duplicate what the schedule already pays for.
+    // First meeting: no schedule before this answer, or one that had never
+    // introduced the item.
+    final discovered = updated != null && !(before?.introduced ?? false);
+
+    final grewTo = srs.stageFor(updated);
+    final stageUp =
+        grewTo.index > srs.stageFor(before).index ? grewTo : null;
+
+    return AnswerOutcome(
+        correct, gained + milestone + bonusSeeds + breakthrough, streak.result,
+        next, updated,
+        breakthrough: broke, stageUp: stageUp, discovered: discovered);
   }
 
   /// Called once, right after a session ends. Applies the flat
@@ -678,10 +831,16 @@ class Repository {
   /// history entry for today. That means it can never drift out of sync with
   /// what the learner actually did, and it costs nothing extra to compute —
   /// the same `history()` the stats screen already reads.
-  Future<({Progress progress, int bonus})> finishSession({required int answered}) async {
+  Future<({Progress progress, int bonus, bool perfect})> finishSession(
+      {required int answered, int missed = 0, int target = 0}) async {
     final progress = await loadProgress();
     final t = today();
-    var bonus = sessionCompletionBonus(answered);
+    var bonus = sessionCompletionBonus(answered, target);
+
+    // A whole session without a single miss. Judged here rather than on the
+    // screen so the bonus cannot be claimed twice by returning to it.
+    final perfect = isPerfectRun(answered: answered, missed: missed);
+    if (perfect) bonus += perfectRunBonus;
     var journeyDay = progress.journeyBonusDay;
 
     if (progress.journeyBonusDay != t) {
@@ -697,24 +856,31 @@ class Repository {
     }
 
     final next = progress.copyWith(
-      kotoCoins: progress.kotoCoins + bonus,
+      seeds: progress.seeds + bonus,
       journeyBonusDay: journeyDay,
     );
     await saveProgress(next);
-    return (progress: next, bonus: bonus);
+    return (progress: next, bonus: bonus, perfect: perfect);
   }
 
   /// Spends `realmUnlockCost` to flip an existing (already-suggested but
   /// still locked) realm to usable. Returns false and spends nothing if the
   /// balance is short — the caller is expected to have already confirmed
-  /// with the learner before calling this.
+  /// with the learner before calling this. An area that is already unlocked
+  /// costs nothing: the confirmation is a dialog, and two of them could be
+  /// stacked up by a double tap and then both confirmed.
   Future<bool> unlockRealm(String realmId) async {
+    final row = await (db.select(db.realms)..where((t) => t.id.equals(realmId)))
+        .getSingleOrNull();
+    if (row == null) return false;
+    if (row.unlocked) return true;
+
     final progress = await loadProgress();
-    if (progress.kotoCoins < realmUnlockCost) return false;
+    if (progress.seeds < realmUnlockCost) return false;
 
     await (db.update(db.realms)..where((t) => t.id.equals(realmId)))
         .write(const RealmsCompanion(unlocked: Value(true)));
-    await saveProgress(progress.copyWith(kotoCoins: progress.kotoCoins - realmUnlockCost));
+    await saveProgress(progress.copyWith(seeds: progress.seeds - realmUnlockCost));
     return true;
   }
 
@@ -733,11 +899,71 @@ class Repository {
   /// rather than one the AI already suggested during profile import. The
   /// realm itself is created, already unlocked, by the `importMaterial` call
   /// that follows. Returns false and spends nothing if the balance is short.
+  ///
+  /// The purchase is held as a credit until that import arrives, because the
+  /// gap between the two is long — the learner leaves for their AI and comes
+  /// back — and copying the prompt again in the meantime must not be charged
+  /// as a second area.
   Future<bool> spendForNewRealm() async {
     final progress = await loadProgress();
-    if (progress.kotoCoins < realmUnlockCost) return false;
-    await saveProgress(progress.copyWith(kotoCoins: progress.kotoCoins - realmUnlockCost));
+    if (progress.realmCredits > 0) return true;
+    if (progress.seeds < realmUnlockCost) return false;
+    await saveProgress(progress.copyWith(
+      seeds: progress.seeds - realmUnlockCost,
+      realmCredits: progress.realmCredits + 1,
+    ));
     return true;
+  }
+
+  /// Whether adding material to [realmId] costs anything. The first batch in
+  /// an area is free; every later one is charged, because that is the point
+  /// at which the learner is genuinely buying more to study rather than
+  /// making a newly opened area usable at all.
+  /// Whether a further batch would be charged for, judged from the reply
+  /// itself rather than from whichever area the picker happens to be showing.
+  ///
+  /// Those were two different things: the charge was decided by the dropdown
+  /// while the material went wherever the JSON said, so pasting a Work batch
+  /// while an empty area was selected imported it for nothing. Reading the
+  /// reply closes that, and answering before the import means the learner is
+  /// never told the price after they have already been to their assistant and
+  /// back.
+  Future<bool> materialWouldCost(String raw) async {
+    final ex = imp.extractJson(raw);
+    if (!ex.ok || ex.data == null) return false;
+    final v = imp.validate(ex.data!);
+    if (v.type != 'material') return false;
+    final norm = imp.normaliseMaterial(ex.data!);
+    final existing = await realms();
+    final match = existing
+        .where((r) => r.normKeyValue == norm.realm.normKeyValue)
+        .firstOrNull;
+    return match != null && match.hasMaterial;
+  }
+
+  /// Spends `extraMaterialCost` for a further batch in an area that already
+  /// has material. Returns false and spends nothing if the balance is short.
+  Future<bool> spendForExtraMaterial() async {
+    final progress = await loadProgress();
+    if (progress.seeds < extraMaterialCost) return false;
+    await saveProgress(progress.copyWith(seeds: progress.seeds - extraMaterialCost));
+    return true;
+  }
+
+  /// Buys one ornament and hangs it on the tree. Returns the progress actually
+  /// stored, or null when the balance is short — in which case nothing is
+  /// spent. Duplicates are allowed: several ribbons on one tree is a choice,
+  /// not a mistake.
+  Future<Progress?> spendForOrnament(String kind) async {
+    if (!ornamentKinds.contains(kind)) return null;
+    final progress = await loadProgress();
+    if (progress.seeds < ornamentCost) return null;
+    final next = progress.copyWith(
+      seeds: progress.seeds - ornamentCost,
+      ornaments: [...progress.ornaments, kind],
+    );
+    await saveProgress(next);
+    return next;
   }
 
   // ------------------------------------------------------------- library ops

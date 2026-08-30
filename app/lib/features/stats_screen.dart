@@ -8,7 +8,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app.dart';
 import '../core/util.dart';
 import '../domain/models.dart';
+import '../domain/progress_service.dart' as ps;
 import '../domain/srs.dart' as srs;
+import 'home_screen.dart';
 
 class _Stats {
   final int todayCount;
@@ -22,6 +24,8 @@ class _Stats {
   final int untouched;
   final int totalAnswers;
   final List<({String name, int done, int total})> byRealm;
+  final Map<srs.MasteryStage, int> stages;
+  final List<ps.Badge> badgeShelf;
 
   const _Stats({
     required this.todayCount,
@@ -35,6 +39,8 @@ class _Stats {
     required this.untouched,
     required this.totalAnswers,
     required this.byRealm,
+    required this.stages,
+    required this.badgeShelf,
   });
 }
 
@@ -76,7 +82,26 @@ final _statsProvider = FutureProvider.autoDispose<_Stats>((ref) async {
   final learning = states.where((s) => s.introduced && !srs.isMastered(s)).length;
   final withQuestions = questions.map((q) => q.itemId).whereType<String>().toSet();
 
+  // Every expression the learner could be asked about, sorted by how far it
+  // has come. Items with no questions behind them are left out: they cannot
+  // grow, so counting them as seeds would be misleading.
+  final stages = <srs.MasteryStage, int>{
+    for (final stage in srs.MasteryStage.values) stage: 0
+  };
+  for (final id in withQuestions) {
+    final stage = srs.stageFor(byId[id]);
+    stages[stage] = stages[stage]! + 1;
+  }
+
+  final progress = ref.watch(progressProvider);
   return _Stats(
+    stages: stages,
+    badgeShelf: ps.badges(
+      history: history,
+      bestStreak: progress.bestStreak,
+      masteredItems: mastered,
+      realmsWithMaterial: realms.where((r) => r.hasMaterial).length,
+    ),
     todayCount: todayRows.length,
     todayCorrect: todayRows.where((h) => h.correct).length,
     dueNow: srs.dueCount(states),
@@ -108,6 +133,10 @@ class StatsScreen extends ConsumerWidget {
     final s = ref.watch(stringsProvider);
     final progress = ref.watch(progressProvider);
     final theme = Theme.of(context);
+    final home = ref.watch(homeStatsProvider).value;
+    final realms = (ref.watch(realmsProvider).value ?? const <Realm>[])
+        .where((r) => r.hasMaterial)
+        .toList();
 
     return ref.watch(_statsProvider).when(
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -119,6 +148,46 @@ class StatsScreen extends ConsumerWidget {
                   style: theme.textTheme.titleLarge
                       ?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 12),
+
+              // Moved off the home screen, which is now the tree and the way
+              // into a session. These are the figures worth looking at when
+              // you have come here to look at figures.
+              if (home?.mastery != null) ...[
+                MasteryCard(mastery: home!.mastery!, s: s, theme: theme),
+                const SizedBox(height: 12),
+              ],
+              if (realms.isNotEmpty) ...[
+                JourneyCard(
+                  realms: realms,
+                  touchedToday: home?.touchedToday ?? const {},
+                  s: s,
+                  theme: theme,
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (home != null) ...[
+                WeekStrip(
+                    week: home.week, label: s.t('weekStripLabel'), theme: theme),
+                const SizedBox(height: 12),
+              ],
+              Row(children: [
+                MiniTile(
+                    value: '${progress.bestStreak}', label: s.t('bestStreakLabel')),
+                const SizedBox(width: 8),
+                MiniTile(
+                  value: '${progress.freezes}',
+                  label: s.t('freezesLabel'),
+                  onTap: () => explainNote(context,
+                      title: s.t('freezeHelpTitle'),
+                      body: s.t('freezeHelpBody'),
+                      closeLabel: s.t('capUnderstood')),
+                ),
+                const SizedBox(width: 8),
+                MiniTile(
+                    value: '${d.learning}', label: s.t('itemsInProgress')),
+              ]),
+              const SizedBox(height: 12),
+
 
               _Block(title: s.t('todaySection'), children: [
                 _Row3(
@@ -194,6 +263,78 @@ class StatsScreen extends ConsumerWidget {
                 ),
               ]),
 
+              // Locked badges are shown alongside earned ones, with the real
+              // number underneath. A hidden badge is nothing to aim at; one
+              // that says "12 / 100" is.
+              // The same items again, but as a journey rather than a verdict:
+              // four stages an expression passes through on its way up.
+              _Block(title: s.t('stageSection'), children: [
+                for (final stage in srs.MasteryStage.values)
+                  _Bar(
+                    label:
+                        '${srs.stageEmoji[stage]!} ${s.t(srs.stageKey[stage]!)}',
+                    value: d.stages.values.fold(0, (a, b) => a + b) == 0
+                        ? null
+                        : percent(d.stages[stage]!,
+                            d.stages.values.fold(0, (a, b) => a + b)),
+                    trailing: '${d.stages[stage]}',
+                  ),
+              ]),
+
+              _Block(title: s.t('badgesSection'), children: [
+                Text(
+                  s.t('badgesEarned', {
+                    'n': d.badgeShelf.where((b) => b.earned).length,
+                    'total': d.badgeShelf.length,
+                  }),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 10),
+                for (final b in d.badgeShelf)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(children: [
+                      Icon(
+                        b.earned ? Icons.emoji_events : Icons.emoji_events_outlined,
+                        size: 22,
+                        color: b.earned
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.outlineVariant,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(s.t('badge_${b.id}'),
+                                style: TextStyle(
+                                  fontWeight:
+                                      b.earned ? FontWeight.w700 : FontWeight.w400,
+                                  color: b.earned
+                                      ? null
+                                      : theme.colorScheme.onSurfaceVariant,
+                                )),
+                            if (!b.earned) ...[
+                              const SizedBox(height: 4),
+                              LinearProgressIndicator(
+                                value: b.ratio,
+                                minHeight: 4,
+                                backgroundColor:
+                                    theme.colorScheme.surfaceContainerHighest,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text('${b.progress}/${b.threshold}',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                    ]),
+                  ),
+              ]),
+
               if (d.byRealm.isNotEmpty)
                 _Block(title: s.t('byRealmSection'), children: [
                   for (final r in d.byRealm)
@@ -206,9 +347,13 @@ class StatsScreen extends ConsumerWidget {
 
               _Block(title: s.t('totalSection'), children: [
                 _Row3(
-                  a: ('${progress.xpTotal}', s.t('xpLabel')),
+                  a: ('${progress.seeds}', s.t('seedsLabel')),
                   b: ('${d.totalAnswers}', s.t('totalAnswers')),
-                  c: ('${progress.freezes}', s.t('freezesLabel')),
+                  c: ('', s.t('freezesLabel')),
+                  onTapC: () => explainNote(context,
+                      title: s.t('freezeHelpTitle'),
+                      body: s.t('freezeHelpBody'),
+                      closeLabel: s.t('capUnderstood')),
                 ),
               ]),
             ],
@@ -243,23 +388,51 @@ class _Block extends StatelessWidget {
 
 class _Row3 extends StatelessWidget {
   final (String, String) a, b, c;
-  const _Row3({required this.a, required this.b, required this.c});
 
-  Widget _cell(BuildContext context, (String, String) v) => Expanded(
-        child: Column(children: [
-          Text(v.$1, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 2),
-          Text(v.$2,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall),
-        ]),
-      );
+  /// Explanation for the third cell, when its label needs one. Same reason as
+  /// the home screen's counters: a name like "rest days" cannot carry it.
+  final VoidCallback? onTapC;
+  const _Row3({required this.a, required this.b, required this.c, this.onTapC});
+
+  Widget _cell(BuildContext context, (String, String) v, {VoidCallback? onTap}) {
+    final theme = Theme.of(context);
+    final body = Column(children: [
+      Text(v.$1, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 2),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Flexible(
+            child: Text(v.$2,
+                textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+          ),
+          if (onTap != null) ...[
+            const SizedBox(width: 3),
+            Icon(Icons.info_outline,
+                size: 13, color: theme.colorScheme.onSurfaceVariant),
+          ],
+        ],
+      ),
+    ]);
+
+    return Expanded(
+      child: onTap == null
+          ? body
+          : InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: onTap,
+              child: body,
+            ),
+    );
+  }
 
   @override
-  Widget build(BuildContext context) =>
-      Row(children: [_cell(context, a), _cell(context, b), _cell(context, c)]);
+  Widget build(BuildContext context) => Row(children: [
+        _cell(context, a),
+        _cell(context, b),
+        _cell(context, c, onTap: onTapC),
+      ]);
 }
-
 class _Bar extends StatelessWidget {
   final String label;
   final int? value; // null when there is nothing to show yet
