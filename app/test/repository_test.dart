@@ -498,6 +498,50 @@ void main() {
       expect(c.total, 2);
       expect(c.questions, greaterThan(0));
     });
+
+    test('unanswered counts questions, fresh counts expressions', () async {
+      // The two are shown side by side on the home screen and they are not
+      // the same thing: two expressions carry a few dozen questions between
+      // them. Meeting every expression is not running out of work.
+      await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await repo.importMaterial(
+          materialJson(realm: 'Work', terms: [('a term', 'x'), ('b term', 'y')]),
+          uiLanguage: 'en');
+
+      final before = await repo.homeCounts('all');
+      expect(before.unanswered, before.questions,
+          reason: 'nothing has been served yet');
+      expect(before.unanswered, greaterThan(before.fresh));
+
+      // One answer takes exactly one question off the pile, and one
+      // expression out of the ones never met.
+      final q = (await repo.questions()).firstWhere((q) => q.itemId != null);
+      await repo.recordAnswer(question: q, correct: true, wasDue: false);
+
+      final after = await repo.homeCounts('all');
+      expect(after.unanswered, before.unanswered - 1);
+      expect(after.fresh, before.fresh - 1);
+    });
+
+    test('meeting every expression still leaves most questions unanswered',
+        () async {
+      await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+      await repo.importMaterial(
+          materialJson(realm: 'Work', terms: [('a term', 'x'), ('b term', 'y')]),
+          uiLanguage: 'en');
+
+      // One question per expression is enough to have "met" them all.
+      final seen = <String>{};
+      for (final q in await repo.questions()) {
+        if (q.itemId == null || !seen.add(q.itemId!)) continue;
+        await repo.recordAnswer(question: q, correct: true, wasDue: false);
+      }
+
+      final c = await repo.homeCounts('all');
+      expect(c.fresh, 0, reason: 'every expression has been introduced');
+      expect(c.unanswered, c.questions - 2,
+          reason: 'but only two questions have actually been answered');
+    });
   });
 
   group('resets', () {

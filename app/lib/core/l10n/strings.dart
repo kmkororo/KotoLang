@@ -288,7 +288,8 @@ const _catalogueCore = <String, Map<String, String>>{
     'justOne': 'Just one question today',
     'treeSeedNote': 'Answer one question and it starts to grow.',
     'treeGrownNote': 'Grown from {n} answers',
-    'todayLine': 'Review {due} · new expressions {fresh} · answered today {done}',
+    'todayLine':
+        'Review {due} · new expressions {fresh} · {left} questions left · answered today {done}',
     'ornamentTitle': 'Decorations',
     'ornamentNote': 'Hang one on the tree. {n} Seeds each, no effect on anything.',
     'ornamentDone': 'Hung on the tree',
@@ -663,7 +664,7 @@ const _catalogueCore = <String, Map<String, String>>{
     'justOne': '今日は1問だけ',
     'treeSeedNote': '1問こたえると育ちはじめます。',
     'treeGrownNote': 'これまでの{n}問で育ちました',
-    'todayLine': '復習 {due}・初めての表現 {fresh}・今日 {done}問',
+    'todayLine': '復習 {due}・初めての表現 {fresh}・未回答 {left}問・今日 {done}問',
     'ornamentTitle': '飾り',
     'ornamentNote': '木に飾れます。1つ{n} Seeds。効果はありません。',
     'ornamentDone': '木に飾りました',

@@ -94,12 +94,19 @@ class HomeCounts {
   final int total;
   final int questions;
 
+  /// Questions never served. `fresh` counts expressions the learner has not
+  /// met; this counts the work actually left in the library, which is a much
+  /// larger number — six expressions carry over a hundred questions between
+  /// them. Both are shown, because meeting every expression and running out
+  /// of things to answer are not the same event.
+  final int unanswered;
+
   /// Distinct sentences available. A session prefers a fresh sentence for every
   /// slot and only doubles up once it has run out of them, so this is what
   /// decides whether a run feels varied or repetitive.
   final int sentences;
-  const HomeCounts(
-      this.due, this.fresh, this.total, this.questions, this.sentences);
+  const HomeCounts(this.due, this.fresh, this.total, this.questions,
+      this.unanswered, this.sentences);
 }
 
 // --------------------------------------------------------------- repository
@@ -552,12 +559,20 @@ class Repository {
   Future<HomeCounts> homeCounts(String? realmId) async {
     final qs = await _usableQuestions(realmId);
     final states = {for (final s in await srsStates()) s.itemId: s};
+    // A question with no row here, or a row saying nought, has never been put
+    // in front of the learner.
+    final served = {
+      for (final row in await db.select(db.questionStats).get())
+        if (row.n > 0) row.questionId
+    };
     final t = today();
 
     final due = <String>{}, fresh = <String>{}, total = <String>{};
+    var unanswered = 0;
     for (final q in qs) {
       final key = q.itemId ?? 'sent:${q.sentenceId}';
       total.add(key);
+      if (!served.contains(q.id)) unanswered++;
       final st = q.itemId == null ? null : states[q.itemId];
       if (st != null && st.introduced) {
         if (srs.isDue(st, t)) due.add(key);
@@ -566,7 +581,7 @@ class Repository {
       }
     }
     return HomeCounts(due.length, fresh.length, total.length, qs.length,
-        qs.map((q) => q.sentenceId).toSet().length);
+        unanswered, qs.map((q) => q.sentenceId).toSet().length);
   }
 
   /// Builds a session. Read-only: nothing is recorded until an answer arrives.

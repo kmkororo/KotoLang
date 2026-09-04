@@ -127,6 +127,7 @@ class HomeScreen extends ConsumerWidget {
               s.t('todayLine', {
                 'due': c.due,
                 'fresh': c.fresh,
+                'left': c.unanswered,
                 'done': stats?.answeredToday ?? 0,
               }),
               textAlign: TextAlign.center,

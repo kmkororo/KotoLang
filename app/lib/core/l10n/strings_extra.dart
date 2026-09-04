@@ -291,7 +291,8 @@ const catalogueExtra = <String, Map<String, String>>{
     'hintLabel': 'PISTA: los huecos son lo que tienes que captar',
     'treeSeedNote': 'Responde una pregunta y empezará a crecer.',
     'treeGrownNote': 'Crecido con {n} respuestas',
-    'todayLine': 'Repaso {due} · expresiones nuevas {fresh} · hoy {done}',
+    'todayLine':
+        'Repaso {due} · expresiones nuevas {fresh} · quedan {left} preguntas · hoy {done}',
     'ornamentTitle': 'Adornos',
     'ornamentNote': 'Cuélgalo del árbol. {n} Seeds cada uno; no afectan a nada.',
     'ornamentDone': 'Colgado del árbol',
@@ -686,7 +687,8 @@ const catalogueExtra = <String, Map<String, String>>{
     'hintLabel': 'DICA — as lacunas são o que você precisa captar',
     'treeSeedNote': 'Responda uma pergunta e ela começa a crescer.',
     'treeGrownNote': 'Cresceu com {n} respostas',
-    'todayLine': 'Revisão {due} · expressões novas {fresh} · hoje {done}',
+    'todayLine':
+        'Revisão {due} · expressões novas {fresh} · faltam {left} perguntas · hoje {done}',
     'ornamentTitle': 'Enfeites',
     'ornamentNote':
         'Pendure um na árvore. {n} Seeds cada; não afetam nada.',
@@ -1084,7 +1086,8 @@ const catalogueExtra = <String, Map<String, String>>{
     'hintLabel': 'INDICE — les blancs sont ce qu\'il faut saisir',
     'treeSeedNote': 'Répondez à une question et il commence à pousser.',
     'treeGrownNote': 'Poussé grâce à {n} réponses',
-    'todayLine': 'Révision {due} · expressions neuves {fresh} · aujourd\'hui {done}',
+    'todayLine':
+        'Révision {due} · expressions neuves {fresh} · {left} questions restantes · aujourd\'hui {done}',
     'ornamentTitle': 'Décorations',
     'ornamentNote':
         'Accrochez-en une à l\'arbre. {n} Seeds pièce, sans aucun effet.',
@@ -1483,7 +1486,8 @@ const catalogueExtra = <String, Map<String, String>>{
     'hintLabel': 'HINWEIS — die Lücken sind das, was Sie hören müssen',
     'treeSeedNote': 'Beantworten Sie eine Frage, dann fängt er an zu wachsen.',
     'treeGrownNote': 'Aus {n} Antworten gewachsen',
-    'todayLine': 'Wiederholung {due} · neue Wendungen {fresh} · heute {done}',
+    'todayLine':
+        'Wiederholung {due} · neue Wendungen {fresh} · {left} Fragen offen · heute {done}',
     'ornamentTitle': 'Schmuck',
     'ornamentNote':
         'Hängen Sie etwas an den Baum. Je {n} Seeds, ohne jede Wirkung.',
@@ -1861,7 +1865,7 @@ const catalogueExtra = <String, Map<String, String>>{
     'hintLabel': '힌트 — 빈칸이 알아들어야 할 부분입니다',
     'treeSeedNote': '한 문제만 풀면 자라기 시작합니다.',
     'treeGrownNote': '지금까지 {n}문제로 자랐습니다',
-    'todayLine': '복습 {due} · 처음 보는 표현 {fresh} · 오늘 {done}',
+    'todayLine': '복습 {due} · 처음 보는 표현 {fresh} · 남은 문제 {left} · 오늘 {done}',
     'ornamentTitle': '장식',
     'ornamentNote': '나무에 걸 수 있습니다. 개당 {n} Seeds, 효과는 없습니다.',
     'ornamentDone': '나무에 걸었습니다',
@@ -2228,7 +2232,7 @@ const catalogueExtra = <String, Map<String, String>>{
     'hintLabel': '提示 — 空格处就是要听出来的部分',
     'treeSeedNote': '答一道题，它就会开始生长。',
     'treeGrownNote': '由 {n} 道题长成',
-    'todayLine': '复习 {due} · 初次见到的表达 {fresh} · 今天 {done}',
+    'todayLine': '复习 {due} · 初次见到的表达 {fresh} · 未答 {left} 题 · 今天 {done}',
     'ornamentTitle': '装饰',
     'ornamentNote': '挂到树上。每个 {n} Seeds，不影响任何数值。',
     'ornamentDone': '已挂到树上',
@@ -2613,7 +2617,8 @@ const catalogueExtra = <String, Map<String, String>>{
     'hintLabel': 'संकेत — खाली जगहें वही हैं जो आपको पकड़नी हैं',
     'treeSeedNote': 'एक सवाल का जवाब दीजिए, यह बढ़ना शुरू कर देगा।',
     'treeGrownNote': '{n} जवाबों से बढ़ा है',
-    'todayLine': 'दोहराव {due} · नए वाक्यांश {fresh} · आज {done}',
+    'todayLine':
+        'दोहराव {due} · नए वाक्यांश {fresh} · {left} सवाल बाक़ी · आज {done}',
     'ornamentTitle': 'सजावट',
     'ornamentNote': 'पेड़ पर टाँगिए। हर एक {n} Seeds का, असर कुछ नहीं।',
     'ornamentDone': 'पेड़ पर टाँग दिया',
@@ -3004,7 +3009,8 @@ const catalogueExtra = <String, Map<String, String>>{
     'hintLabel': 'PETUNJUK — bagian kosong itulah yang harus Anda tangkap',
     'treeSeedNote': 'Jawab satu soal dan ia mulai tumbuh.',
     'treeGrownNote': 'Tumbuh dari {n} jawaban',
-    'todayLine': 'Ulangan {due} · ungkapan baru {fresh} · hari ini {done}',
+    'todayLine':
+        'Ulangan {due} · ungkapan baru {fresh} · sisa {left} soal · hari ini {done}',
     'ornamentTitle': 'Hiasan',
     'ornamentNote':
         'Gantungkan di pohon. {n} Seeds per buah, tidak memengaruhi apa pun.',
