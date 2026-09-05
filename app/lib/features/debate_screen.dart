@@ -129,6 +129,7 @@ class _DebateScreenState extends ConsumerState<DebateScreen> {
     _closest = null;
     _check = null;
     _gainedHere = 0;
+    _peeked = _revealed && _speech.available;
     // Shuffled once per node so the answer is not always the first option,
     // and seeded so the same node shuffles the same way every time.
     final rnd = Random(node.id.hashCode);
@@ -161,11 +162,26 @@ class _DebateScreenState extends ConsumerState<DebateScreen> {
 
   bool _graspRight(String key) => _grasp[key] == _answerFor(key);
 
+  /// The words were on screen before the line was grasped. Only counts when
+  /// there was a voice to catch it from — with no voice, showing the text is
+  /// the only way to hear the line at all.
+  bool _peeked = false;
+
   List<String> get _graspMisses => [
         if (!_graspRight('claim')) FailureKind.claimMissed,
         if (!_graspRight('reason')) FailureKind.reasonMissed,
         if (!_graspRight('weak')) FailureKind.weakPointMissed,
       ];
+
+  /// Everything written down about the grasp step, misses and the peek.
+  List<String> get _graspSlips => [..._graspMisses, if (_peeked) FailureKind.peeked];
+
+  void _toggleReveal() {
+    setState(() => _revealed = !_revealed);
+    if (_revealed && _speech.available && _step.index <= _Step.grasp.index) {
+      _peeked = true;
+    }
+  }
 
   void _pickGrasp(String key, String option) {
     if (_graspDone) return; // the third tap locks all three
@@ -224,7 +240,7 @@ class _DebateScreenState extends ConsumerState<DebateScreen> {
           closest: closest,
           graspedAll: _graspMisses.isEmpty,
           missingMoves: check.missing,
-          graspMisses: _graspMisses,
+          graspMisses: _graspSlips,
           outcome: outcome?.name,
         );
     if (!mounted) return;
@@ -370,7 +386,7 @@ class _DebateScreenState extends ConsumerState<DebateScreen> {
                   ),
                 IconButton(
                   tooltip: s.t(_revealed ? 'debateHideText' : 'debateShowText'),
-                  onPressed: () => setState(() => _revealed = !_revealed),
+                  onPressed: _toggleReveal,
                   icon: Icon(_revealed ? Icons.visibility_off : Icons.visibility),
                 ),
               ],

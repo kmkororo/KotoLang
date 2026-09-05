@@ -13,6 +13,7 @@ import '../domain/importer.dart' as imp;
 import '../domain/debate.dart';
 import '../domain/models.dart';
 import '../domain/prompts.dart' as pr;
+import '../domain/skills.dart';
 import '../domain/progress_service.dart';
 import '../domain/question_generator.dart' as qg;
 import '../domain/srs.dart' as srs;
@@ -1359,6 +1360,19 @@ class Repository {
   Future<void> setDebateDisabled(String id, bool disabled) => (db.update(db.debates)
         ..where((t) => t.id.equals(id)))
       .write(DebatesCompanion(disabled: Value(disabled)));
+
+  /// The learner says a reply was used in a real conversation. Paid once per
+  /// attempt; a second report returns null and changes nothing.
+  Future<Progress?> markClaimUsed(String attemptId) async {
+    final p = await loadProgress();
+    if (p.usedClaims.contains(attemptId)) return null;
+    final next = p.copyWith(
+      seeds: p.seeds + claimUsedSeeds,
+      usedClaims: [...p.usedClaims, attemptId],
+    );
+    await saveProgress(next);
+    return next;
+  }
 
   /// One exchange settled: the reply stored for critique, the day counted as
   /// studied, the Seeds paid. Failures the exchange showed are written down

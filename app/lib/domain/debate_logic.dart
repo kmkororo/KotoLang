@@ -138,5 +138,10 @@ class FailureKind {
   static const claimMissed = 'claim_missed';
   static const reasonMissed = 'reason_missed';
   static const pressed = 'pressed';
+
+  /// The words were shown before the line was grasped. Not a wrong answer —
+  /// but the understanding skill is about catching it by ear, and this says
+  /// the ear was not what caught it.
+  static const peeked = 'text_revealed';
   static String missingMove(Move m) => 'missing_move:${m.name}';
 }

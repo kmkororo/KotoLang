@@ -18,7 +18,6 @@ import 'package:share_plus/share_plus.dart';
 import '../app.dart';
 import '../core/l10n/languages.dart';
 import '../domain/models.dart';
-import '../domain/progress_service.dart';
 import '../domain/prompts.dart' as prompts;
 import 'onboarding_screens.dart';
 
@@ -224,28 +223,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: Text(s.t('hapticsLabel')),
             subtitle: Text(s.t('hapticsHint'), style: theme.textTheme.bodySmall),
             onChanged: (v) => updateSettings(ref, settings.copyWith(haptics: v)),
-          ),
-          const SizedBox(height: 14),
-          // A preference, not a purchase. It used to cost Seeds, which turned
-          // "how long do I want to study for" into a price list.
-          DropdownButtonFormField<int>(
-            initialValue: sessionSizes.contains(settings.sessionSize)
-                ? settings.sessionSize
-                : baseSessionSize,
-            isExpanded: true,
-            decoration:
-                InputDecoration(labelText: s.t('sessionSizeLabel'), isDense: true),
-            items: [
-              for (final n in sessionSizes)
-                DropdownMenuItem(
-                  value: n,
-                  child: Text(n == sessionSizeAll
-                      ? s.t('sessionSizeAll')
-                      : s.t('sessionSizeN', {'n': n})),
-                ),
-            ],
-            onChanged: (v) =>
-                v == null ? null : updateSettings(ref, settings.copyWith(sessionSize: v)),
           ),
         ]),
         _Section(title: s.t('materialSection'), children: [

@@ -37,9 +37,9 @@ Branch _branch(String id, String label, int answers,
     twigs: bare
         ? {for (final t in Twig.values) t: 0}
         : {
-            Twig.listening: listening,
-            Twig.phrasing: phrasing,
-            Twig.speaking: answers - listening - phrasing,
+            Twig.grasp: listening,
+            Twig.reply: answers - listening - phrasing,
+            Twig.claim: phrasing,
           },
     growing: (answers / 6).ceil(),
     learned: learned,

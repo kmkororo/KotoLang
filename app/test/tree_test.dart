@@ -74,9 +74,9 @@ void main() {
     );
     final a = t.branches.firstWhere((b) => b.realmId == 'a');
     expect(a.answers, 3);
-    expect(a.twigs[Twig.listening], 2);
-    expect(a.twigs[Twig.speaking], 1);
-    expect(a.twigs[Twig.phrasing], 0);
+    expect(a.twigs[Twig.grasp], 2);
+    expect(a.twigs[Twig.reply], 1);
+    expect(a.twigs[Twig.claim], 0);
     expect(t.answers, 4);
   });
 

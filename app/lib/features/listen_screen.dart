@@ -18,11 +18,25 @@ import '../core/util.dart';
 import '../domain/models.dart';
 
 final _feedProvider = FutureProvider.autoDispose<List<Sentence>>((ref) async {
-  final realm = ref.watch(realmFilterProvider);
-  final all = await ref.watch(repositoryProvider).sentences();
-  final usable = all.where((x) =>
-      !x.disabled && (realm == null || realm == 'all' || x.realmId == realm));
-  return shuffled(usable.toList());
+  final repo = ref.watch(repositoryProvider);
+  final all = await repo.sentences();
+  // The opponents' lines join the feed. Hearing them again with the meaning a
+  // tap away is the understanding skill practised without the argument
+  // attached — and it keeps the feed alive for a learner whose material was
+  // only ever debate packs.
+  final lines = [
+    for (final t in await repo.debates())
+      for (final n in t.nodes)
+        Sentence(
+          id: 'debate:${t.id}:${n.id}',
+          text: n.line,
+          normKeyValue: normKey(n.line),
+          translationNative: n.lineNative,
+          context: t.personaNative.isNotEmpty ? t.personaNative : t.persona,
+          realmId: t.realmId ?? '',
+        ),
+  ];
+  return shuffled([...all.where((x) => !x.disabled), ...lines]);
 });
 
 class ListenScreen extends ConsumerStatefulWidget {

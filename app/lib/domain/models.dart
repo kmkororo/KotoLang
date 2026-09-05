@@ -512,6 +512,11 @@ class Progress {
   /// and copying the prompt a second time charged all over again.
   final int realmCredits;
 
+  /// Replies the learner reported having actually used in a real
+  /// conversation, by attempt id. Paid for once each; the list is what makes
+  /// "once" true.
+  final List<String> usedClaims;
+
   const Progress({
     this.streak = 0,
     this.bestStreak = 0,
@@ -525,6 +530,7 @@ class Progress {
     this.realmCredits = 0,
     this.breakthroughs = const [],
     this.ornaments = const [],
+    this.usedClaims = const [],
   });
 
   Progress copyWith({
@@ -540,8 +546,10 @@ class Progress {
     List<String>? breakthroughs,
     List<String>? ornaments,
     int? realmCredits,
+    List<String>? usedClaims,
   }) =>
       Progress(
+        usedClaims: usedClaims ?? this.usedClaims,
         streak: streak ?? this.streak,
         bestStreak: bestStreak ?? this.bestStreak,
         lastStudyDay: lastStudyDay ?? this.lastStudyDay,
@@ -567,6 +575,7 @@ class Progress {
         'realmCredits': realmCredits,
         'breakthroughs': breakthroughs,
         'ornaments': ornaments,
+        'usedClaims': usedClaims,
       };
 
   factory Progress.fromJson(Map<String, dynamic> j) => Progress(
@@ -583,6 +592,7 @@ class Progress {
         breakthroughs:
             ((j['breakthroughs'] as List?) ?? const []).cast<String>(),
         ornaments: ((j['ornaments'] as List?) ?? const []).cast<String>(),
+        usedClaims: ((j['usedClaims'] as List?) ?? const []).cast<String>(),
       );
 }
 

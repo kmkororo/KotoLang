@@ -80,17 +80,22 @@ final treeDataProvider = FutureProvider.autoDispose<TreeData>((ref) async {
   final progress = ref.watch(progressProvider);
   final t = today();
   final history = await repo.history();
+  final attempts = await repo.attempts();
   final shape = treeFrom(
     history: history,
     realms: await repo.realms(),
     items: await repo.items(),
     states: {for (final s in await repo.srsStates()) s.itemId: s},
     today: t,
+    attempts: attempts,
+    trees: {for (final d in await repo.debates(includeDisabled: true)) d.id: d},
+    usedClaims: progress.usedClaims.toSet(),
   );
+  final doneToday = history.any((h) => h.day == t) || attempts.any((a) => a.day == t);
   return TreeData(
     shape: shape,
     ornaments: progress.ornaments,
-    pest: progress.streak > 0 && !history.any((h) => h.day == t),
+    pest: progress.streak > 0 && !doneToday,
   );
 });
 

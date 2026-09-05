@@ -307,17 +307,16 @@ class _Root extends ConsumerWidget {
         if (ref.watch(languageProvider) == null) {
           return const LanguagePickerScreen(firstRun: true);
         }
-        if (b.profile == null && b.realmCount == 0) return const WelcomeScreen();
-        if (b.questionCount == 0) {
-          if (b.realmCount == 0) return const WelcomeScreen();
-          // Areas exist but none was ever confirmed — setup was abandoned at
-          // the picker. Sending them on to the material screen would offer a
-          // list with nothing in it and no way forward.
-          if (b.unlockedRealmCount == 0) {
-            return const RealmPickerScreen(firstRun: true);
-          }
-          return const MaterialScreen();
+        if (b.realmCount == 0) return const WelcomeScreen();
+        // Areas exist but none was ever confirmed — setup was abandoned at
+        // the picker. Home would offer opponents for areas that were never
+        // chosen.
+        if (b.questionCount == 0 && b.unlockedRealmCount == 0) {
+          return const RealmPickerScreen(firstRun: true);
         }
+        // Material is no longer the ticket in: home's first job is to lead to
+        // the first opponent, and it can do that with nothing else on the
+        // phone.
         return const HomeShell();
       },
     );
