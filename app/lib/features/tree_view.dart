@@ -227,20 +227,7 @@ class _TreePanelState extends ConsumerState<TreePanel>
           key: _shot,
           child: ColoredBox(
             color: theme.colorScheme.surface,
-            child: Column(
-              children: [
-                canvas,
-                const SizedBox(height: 4),
-                Text(
-                  shape.isSeed
-                      ? s.t('treeSeedNote')
-                      : s.t('treeGrownNote', {'n': shape.answers}),
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
+            child: Padding(padding: const EdgeInsets.only(bottom: 4), child: canvas),
           ),
         ),
         if (!shape.isSeed)

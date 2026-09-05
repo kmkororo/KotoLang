@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:kotolang/app.dart';
 import 'package:kotolang/core/l10n/strings.dart';
+import 'package:kotolang/core/speech.dart';
 import 'package:kotolang/core/util.dart';
 import 'package:kotolang/data/database.dart';
 import 'package:kotolang/data/repository.dart';
@@ -27,6 +28,7 @@ Future<(AppDatabase, Repository, Scene)> pumpScene(
   WidgetTester tester, {
   List<SceneCard> reviews = const [],
   bool tutorial = false,
+  SpeechService? speech,
 }) async {
   final db = AppDatabase(NativeDatabase.memory());
   final repo = Repository(db, rng: Random(42));
@@ -41,6 +43,7 @@ Future<(AppDatabase, Repository, Scene)> pumpScene(
         databaseProvider.overrideWithValue(db),
         repositoryProvider.overrideWithValue(repo),
         treeMotionProvider.overrideWithValue(false),
+        if (speech != null) speechProvider.overrideWithValue(speech),
       ],
       child: MaterialApp(home: SceneScreen(scene: sc, reviews: reviews, tutorial: tutorial)),
     ),
@@ -182,6 +185,33 @@ void main() {
     expect(find.text(s.t('tutReply')), findsOneWidget);
   });
 
+  testWidgets('with a voice the words start hidden, and looking is a peek', (tester) async {
+    final speech = _VoicedSpeech();
+    final (db, repo, sc) = await pumpScene(tester, speech: speech);
+    addTearDown(db.close);
+    final s = S('en');
+
+    // The line was spoken, not shown; the replay button sits in its row.
+    expect(speech.spoken, [sc.exchanges[0].line]);
+    expect(find.text(sc.exchanges[0].line), findsNothing);
+    expect(find.text(s.t('debateReplay')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byIcon(Icons.visibility));
+    await tester.pumpAndSettle();
+    expect(find.text(sc.exchanges[0].line), findsOneWidget);
+
+    await swipe(tester, sc.exchanges[0].gist.correct);
+    await tester.tapAt(const Offset(400, 1500));
+    await tester.pumpAndSettle();
+    await swipe(tester, sc.exchanges[0].reply.correct.text);
+    await tester.tapAt(const Offset(400, 1500));
+    await tester.pumpAndSettle();
+    final r = (await repo.sceneResults()).single;
+    expect(r.peeked, isTrue);
+    expect(r.gistOk, isTrue);
+  });
+
   test('the next scene is one never done, then the one done longest ago', () {
     Scene mk(String id) => Scene(
         id: id, topic: id, topicNative: '', exchanges: const [], createdAt: 0);
@@ -207,4 +237,18 @@ void main() {
     expect(pickScene([a, b, c], [done('a', 5), done('c', 9)])!.id, 'b');
     expect(pickScene([a, b, c], [done('a', 5), done('b', 7), done('c', 9)])!.id, 'a');
   });
+}
+
+/// A device with an English voice, without a platform: the screen takes the
+/// listening path, which the plugin-less test runner otherwise never shows.
+class _VoicedSpeech extends SpeechService {
+  final spoken = <String>[];
+  @override
+  bool get available => true;
+  @override
+  Voice? voiceFor(int seed) => const Voice('en-test', 'en-US');
+  @override
+  Future<void> speak(String text, {double rate = 1.0, Voice? voice}) async => spoken.add(text);
+  @override
+  Future<void> stop() async {}
 }

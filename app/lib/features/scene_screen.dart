@@ -359,6 +359,9 @@ class _SceneScreenState extends ConsumerState<SceneScreen> {
               children: [
                 if (_speech.available)
                   FilledButton.tonalIcon(
+                    // The app theme gives FilledButton an infinite minimum
+                    // width, which a Row cannot lay out.
+                    style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
                     onPressed: _play,
                     icon: const Icon(Icons.volume_up),
                     label: Text(s.t('debateReplay')),
