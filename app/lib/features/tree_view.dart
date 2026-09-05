@@ -17,7 +17,9 @@ import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:share_plus/share_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
@@ -113,6 +115,34 @@ class _TreePanelState extends ConsumerState<TreePanel>
   /// `pumpAndSettle` in the suite.
   final _breeze = _Breeze();
 
+  /// The picture of the tree, as it stands, for the share sheet. Nothing but
+  /// the image and one line of text leaves the phone, and only where the
+  /// learner sends it.
+  final _shot = GlobalKey();
+
+  Future<void> _share() async {
+    final s = ref.read(stringsProvider);
+    final streak = ref.read(progressProvider).streak;
+    final boundary = _shot.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    if (boundary == null) return;
+    try {
+      final image = await boundary.toImage(pixelRatio: 3);
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (bytes == null) return;
+      await SharePlus.instance.share(ShareParams(
+        text: s.t('shareTreeText', {'n': streak}),
+        files: [
+          XFile.fromData(bytes.buffer.asUint8List(),
+              mimeType: 'image/png', name: 'kotolang_tree.png'),
+        ],
+      ));
+    } catch (e) {
+      // No share target, or a platform without the plugin (tests): nothing
+      // to do but not crash.
+      debugPrint('[KotoLang] share failed: $e');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -160,45 +190,69 @@ class _TreePanelState extends ConsumerState<TreePanel>
     }
 
     final shape = data.value!.shape;
-    return Column(
+    final canvas = SizedBox(
+      // Capped against the screen as well as the tree: on a short phone a
+      // tall panel pushes the start button below the fold, which is the
+      // one thing this screen must never do.
+      height: min(150 + 130 * trunkGrowth(shape.answers),
+          MediaQuery.sizeOf(context).height * 0.28),
+      width: double.infinity,
+      child: TweenAnimationBuilder<double>(
+        // Grows into place rather than appearing at full size. The tween
+        // runs off the answer count, so an answer visibly adds to it.
+        tween: Tween(begin: 0, end: trunkGrowth(shape.answers)),
+        duration: const Duration(milliseconds: 900),
+        curve: Curves.easeOutCubic,
+        builder: (context, grown, _) => CustomPaint(
+          // The breeze repaints the painter directly rather than rebuilding
+          // the widget: nothing above the canvas changes when the wind
+          // blows, so nothing above the canvas needs to be built again.
+          painter: _TreePainter(
+            data: data.value!,
+            art: art.value!,
+            grown: grown,
+            girth: trunkGirth(shape.answers),
+            dark: theme.brightness == Brightness.dark,
+            breeze: _breeze,
+          ),
+        ),
+      ),
+    );
+
+    return Stack(
       children: [
-        SizedBox(
-          // Capped against the screen as well as the tree: on a short phone a
-          // tall panel pushes the start button below the fold, which is the
-          // one thing this screen must never do.
-          height: min(150 + 130 * trunkGrowth(shape.answers),
-              MediaQuery.sizeOf(context).height * 0.28),
-          width: double.infinity,
-          child: TweenAnimationBuilder<double>(
-            // Grows into place rather than appearing at full size. The tween
-            // runs off the answer count, so an answer visibly adds to it.
-            tween: Tween(begin: 0, end: trunkGrowth(shape.answers)),
-            duration: const Duration(milliseconds: 900),
-            curve: Curves.easeOutCubic,
-            builder: (context, grown, _) => CustomPaint(
-              // The breeze repaints the painter directly rather than rebuilding
-              // the widget: nothing above the canvas changes when the wind
-              // blows, so nothing above the canvas needs to be built again.
-              painter: _TreePainter(
-                data: data.value!,
-                art: art.value!,
-                grown: grown,
-                girth: trunkGirth(shape.answers),
-                dark: theme.brightness == Brightness.dark,
-                breeze: _breeze,
-              ),
+        // What gets shared is exactly what is on screen: the tree and the
+        // line under it, on the page colour so the picture is not see-through.
+        RepaintBoundary(
+          key: _shot,
+          child: ColoredBox(
+            color: theme.colorScheme.surface,
+            child: Column(
+              children: [
+                canvas,
+                const SizedBox(height: 4),
+                Text(
+                  shape.isSeed
+                      ? s.t('treeSeedNote')
+                      : s.t('treeGrownNote', {'n': shape.answers}),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ],
             ),
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          shape.isSeed
-              ? s.t('treeSeedNote')
-              : s.t('treeGrownNote', {'n': shape.answers}),
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-        ),
+        if (!shape.isSeed)
+          Positioned(
+            top: 0,
+            right: 0,
+            child: IconButton(
+              tooltip: s.t('shareTree'),
+              icon: Icon(Icons.ios_share, size: 20, color: theme.colorScheme.onSurfaceVariant),
+              onPressed: _share,
+            ),
+          ),
       ],
     );
   }
@@ -272,6 +326,21 @@ class _TreePainter extends CustomPainter {
     Color(0xFFBECEB3),
     Color(0xFF93A788),
   ];
+
+  /// A five-petalled flower, drawn rather than pasted: it has to sit on a
+  /// twig end at any scale and read against both the light and the dark
+  /// ground, which a fixed bitmap did not.
+  void _flower(Canvas canvas, Offset at, double r) {
+    final petal = Paint()
+      ..color = dark ? const Color(0xFFE58AA0) : const Color(0xFFF4A7B9);
+    final centre = Paint()
+      ..color = dark ? const Color(0xFFFFE08A) : const Color(0xFFFFD25E);
+    for (var i = 0; i < 5; i++) {
+      final a = -pi / 2 + i * 2 * pi / 5;
+      canvas.drawCircle(at + Offset(cos(a), sin(a)) * r, r * 0.62, petal);
+    }
+    canvas.drawCircle(at, r * 0.42, centre);
+  }
 
   void _image(Canvas canvas, ui.Image img, Offset at, double height,
       {double opacity = 1, double angle = 0}) {
@@ -732,6 +801,20 @@ class _TreePainter extends CustomPainter {
       for (var k = 0; k < show; k++) {
         final (l, leafSize) = ends[(k * 7 + 1) % ends.length];
         _image(canvas, art.fruit, l.to + Offset(0, leafSize * 0.6), 15);
+      }
+    }
+
+    // Flowers: one per reply answered on a scene of the learner's own. The
+    // samples grow leaves but never flower — that is the difference the tree
+    // shows between practising on what came with the app and on what the
+    // learner's own AI wrote for them.
+    final flowers = shape.flowers;
+    if (flowers > 0 && ends.isNotEmpty) {
+      final show = min(flowers, min(ends.length, 12));
+      for (var k = 0; k < show; k++) {
+        final (l, leafSize) = ends[(k * 5 + 3) % ends.length];
+        _flower(canvas, l.to + Offset(_wobble(k * 13) * 4, -leafSize * 0.3),
+            4.2 + (k % 3) * 0.6);
       }
     }
 

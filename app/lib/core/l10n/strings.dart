@@ -196,6 +196,7 @@ class S {
     'sproutTitle', 'sproutSample', 'sproutNoSample',
     'scenePackIntro', 'scenePackWhat', 'scenePackNeedProfile', 'scenePackProfileButton',
     'scenePackTakesTime', 'scenePackNotScenes', 'scenesImported', 'collectedScenes',
+    'shareTree', 'shareTreeText',
   ];
 }
 
@@ -745,6 +746,8 @@ const _catalogueCore = <String, Map<String, String>>{
     'scenePackNotScenes': 'That is not a scenes reply. Paste the reply your AI gave to the prompt above.',
     'scenesImported': '{n} scenes arrived.',
     'collectedScenes': '{chars} characters held · {n} scenes readable',
+    'shareTree': 'Share the tree',
+    'shareTreeText': 'My tree in KotoLang, grown by listening to English. {n} days in a row.',
   },
 
   // =========================================================== Japanese
@@ -1251,5 +1254,7 @@ const _catalogueCore = <String, Map<String, String>>{
     'scenePackNotScenes': 'これは場面の返答ではありません。上のプロンプトへのAIの返答を貼ってください。',
     'scenesImported': '場面が{n}つ届きました',
     'collectedScenes': '{chars}文字を保持中 · 場面 {n}つを読み取れました',
+    'shareTree': '木を共有',
+    'shareTreeText': 'KotoLang で英語を聞いて育てた木。{n}日連続。',
   },
 };

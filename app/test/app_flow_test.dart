@@ -128,16 +128,23 @@ void main() {
     expect(settings.ageBand, '20s');
     expect(settings.interests, ['travel']);
 
-    // With no sample in this build the sprout comes straight away, and the
-    // main button is the way to the learner's own AI.
+    // The sample scene, with the guide on it. Leaving it early still leads on.
+    expect(find.byType(SceneScreen), findsOneWidget);
+    expect(find.text(s.t('tutListen')), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+
+    // The sprout: the main button is the way to the learner's own AI.
     expect(find.text(s.t('sproutTitle')), findsOneWidget);
+    expect(find.text(s.t('sproutSample')), findsOneWidget);
     expect(find.widgetWithText(FilledButton, s.t('makeOwnScenes')), findsOneWidget);
     await tester.tap(find.text(s.t('laterSamples')));
     await tester.pumpAndSettle();
 
-    // Home, with nothing to do yet but make the first scenes.
+    // Home, on the samples, with the way to the real thing always in view.
     expect((await repo.loadSettings()).tutorialDone, isTrue);
-    expect(find.text(s.t('firstSceneMake')), findsOneWidget);
+    expect(find.text(s.t('todaySceneSample')), findsOneWidget);
+    expect(find.text(s.t('ownScenesCardTitle')), findsOneWidget);
     expect(find.text(s.t('axisEmpty')), findsOneWidget);
   });
 
@@ -164,14 +171,20 @@ void main() {
     expect(await repo.sceneResults(), isEmpty);
   });
 
-  testWidgets('with no scene at all, home leads to making the first ones', (tester) async {
+  testWidgets('with only the samples, home leads to making the first own scenes',
+      (tester) async {
+    _tallScreen(tester);
     final (db, _) = await pumpApp(tester, seed: (r) => seedLearner(r, withScene: false));
     addTearDown(db.close);
     final s = S('en');
 
-    await tester.tap(find.text(s.t('firstSceneMake')));
+    // The samples are there to play, and the card to the learner's own AI
+    // stays up until an own scene arrives.
+    expect(find.text(s.t('todaySceneSample')), findsOneWidget);
+    await tester.tap(find.text(s.t('makeOwnScenes')));
     await tester.pumpAndSettle();
     expect(find.byType(ScenePackScreen), findsOneWidget);
+    expect(find.text(s.t('firstSceneMake')), findsOneWidget);
     // The profile is there, so the prompt is ready to copy.
     final copy = find.widgetWithText(FilledButton, s.t('copyPrompt'));
     expect(tester.widget<FilledButton>(copy).onPressed, isNotNull);
@@ -180,6 +193,7 @@ void main() {
 
   testWidgets('the scenes screen asks for a profile first when there is none',
       (tester) async {
+    _tallScreen(tester);
     final (db, _) = await pumpApp(tester, seed: (r) async {
       await r.saveUiLanguage('en');
       await r.saveSettings(const AppSettings(ageBand: '20s', tutorialDone: true));
@@ -187,7 +201,7 @@ void main() {
     addTearDown(db.close);
     final s = S('en');
 
-    await tester.tap(find.text(s.t('firstSceneMake')));
+    await tester.tap(find.text(s.t('makeOwnScenes')));
     await tester.pumpAndSettle();
     expect(find.text(s.t('scenePackNeedProfile')), findsOneWidget);
     final copy = find.widgetWithText(FilledButton, s.t('copyPrompt'));
@@ -209,7 +223,11 @@ void main() {
     expect(find.byType(RecordScreen), findsOneWidget);
     expect(find.text(s.t('skillUnderstand')), findsOneWidget);
     expect(find.text(s.t('sceneListTitle')), findsOneWidget);
+    // The own scene and the samples are listed together, samples marked.
+    await tester.scrollUntilVisible(find.text('Stay late（日本語）'), 200,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Stay late（日本語）'), findsOneWidget);
+    expect(find.text(s.t('sampleTag')), findsWidgets);
 
     await tester.tap(find.text(s.t('settingsTitle')).last);
     await tester.pumpAndSettle();
