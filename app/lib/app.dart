@@ -13,18 +13,21 @@ import 'core/l10n/languages.dart';
 import 'core/l10n/strings.dart';
 import 'core/share_intake.dart';
 import 'core/speech.dart';
+import 'core/util.dart';
 import 'data/database.dart';
 import 'data/repository.dart';
+import 'data/builtin_scenes.dart';
 import 'domain/importer.dart' as imp;
-import 'domain/debate.dart';
 import 'domain/models.dart';
 import 'domain/progress_service.dart';
+import 'domain/scene.dart';
+import 'domain/skills.dart';
+import 'features/first_run_screen.dart';
 import 'features/home_screen.dart';
-import 'features/library_screen.dart';
 import 'features/onboarding_screens.dart';
-import 'features/pack_screen.dart';
+import 'features/record_screen.dart';
+import 'features/scene_pack_screen.dart';
 import 'features/settings_screen.dart';
-import 'features/stats_screen.dart';
 
 // ---------------------------------------------------------------- providers
 
@@ -117,10 +120,24 @@ final homeCountsProvider = FutureProvider.autoDispose<HomeCounts>((ref) async {
 final realmsProvider = FutureProvider.autoDispose<List<Realm>>(
     (ref) => ref.watch(repositoryProvider).realms());
 
-/// The opponents waiting on this phone. Home shows the way in only when there
-/// is at least one, and the debate screen refreshes it when a pack lands.
-final debatesProvider = FutureProvider.autoDispose<List<DebateTree>>(
-    (ref) => ref.watch(repositoryProvider).debates());
+/// Every scene the learner has: their own, from the database, and the
+/// built-in samples for the current language, ordered for their interests.
+/// One list, so home, the record and the launcher all see the same thing.
+final allScenesProvider = FutureProvider.autoDispose<List<Scene>>((ref) async {
+  final own = await ref.watch(repositoryProvider).scenes();
+  final lang = ref.watch(languageProvider) ?? fallbackLanguage;
+  final interests = ref.watch(settingsProvider).interests;
+  return [...own, ...builtinScenes(lang, interests: interests)];
+});
+
+final sceneResultsProvider = FutureProvider.autoDispose<List<SceneResult>>(
+    (ref) => ref.watch(repositoryProvider).sceneResults());
+
+/// The two skills, read off the results. Refreshed with them.
+final skillStatsProvider = FutureProvider.autoDispose<SkillStats>((ref) async {
+  final results = await ref.watch(sceneResultsProvider.future);
+  return skillStats(results, today: today());
+});
 
 /// Strings for the current language.
 final stringsProvider = Provider<S>((ref) {
@@ -225,12 +242,12 @@ class _KotoLangAppState extends ConsumerState<KotoLangApp>
 
     _pendingShare = null;
     final kind = imp.previewImport(text).type;
+    // A profile goes to the profile box; everything else to the scenes box,
+    // which says plainly when what arrived is not a scenes reply.
     nav.push(MaterialPageRoute(
-      builder: (_) => switch (kind) {
-        'profile' => PasteProfileScreen(initialText: text),
-        'pack' => PackScreen(initialText: text),
-        _ => MaterialScreen(initialText: text),
-      },
+      builder: (_) => kind == 'profile'
+          ? PasteProfileScreen(initialText: text, forScenes: true)
+          : ScenePackScreen(initialText: text),
     ));
   }
 
@@ -307,16 +324,18 @@ class _Root extends ConsumerWidget {
         if (ref.watch(languageProvider) == null) {
           return const LanguagePickerScreen(firstRun: true);
         }
-        if (b.realmCount == 0) return const WelcomeScreen();
-        // Areas exist but none was ever confirmed — setup was abandoned at
-        // the picker. Home would offer opponents for areas that were never
-        // chosen.
-        if (b.questionCount == 0 && b.unlockedRealmCount == 0) {
+        // Two questions and one sample scene, once. A phone that already has
+        // a profile or areas came through the older setup and skips it.
+        if (!b.settings.tutorialDone && b.profile == null && b.realmCount == 0) {
+          return const FirstRunScreen();
+        }
+        // Areas exist but none was ever confirmed and the phone never came
+        // through the new first run: setup was abandoned at the old picker.
+        // Home would offer areas that were never chosen.
+        if (!b.settings.tutorialDone &&
+            b.realmCount > 0 && b.questionCount == 0 && b.unlockedRealmCount == 0) {
           return const RealmPickerScreen(firstRun: true);
         }
-        // Material is no longer the ticket in: home's first job is to lead to
-        // the first opponent, and it can do that with nothing else on the
-        // phone.
         return const HomeShell();
       },
     );
@@ -337,7 +356,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
-    const pages = [HomeScreen(), LibraryScreen(), StatsScreen(), SettingsScreen()];
+    // Three destinations: today, the record, settings. The record holds what
+    // used to be two tabs — progress and the library — now that the scenes
+    // are few enough to list under the numbers they produce.
+    const pages = [HomeScreen(), RecordScreen(), SettingsScreen()];
 
     return Scaffold(
       body: SafeArea(child: pages[_index]),
@@ -350,13 +372,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               selectedIcon: const Icon(Icons.home),
               label: s.t('todayEyebrow')),
           NavigationDestination(
-              icon: const Icon(Icons.menu_book_outlined),
-              selectedIcon: const Icon(Icons.menu_book),
-              label: s.t('libraryTitle')),
-          NavigationDestination(
               icon: const Icon(Icons.insights_outlined),
               selectedIcon: const Icon(Icons.insights),
-              label: s.t('statsTitle')),
+              label: s.t('recordTab')),
           NavigationDestination(
               icon: const Icon(Icons.settings_outlined),
               selectedIcon: const Icon(Icons.settings),

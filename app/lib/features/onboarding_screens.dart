@@ -350,7 +350,11 @@ class PasteProfileScreen extends ConsumerStatefulWidget {
   /// Prefilled when the reply arrived through the share sheet rather than the
   /// clipboard.
   final String? initialText;
-  const PasteProfileScreen({super.key, this.initialText});
+
+  /// Opened from the scenes screen, which only needs the profile: once it is
+  /// in, this screen goes back there rather than on to the area picker.
+  final bool forScenes;
+  const PasteProfileScreen({super.key, this.initialText, this.forScenes = false});
 
   @override
   ConsumerState<PasteProfileScreen> createState() => _PasteProfileScreenState();
@@ -401,6 +405,11 @@ class _PasteProfileScreenState extends ConsumerState<PasteProfileScreen> {
     );
     await reload(ref);
     if (!mounted) return;
+    if (widget.forScenes) {
+      // The scenes screen sent us; it has what it needs now.
+      Navigator.pop(context);
+      return;
+    }
     // Pushed, never `pushReplacement`. The root screen decides where the app
     // belongs, and when the root is itself showing a setup step, replacing the
     // route deletes that decision-maker for the rest of the session.
@@ -890,27 +899,6 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
     final repo = ref.read(repositoryProvider);
     final lang = ref.read(languageProvider) ?? fallbackLanguage;
 
-    // A debate pack pasted into the material box goes where it belongs. It
-    // costs no Seeds — the learner already paid for it with a trip to their
-    // AI — and it has no realm to be filed under.
-    if (_paste.preview.type == 'pack') {
-      setState(() {
-        _busy = true;
-        _error = null;
-      });
-      final pack = await repo.importPack(_paste.text, uiLanguage: lang);
-      if (!mounted) return;
-      setState(() => _busy = false);
-      if (!pack.ok) {
-        setState(() => _error = s.t('importFailedHint'));
-        return;
-      }
-      _paste.clear();
-      ref.invalidate(debatesProvider);
-      showToast(context, s.t('packImported', {'n': pack.debates}));
-      Navigator.popUntil(context, (r) => r.isFirst);
-      return;
-    }
 
     // Charged on what is actually being imported, judged before the trip is
     // finished rather than after: being told the price once the reply is

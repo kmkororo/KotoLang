@@ -29,7 +29,6 @@ import 'package:kotolang/features/tree_view.dart';
 Branch _branch(String id, String label, int answers,
     {int learned = 0, bool thirsty = false, bool bare = false}) {
   final listening = (answers * 0.5).round();
-  final phrasing = (answers * 0.3).round();
   return Branch(
     realmId: id,
     label: label,
@@ -38,8 +37,7 @@ Branch _branch(String id, String label, int answers,
         ? {for (final t in Twig.values) t: 0}
         : {
             Twig.grasp: listening,
-            Twig.reply: answers - listening - phrasing,
-            Twig.claim: phrasing,
+            Twig.reply: answers - listening,
           },
     growing: (answers / 6).ceil(),
     learned: learned,

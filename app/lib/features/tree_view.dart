@@ -80,23 +80,20 @@ final treeDataProvider = FutureProvider.autoDispose<TreeData>((ref) async {
   final progress = ref.watch(progressProvider);
   final t = today();
   final history = await repo.history();
-  final attempts = await repo.attempts();
+  final results = await ref.watch(sceneResultsProvider.future);
+  final scenes = await ref.watch(allScenesProvider.future);
   final shape = treeFrom(
     history: history,
     realms: await repo.realms(),
     items: await repo.items(),
     states: {for (final s in await repo.srsStates()) s.itemId: s},
     today: t,
-    attempts: attempts,
-    trees: {for (final d in await repo.debates(includeDisabled: true)) d.id: d},
-    usedClaims: progress.usedClaims.toSet(),
+    results: results,
+    scenes: {for (final sc in scenes) sc.id: sc},
   );
-  final doneToday = history.any((h) => h.day == t) || attempts.any((a) => a.day == t);
-  return TreeData(
-    shape: shape,
-    ornaments: progress.ornaments,
-    pest: progress.streak > 0 && !doneToday,
-  );
+  // The bug is retired: a day not yet studied shows as pale leaves on the
+  // boughs that are owed a review, not as a pest on the tree.
+  return TreeData(shape: shape, ornaments: progress.ornaments, pest: false);
 });
 
 class TreePanel extends ConsumerStatefulWidget {

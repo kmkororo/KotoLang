@@ -24,16 +24,17 @@ final _feedProvider = FutureProvider.autoDispose<List<Sentence>>((ref) async {
   // tap away is the understanding skill practised without the argument
   // attached — and it keeps the feed alive for a learner whose material was
   // only ever debate packs.
+  final scenes = await ref.watch(allScenesProvider.future);
   final lines = [
-    for (final t in await repo.debates())
-      for (final n in t.nodes)
+    for (final sc in scenes)
+      for (var i = 0; i < sc.exchanges.length; i++)
         Sentence(
-          id: 'debate:${t.id}:${n.id}',
-          text: n.line,
-          normKeyValue: normKey(n.line),
-          translationNative: n.lineNative,
-          context: t.personaNative.isNotEmpty ? t.personaNative : t.persona,
-          realmId: t.realmId ?? '',
+          id: 'scene:${sc.id}:$i',
+          text: sc.exchanges[i].line,
+          normKeyValue: normKey(sc.exchanges[i].line),
+          translationNative: sc.exchanges[i].lineNative,
+          context: sc.settingNative,
+          realmId: sc.realmId ?? '',
         ),
   ];
   return shuffled([...all.where((x) => !x.disabled), ...lines]);

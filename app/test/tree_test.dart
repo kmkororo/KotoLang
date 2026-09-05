@@ -76,7 +76,6 @@ void main() {
     expect(a.answers, 3);
     expect(a.twigs[Twig.grasp], 2);
     expect(a.twigs[Twig.reply], 1);
-    expect(a.twigs[Twig.claim], 0);
     expect(t.answers, 4);
   });
 

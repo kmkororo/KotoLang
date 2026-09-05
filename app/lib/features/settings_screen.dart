@@ -18,7 +18,6 @@ import 'package:share_plus/share_plus.dart';
 import '../app.dart';
 import '../core/l10n/languages.dart';
 import '../domain/models.dart';
-import '../domain/prompts.dart' as prompts;
 import 'onboarding_screens.dart';
 
 final _realmsProvider =
@@ -33,14 +32,11 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String? _resetRealmId;
-  bool _auditOpen = false;
   bool _wipeOpen = false;
-  final _auditController = TextEditingController();
   String? _note;
 
   @override
   void dispose() {
-    _auditController.dispose();
     super.dispose();
   }
 
@@ -226,12 +222,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ]),
         _Section(title: s.t('materialSection'), children: [
-          OutlinedButton(
-            onPressed: () => Navigator.push(
-                context, MaterialPageRoute(builder: (_) => const MaterialScreen())),
-            child: Text(s.t('addMaterial')),
-          ),
-          const SizedBox(height: 8),
           // Every area the AI ever suggested, lock state and unlock cost
           // included — the home screen for the "grow your world" loop.
           OutlinedButton(
@@ -239,83 +229,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 MaterialPageRoute(builder: (_) => const RealmPickerScreen())),
             child: Text(s.t('yourRealmsButton')),
           ),
-          const SizedBox(height: 8),
-          // Everything else here is a repair tool, not part of studying.
-          // Folded away so the two things anyone actually comes to this
-          // section for are the two things they see.
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              icon: Icon(_auditOpen ? Icons.expand_less : Icons.expand_more),
-              onPressed: () => setState(() => _auditOpen = !_auditOpen),
-              label: Text(s.t('advancedSection')),
-            ),
-          ),
-          if (_auditOpen) ...[
-            const SizedBox(height: 4),
-            // Material imported before a question format existed never saw it.
-            // This rebuilds the questions from the sentences already stored.
-            OutlinedButton(
-              onPressed: () async {
-                final n = await ref.read(repositoryProvider).regenerateQuestions();
-                if (!context.mounted) return;
-                showToast(context, s.t('regeneratedLabel', {'n': n}));
-                await reload(ref);
-              },
-              child: Text(s.t('regenerateQuestions')),
-            ),
-            const SizedBox(height: 10),
-            Text(s.t('auditHint'),
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: () async {
-                final sentences = await ref.read(repositoryProvider).sentences();
-                // Capped so the reply stays inside one copyable block; run the
-                // audit twice rather than asking for a reply nobody can copy.
-                final list = sentences
-                    .where((x) => !x.disabled)
-                    .take(60)
-                    .toList()
-                    .asMap()
-                    .entries
-                    .map((e) => '${e.key + 1}. ${e.value.text}')
-                    .join('\n');
-                if (!context.mounted) return;
-                await copyToClipboard(
-                    context,
-                    prompts.auditPrompt(uiLanguage: lang, sentences: list),
-                    s.t('copied'));
-              },
-              child: Text(s.t('copyAuditPrompt')),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _auditController,
-              maxLines: 6,
-              minLines: 4,
-              decoration: InputDecoration(hintText: s.t('pastePlaceholder')),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: () async {
-                final res = await ref
-                    .read(repositoryProvider)
-                    .importAudit(_auditController.text);
-                if (!context.mounted) return;
-                if (res.low > 0) {
-                  final removed =
-                      await ref.read(repositoryProvider).disableLowQuality();
-                  if (!context.mounted) return;
-                  showToast(context, '${res.matched} · $removed');
-                } else {
-                  showToast(context, '${res.matched}');
-                }
-              },
-              child: Text(s.t('loadAudit')),
-            ),
-          ],
         ]),
 
         // ----------------------------------------------------------- data
