@@ -206,7 +206,6 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
         _phase = _Phase.gistAnswer;
       } else {
         _replyPick = i;
-        _heardOpen = true;
         _phase = _Phase.replyAnswer;
       }
     });
@@ -454,7 +453,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 400),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
         color: complete ? scheme.primaryContainer.withValues(alpha: 0.7) : scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(16),
@@ -520,12 +519,98 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
 
   /// Their line: a bubble from the figure on the left. Hidden until the ear
   /// has been tested; the translation stays behind a button after that. The
-  /// second line of a scene says it follows the learner's own reply.
+  /// second line of a scene says it follows the learner's own reply. Once the
+  /// reply question is up the bubble folds to one row, so the three replies
+  /// and the panel all fit without scrolling.
   Widget _lineBubble(S s, ThemeData theme) {
     final scheme = theme.colorScheme;
     final showWords = _revealed || _phase != _Phase.listen;
     final followsReply = !_card.review && _card.exchange > 0;
     final canTranslate = showWords && _phase != _Phase.listen && _x.lineNative.isNotEmpty;
+    final folded = _phase != _Phase.listen;
+    final muted = theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+
+    Widget words() => showWords
+        ? Text(_x.line,
+            style: folded
+                ? theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)
+                : theme.textTheme.titleMedium)
+        : Text('· · · · · ·',
+            style: theme.textTheme.titleMedium?.copyWith(color: scheme.onSurfaceVariant));
+
+    final translateButton = canTranslate
+        ? IconButton(
+            tooltip: s.t(_showNative ? 'sceneHideTranslation' : 'sceneShowTranslation'),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => setState(() => _showNative = !_showNative),
+            icon: Icon(_showNative ? Icons.translate : Icons.translate_outlined,
+                size: 18, color: _showNative ? scheme.primary : scheme.onSurfaceVariant),
+          )
+        : null;
+
+    final body = folded
+        // One row: speaker, the words, the translation toggle.
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (followsReply) Text(s.t('afterYourReply'), style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_speech.available)
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _play,
+                      icon: Icon(Icons.volume_up, size: 20, color: scheme.primary),
+                    ),
+                  Expanded(child: Padding(padding: const EdgeInsets.only(top: 8), child: words())),
+                  ?translateButton,
+                ],
+              ),
+              if (canTranslate && _showNative)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+                  child: Text(_x.lineNative, style: muted),
+                ),
+            ],
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (followsReply) Text(s.t('afterYourReply'), style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+              Row(
+                children: [
+                  if (_speech.available)
+                    FilledButton.tonalIcon(
+                      // The app theme gives FilledButton an infinite minimum
+                      // width, which a Row cannot lay out.
+                      style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 12)),
+                      onPressed: _play,
+                      icon: const Icon(Icons.volume_up, size: 18),
+                      label: Text(s.t('debateReplay')),
+                    ),
+                  const Spacer(),
+                  if (_phase == _Phase.listen && _speech.available)
+                    IconButton(
+                      tooltip: s.t(_revealed ? 'debateHideText' : 'debateShowText'),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _toggleReveal,
+                      icon: Icon(_revealed ? Icons.visibility_off : Icons.visibility, size: 20),
+                    ),
+                  ?translateButton,
+                ],
+              ),
+              const SizedBox(height: 4),
+              words(),
+              if (canTranslate && _showNative) ...[
+                const SizedBox(height: 4),
+                Text(_x.lineNative, style: muted),
+              ],
+            ],
+          );
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -535,7 +620,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 250),
             child: Card(
-              key: ValueKey('line$_index'),
+              key: ValueKey('line$_index${folded ? 'f' : ''}'),
               color: scheme.surfaceContainerHigh,
               margin: EdgeInsets.zero,
               shape: const RoundedRectangleBorder(
@@ -547,57 +632,10 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
                 ),
               ),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 8, 8, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (followsReply)
-                      Text(s.t('afterYourReply'),
-                          style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-                    Row(
-                      children: [
-                        if (_speech.available)
-                          FilledButton.tonalIcon(
-                            // The app theme gives FilledButton an infinite minimum
-                            // width, which a Row cannot lay out.
-                            style: FilledButton.styleFrom(
-                                minimumSize: const Size(0, 36),
-                                padding: const EdgeInsets.symmetric(horizontal: 12)),
-                            onPressed: _play,
-                            icon: const Icon(Icons.volume_up, size: 18),
-                            label: Text(s.t('debateReplay')),
-                          ),
-                        const Spacer(),
-                        if (_phase == _Phase.listen && _speech.available)
-                          IconButton(
-                            tooltip: s.t(_revealed ? 'debateHideText' : 'debateShowText'),
-                            onPressed: _toggleReveal,
-                            icon: Icon(_revealed ? Icons.visibility_off : Icons.visibility, size: 20),
-                          ),
-                        if (canTranslate)
-                          TextButton(
-                            style: TextButton.styleFrom(
-                                minimumSize: const Size(0, 32),
-                                padding: const EdgeInsets.symmetric(horizontal: 8)),
-                            onPressed: () => setState(() => _showNative = !_showNative),
-                            child: Text(s.t(_showNative ? 'sceneHideTranslation' : 'sceneShowTranslation'),
-                                style: const TextStyle(fontSize: 12)),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    if (showWords) ...[
-                      Text(_x.line, style: theme.textTheme.titleMedium),
-                      if (canTranslate && _showNative) ...[
-                        const SizedBox(height: 4),
-                        Text(_x.lineNative,
-                            style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-                      ],
-                    ] else
-                      Text('· · · · · ·',
-                          style: theme.textTheme.titleMedium?.copyWith(color: scheme.onSurfaceVariant)),
-                  ],
-                ),
+                padding: folded
+                    ? const EdgeInsets.fromLTRB(4, 2, 4, 2)
+                    : const EdgeInsets.fromLTRB(14, 8, 8, 10),
+                child: body,
               ),
             ),
           ),
@@ -679,8 +717,9 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
             _Option(
               key: ValueKey('g$_index-$i'),
               text: _x.gist.options[i],
-              // The translation appears under every option once answered.
-              sub: answered ? _x.gist.nativeOf(i) : '',
+              // The right answer shows its translation once answered; the rest
+              // stay short so the three rows still fit above the panel.
+              sub: answered && i == _x.gist.answer ? _x.gist.nativeOf(i) : '',
               state: _stateOf(i, answered: answered, answer: _x.gist.answer, pick: _gistPick),
               onTap: answered ? null : (c) => _select(i, c),
             ),
@@ -695,7 +734,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
             _Option(
               key: ValueKey('r$_index-$i'),
               text: _x.reply.options[i].text,
-              sub: answered ? _x.reply.options[i].native : '',
+              sub: answered && i == _x.reply.answer ? _x.reply.options[i].native : '',
               state: _stateOf(i, answered: answered, answer: _x.reply.answer, pick: _replyPick),
               // Tapping another reply after the answer shows its reason.
               onTap: answered ? (_) => setState(() => _whyOf = i) : (c) => _select(i, c),
@@ -894,7 +933,7 @@ class _Figure extends StatelessWidget {
   final bool other;
   final bool lit;
   final double size;
-  const _Figure({required this.label, required this.other, required this.lit}) : size = 36;
+  const _Figure({required this.label, required this.other, required this.lit}) : size = 32;
   const _Figure.small({required this.other})
       : label = null,
         lit = true,
@@ -986,8 +1025,8 @@ class _Option extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             child: Container(
               width: double.infinity,
-              constraints: const BoxConstraints(minHeight: 52),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              constraints: const BoxConstraints(minHeight: 48),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: border, width: width),

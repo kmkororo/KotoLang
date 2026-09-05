@@ -95,16 +95,11 @@ class AiLinks extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(s.t('openAiTitle'), style: const TextStyle(fontWeight: FontWeight.w700)),
-        const SizedBox(height: 2),
-        Text(s.t('openAiSub'),
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         const SizedBox(height: 12),
         // One row that divides the width evenly, rather than a Wrap: at 320dp
         // a fixed tile width spills the last assistant onto a line of its own.

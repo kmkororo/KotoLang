@@ -128,14 +128,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ]),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: () =>
-                    updateSettings(ref, settings.copyWith(clearSpeechRate: true)),
-                child: Text(s.t('followDifficulty')),
-              ),
-            ),
             OutlinedButton.icon(
               icon: const Icon(Icons.volume_up),
               onPressed: () => speech.speak(_sample, rate: settings.rate),

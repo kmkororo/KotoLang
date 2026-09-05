@@ -103,7 +103,7 @@ void main() {
     expect(find.text('${s.t('sceneCorrect')} · +$gistSeeds'), findsOneWidget);
     // The translation waits behind a button.
     expect(find.text(sc.exchanges[0].lineNative), findsNothing);
-    await tester.tap(find.text(s.t('sceneShowTranslation')));
+    await tester.tap(find.byIcon(Icons.translate_outlined));
     await tester.pumpAndSettle();
     expect(find.text(sc.exchanges[0].lineNative), findsOneWidget);
     expect(find.text(s.t('sceneTapNext')), findsOneWidget);

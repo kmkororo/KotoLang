@@ -93,7 +93,7 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
 
   /// Takes the reply off the clipboard; only when that is empty does the
   /// paste box appear.
-  Future<void> _import() async {
+  Future<void> _import(String field) async {
     final s = ref.read(stringsProvider);
     if (_paste.isEmpty) {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
@@ -115,7 +115,7 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
     });
     final out = await ref
         .read(repositoryProvider)
-        .importScenes(_paste.text, uiLanguage: _lang, field: _field ?? defaultFieldId);
+        .importScenes(_paste.text, uiLanguage: _lang, field: field);
     if (!mounted) return;
     setState(() => _busy = false);
 
@@ -164,6 +164,8 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
     final field = _field ??
         fields.map((f) => f.id).where(interests.contains).firstOrNull ??
         (fields.isEmpty ? null : fields.first.id);
+    // Remembered, so the prompt and the import use what the dropdown shows.
+    _field ??= field;
     final hasProfile = _profile != null;
     final ready = hasProfile && field != null;
 
@@ -243,7 +245,7 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
                     n: 2,
                     icon: Icons.download,
                     label: s.t('scenePasteButton'),
-                    onPressed: _busy || !ready ? null : _import,
+                    onPressed: _busy || !ready ? null : () => _import(field),
                     busy: _busy,
                   ),
                   if (_showBox) ...[

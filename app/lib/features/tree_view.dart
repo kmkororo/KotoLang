@@ -186,8 +186,9 @@ class _TreePanelState extends ConsumerState<TreePanel>
       // Capped against the screen as well as the tree: on a short phone a
       // tall panel pushes the start button below the fold, which is the
       // one thing this screen must never do.
-      height: min(150 + 130 * trunkGrowth(shape.answers),
-          MediaQuery.sizeOf(context).height * 0.28),
+      height: widget.compact
+          ? 140
+          : min(150 + 130 * trunkGrowth(shape.answers), MediaQuery.sizeOf(context).height * 0.28),
       width: double.infinity,
       child: TweenAnimationBuilder<double>(
         // Grows into place rather than appearing at full size. The tween

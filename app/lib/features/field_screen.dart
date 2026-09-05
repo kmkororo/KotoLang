@@ -48,6 +48,8 @@ class FieldScreen extends ConsumerWidget {
     final scenes = own ? split.own : split.samples;
     final done = {for (final r in results) if (!r.review) r.sceneId};
     final n = scenes.where((x) => done.contains(x.id)).length;
+    // The bough exists once something here has been answered.
+    final hasBough = n > 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -62,7 +64,7 @@ class FieldScreen extends ConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 children: [
                   // This field's bough alone, the way it stands on the tree.
-                  if (scenes.isNotEmpty) ...[
+                  if (hasBough) ...[
                     TreePanel(focus: own ? ownBranch(field.id) : sampleBranch(field.id), compact: true),
                     const SizedBox(height: 8),
                   ],
