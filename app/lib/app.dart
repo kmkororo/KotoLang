@@ -22,6 +22,7 @@ import 'domain/progress_service.dart';
 import 'features/home_screen.dart';
 import 'features/library_screen.dart';
 import 'features/onboarding_screens.dart';
+import 'features/pack_screen.dart';
 import 'features/settings_screen.dart';
 import 'features/stats_screen.dart';
 
@@ -225,9 +226,11 @@ class _KotoLangAppState extends ConsumerState<KotoLangApp>
     _pendingShare = null;
     final kind = imp.previewImport(text).type;
     nav.push(MaterialPageRoute(
-      builder: (_) => kind == 'profile'
-          ? PasteProfileScreen(initialText: text)
-          : MaterialScreen(initialText: text),
+      builder: (_) => switch (kind) {
+        'profile' => PasteProfileScreen(initialText: text),
+        'pack' => PackScreen(initialText: text),
+        _ => MaterialScreen(initialText: text),
+      },
     ));
   }
 

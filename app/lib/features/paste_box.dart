@@ -124,6 +124,7 @@ class PasteBox extends StatelessWidget {
 
         final status = switch (expecting) {
           'profile' => s.t('collectedRealms', {'chars': _n(chars), 'n': p.realms}),
+          'pack' => s.t('collectedPack', {'chars': _n(chars), 'n': p.debates}),
           _ => s.t('collectedSentences', {'chars': _n(chars), 'n': p.sentences}),
         };
 

@@ -16,6 +16,7 @@ import '../domain/progress_service.dart';
 import 'debate_screen.dart';
 import 'listen_screen.dart';
 import 'onboarding_screens.dart';
+import 'pack_screen.dart';
 import 'quiz_screen.dart';
 import 'tree_view.dart';
 
@@ -268,6 +269,34 @@ class HomeScreen extends ConsumerWidget {
                 child: Text(s.t('debateButton')),
               ),
             ],
+            // The two doors to the AI trip: writing something down right
+            // after a meeting, and building the next pack from what has been
+            // written. Always present — this is how the first opponent
+            // arrives, so it cannot wait for one to exist.
+            const SizedBox(height: 4),
+            // A Wrap, not a Row: at 320dp the two labels do not share a line
+            // in every language, and a cut-off label is worse than two lines.
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 4,
+              children: [
+                TextButton.icon(
+                  icon: const Icon(Icons.edit_note, size: 18),
+                  onPressed: () => showCaptureDialog(context, ref),
+                  label: Text(s.t('captureAdd')),
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                  onPressed: () async {
+                    await Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const PackScreen()));
+                    if (!context.mounted) return;
+                    ref.invalidate(debatesProvider);
+                  },
+                  label: Text(s.t('packTitle')),
+                ),
+              ],
+            ),
             // Listening with nothing to answer. Not a session and not scored:
             // it is here for the minutes when a question is too much but the
             // sentences are not.
