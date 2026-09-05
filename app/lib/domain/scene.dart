@@ -56,7 +56,9 @@ class Gist {
     }
     return Gist(
       options: texts,
-      natives: natives.length == texts.length ? natives : const [],
+      natives: natives.length == texts.length && natives.any((n) => n.isNotEmpty)
+          ? natives
+          : const [],
       answer: (j['answer'] as num?)?.toInt() ?? 0,
     );
   }
