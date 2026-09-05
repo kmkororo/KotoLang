@@ -13,6 +13,8 @@ import '../domain/importer.dart' as imp;
 import '../domain/debate.dart';
 import '../domain/models.dart';
 import '../domain/prompts.dart' as pr;
+import '../domain/scene.dart';
+import '../domain/scene_import.dart';
 import '../domain/skills.dart';
 import '../domain/progress_service.dart';
 import '../domain/question_generator.dart' as qg;
@@ -71,7 +73,7 @@ class PackOutcome {
   final int debates;
   final int critiques;
 
-  /// Critiques for attempts this phone does not have — a pack pasted onto a
+  /// Critiques for attempts this phone does not have â a pack pasted onto a
   /// different device, or attempts since deleted. Counted, not stored.
   final int unmatchedCritiques;
   final List<({String topic, String reason})> rejected;
@@ -136,7 +138,7 @@ class HomeCounts {
 
   /// Questions never served. `fresh` counts expressions the learner has not
   /// met; this counts the work actually left in the library, which is a much
-  /// larger number — six expressions carry over a hundred questions between
+  /// larger number â six expressions carry over a hundred questions between
   /// them. Both are shown, because meeting every expression and running out
   /// of things to answer are not the same event.
   final int unanswered;
@@ -154,7 +156,7 @@ class HomeCounts {
 /// The nearest size the settings screen actually offers.
 ///
 /// `sessionSizeAll` means "everything there is" rather than a number, so it is
-/// only ever kept when it was stored deliberately — nothing snaps to it.
+/// only ever kept when it was stored deliberately â nothing snaps to it.
 int _offeredSessionSize(int stored) {
   if (sessionSizes.contains(stored)) return stored;
   final numbered = sessionSizes.where((n) => n != sessionSizeAll).toList()
@@ -165,6 +167,30 @@ int _offeredSessionSize(int stored) {
       (a - stored).abs() <= (b - stored).abs() ? a : b);
 }
 
+
+/// What came of importing a scenes reply. Scenes the importer could not make
+/// sound are named, with the reason.
+class SceneOutcome {
+  final bool ok;
+  final List<String> errors;
+  final int scenes;
+  final List<({String topic, String reason})> rejected;
+  final bool partial;
+
+  const SceneOutcome({
+    required this.ok,
+    this.errors = const [],
+    this.scenes = 0,
+    this.rejected = const [],
+    this.partial = false,
+  });
+
+  const SceneOutcome.failure(this.errors)
+      : ok = false,
+        scenes = 0,
+        rejected = const [],
+        partial = false;
+}
 
 class Repository {
   final AppDatabase db;
@@ -202,12 +228,15 @@ class Repository {
       dailyGoal: (j['dailyGoal'] ?? 1) as int,
       theme: (j['theme'] ?? 'system') as String,
       batchSize: (j['batchSize'] ?? 'standard') as String,
-      // A size bought under the old rules — sessions used to be lengthened ten
-      // slots at a time, up to forty-five — is not one the settings screen can
+      // A size bought under the old rules â sessions used to be lengthened ten
+      // slots at a time, up to forty-five â is not one the settings screen can
       // offer any more. Snapped to the nearest size that is, because the
       // dropdown was showing "5" while the session still served twenty-five.
       sessionSize: _offeredSessionSize((j['sessionSize'] ?? baseSessionSize) as int),
       haptics: (j['haptics'] ?? true) as bool,
+      ageBand: (j['ageBand'] ?? '') as String,
+      interests: ((j['interests'] as List?) ?? const []).cast<String>(),
+      tutorialDone: (j['tutorialDone'] ?? false) as bool,
     );
   }
 
@@ -223,6 +252,9 @@ class Repository {
         'batchSize': s.batchSize,
         'sessionSize': s.sessionSize,
         'haptics': s.haptics,
+        'ageBand': s.ageBand,
+        'interests': s.interests,
+        'tutorialDone': s.tutorialDone,
       }));
 
   /// null until the learner has chosen one, which is what triggers the very
@@ -361,7 +393,7 @@ class Repository {
     // slots, `unlockRealm`, or `spendForNewRealm`), so material actually
     // landing here is itself the proof the realm was earned. Setting it here
     // rather than trusting each call site to have flipped it first is what
-    // keeps "has material" and "unlocked" from ever disagreeing — the same
+    // keeps "has material" and "unlocked" from ever disagreeing â the same
     // invariant the schema 3 migration's grandfathering rule relies on.
     final prevRealm = existingRealms[norm.realm.normKeyValue];
     final realm = prevRealm == null
@@ -628,7 +660,7 @@ class Repository {
   ///
   /// Reviews that have come due lead, and everything else follows in an order
   /// weighted towards what has been asked least. The schedule is the point of
-  /// the app, so it is never shuffled away — but beyond it the order is loose,
+  /// the app, so it is never shuffled away â but beyond it the order is loose,
   /// because the same five questions in the same order every evening is what
   /// makes a library feel smaller than it is.
   Future<List<SessionSlot>> buildSession(
@@ -657,7 +689,7 @@ class Repository {
     }
     // How often each question has actually been served. The recency list only
     // remembers the last `recentLimit` sentences, so on a small library it
-    // fills up and stops discriminating — this is what keeps the rotation
+    // fills up and stops discriminating â this is what keeps the rotation
     // honest after that: least-asked first.
     final asked = {
       for (final row in await db.select(db.questionStats).get()) row.questionId: row.n
@@ -723,7 +755,7 @@ class Repository {
     }
 
     // A second helping. The first pass takes one question per learning item,
-    // which is what makes a session broad — but it also caps the session at
+    // which is what makes a session broad â but it also caps the session at
     // however many items the library holds. On a small library that turned a
     // ten-question session into three, and the same few sentences came round
     // again and again.
@@ -792,7 +824,7 @@ class Repository {
       pool = take(pool, 3);
     }
 
-    // Among what is left, the ones asked fewest times — all of them, so the
+    // Among what is left, the ones asked fewest times â all of them, so the
     // caller still has something to pick at random from.
     final fewest = pool.map((q) => asked[q.id] ?? 0).reduce((a, b) => a < b ? a : b);
     return pool.where((q) => (asked[q.id] ?? 0) == fewest).toList();
@@ -802,7 +834,7 @@ class Repository {
   /// Seeds. The streak advances here rather than at session start, because a
   /// day counts only once a question has actually been answered.
   ///
-  /// [bonusSeeds] is added on top of what the answer itself earns — the
+  /// [bonusSeeds] is added on top of what the answer itself earns â the
   /// session's combo run. It is passed in rather than computed here because
   /// the run belongs to the session on screen, not to the stored record.
   Future<AnswerOutcome> recordAnswer({
@@ -858,14 +890,14 @@ class Repository {
         seedsFor(question.type, correct, wasDue: wasDue, firstCorrect: firstCorrect) *
             (boost > 1 ? boost : 1);
     // A study day advancing onto a multiple of `streakBonusEvery` pays a
-    // milestone once — `registerStudyDay` already guarantees the streak
+    // milestone once â `registerStudyDay` already guarantees the streak
     // advances at most once per calendar day, so this cannot double-fire from
     // answering several questions on the same day.
     final milestone =
         streak.result.advanced && streak.result.to % streakBonusEvery == 0 ? streakBonus : 0;
 
     // The item that kept going wrong and finally stopped. Paid once, so a
-    // later slip and recovery is not a second payday — and so nobody can
+    // later slip and recovery is not a second payday â and so nobody can
     // farm it by missing on purpose.
     final itemId = question.itemId;
     final broke = itemId != null &&
@@ -880,7 +912,7 @@ class Repository {
     );
     await saveProgress(next);
 
-    // Growing a stage is its own reward — no Seeds attached, or it would
+    // Growing a stage is its own reward â no Seeds attached, or it would
     // simply duplicate what the schedule already pays for.
     // First meeting: no schedule before this answer, or one that had never
     // introduced the item.
@@ -897,13 +929,13 @@ class Repository {
   }
 
   /// Called once, right after a session ends. Applies the flat
-  /// session-length bonus, and — at most once a day — the "today's journey
+  /// session-length bonus, and â at most once a day â the "today's journey
   /// complete" bonus.
   ///
   /// Journey completeness is derived from the answer log rather than tracked
   /// separately: every realm that has material must have at least one
   /// history entry for today. That means it can never drift out of sync with
-  /// what the learner actually did, and it costs nothing extra to compute —
+  /// what the learner actually did, and it costs nothing extra to compute â
   /// the same `history()` the stats screen already reads.
   Future<({Progress progress, int bonus, bool perfect})> finishSession(
       {required int answered, int missed = 0, int target = 0}) async {
@@ -939,7 +971,7 @@ class Repository {
 
   /// Spends `realmUnlockCost` to flip an existing (already-suggested but
   /// still locked) realm to usable. Returns false and spends nothing if the
-  /// balance is short — the caller is expected to have already confirmed
+  /// balance is short â the caller is expected to have already confirmed
   /// with the learner before calling this. An area that is already unlocked
   /// costs nothing: the confirmation is a dialog, and two of them could be
   /// stacked up by a double tap and then both confirmed.
@@ -958,7 +990,7 @@ class Repository {
     return true;
   }
 
-  /// Marks realms unlocked at no cost — used once, when the learner confirms
+  /// Marks realms unlocked at no cost â used once, when the learner confirms
   /// their first three free areas at onboarding. Nothing beyond this point
   /// grants a free unlock; every later one goes through `unlockRealm` or
   /// `spendForNewRealm`.
@@ -968,15 +1000,15 @@ class Repository {
         .write(const RealmsCompanion(unlocked: Value(true)));
   }
 
-  /// Spends `realmUnlockCost` for a realm that does not exist as a row yet —
+  /// Spends `realmUnlockCost` for a realm that does not exist as a row yet â
   /// a genuinely new domain named through the "add a new area" AI prompt,
   /// rather than one the AI already suggested during profile import. The
   /// realm itself is created, already unlocked, by the `importMaterial` call
   /// that follows. Returns false and spends nothing if the balance is short.
   ///
   /// The purchase is held as a credit until that import arrives, because the
-  /// gap between the two is long — the learner leaves for their AI and comes
-  /// back — and copying the prompt again in the meantime must not be charged
+  /// gap between the two is long â the learner leaves for their AI and comes
+  /// back â and copying the prompt again in the meantime must not be charged
   /// as a second area.
   Future<bool> spendForNewRealm() async {
     final progress = await loadProgress();
@@ -1025,7 +1057,7 @@ class Repository {
   }
 
   /// Buys one ornament and hangs it on the tree. Returns the progress actually
-  /// stored, or null when the balance is short — in which case nothing is
+  /// stored, or null when the balance is short â in which case nothing is
   /// spent. Duplicates are allowed: several ribbons on one tree is a choice,
   /// not a mistake.
   Future<Progress?> spendForOrnament(String kind) async {
@@ -1154,8 +1186,8 @@ class Repository {
     final generated = qg.generateForSentences(all, itemsById, all, rng);
     final keep = {for (final q in generated) q.id};
 
-    // Anything a rebuild no longer produces is stale — a sentence edited into
-    // a shape its old question no longer matches, say — and its statistics
+    // Anything a rebuild no longer produces is stale â a sentence edited into
+    // a shape its old question no longer matches, say â and its statistics
     // describe a question that is gone.
     await db.transaction(() async {
       for (final q in generated) {
@@ -1186,6 +1218,7 @@ class Repository {
       // Debates and the chunk library are material too; the learner's own
       // captures and attempts are a record of what they did, and stay.
       await db.delete(db.debates).go();
+      await db.delete(db.scenes).go();
       await db.delete(db.chunks).go();
     });
     await _delMeta('recentSentences');
@@ -1200,6 +1233,8 @@ class Repository {
       // What the learner said in debates, and where they slipped, is progress
       // in the same sense; the trees themselves are material and stay.
       await db.delete(db.attempts).go();
+      await db.delete(db.sceneResults).go();
+      await db.delete(db.reviews).go();
       await db.delete(db.failures).go();
     });
     await saveProgress(const Progress());
@@ -1221,8 +1256,11 @@ class Repository {
       // and failures point into those debates. Captures are the learner's own
       // notes about their life, not about the material, so they stay.
       await db.delete(db.debates).go();
+      await db.delete(db.scenes).go();
       await db.delete(db.chunks).go();
       await db.delete(db.attempts).go();
+      await db.delete(db.sceneResults).go();
+      await db.delete(db.reviews).go();
       await db.delete(db.failures).go();
     });
     await _delMeta('profile');
@@ -1246,8 +1284,11 @@ class Repository {
       await db.delete(db.batches).go();
       await db.delete(db.meta).go();
       await db.delete(db.debates).go();
+      await db.delete(db.scenes).go();
       await db.delete(db.chunks).go();
       await db.delete(db.attempts).go();
+      await db.delete(db.sceneResults).go();
+      await db.delete(db.reviews).go();
       await db.delete(db.captures).go();
       await db.delete(db.failures).go();
     });
@@ -1361,19 +1402,6 @@ class Repository {
         ..where((t) => t.id.equals(id)))
       .write(DebatesCompanion(disabled: Value(disabled)));
 
-  /// The learner says a reply was used in a real conversation. Paid once per
-  /// attempt; a second report returns null and changes nothing.
-  Future<Progress?> markClaimUsed(String attemptId) async {
-    final p = await loadProgress();
-    if (p.usedClaims.contains(attemptId)) return null;
-    final next = p.copyWith(
-      seeds: p.seeds + claimUsedSeeds,
-      usedClaims: [...p.usedClaims, attemptId],
-    );
-    await saveProgress(next);
-    return next;
-  }
-
   /// One exchange settled: the reply stored for critique, the day counted as
   /// studied, the Seeds paid. Failures the exchange showed are written down
   /// here too, so the next pack can aim at them.
@@ -1428,7 +1456,7 @@ class Repository {
   /// debates, and critiques for attempts still waiting on one.
   ///
   /// Captures and failures are marked as carried out here, at the moment the
-  /// material actually comes back — not when the prompt is copied, because a
+  /// material actually comes back â not when the prompt is copied, because a
   /// prompt copied and never pasted would otherwise lose them.
   Future<PackOutcome> importPack(String raw, {required String uiLanguage}) async {
     final ex = imp.extractJson(raw);
@@ -1559,6 +1587,223 @@ class Repository {
     );
   }
 
+  // ------------------------------------------------------------------ scenes
+  //
+  // Listen, choose, grow. Scenes the learner's own AI wrote live here; the
+  // built-in ones ship with the app and are merged in above this layer, so
+  // everything below is about the learner's own material and their results.
+
+  Future<List<Scene>> scenes({bool includeDisabled = false}) async {
+    final rows = await (db.select(db.scenes)
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .get();
+    return [
+      for (final r in rows)
+        if (includeDisabled || !r.disabled) r.toDomain()
+    ];
+  }
+
+  Future<void> setSceneDisabled(String id, bool disabled) => (db.update(db.scenes)
+        ..where((t) => t.id.equals(id)))
+      .write(ScenesCompanion(disabled: Value(disabled)));
+
+  /// A scenes reply pasted in. Sound scenes are stored (a scene pasted twice
+  /// lands on itself); the ones that could not be made sound are named with
+  /// the reason, because the learner pasted them and "3 of 5" with no
+  /// explanation would leave them wondering what they did wrong.
+  Future<SceneOutcome> importScenes(String raw, {required String uiLanguage}) async {
+    final ex = imp.extractJson(raw);
+    if (!ex.ok) return SceneOutcome.failure([ex.failure == 'empty' ? 'empty' : 'parse']);
+
+    final v = imp.validate(ex.data!);
+    if (!v.ok) return SceneOutcome.failure(v.errors);
+    if (v.type != 'scenes') return const SceneOutcome.failure(['not a scenes reply']);
+
+    final norm = normaliseScenes(ex.data!);
+    if (norm.scenes.isEmpty) {
+      return SceneOutcome(
+        ok: false,
+        errors: const ['no usable scene'],
+        rejected: norm.rejected,
+        partial: ex.repaired,
+      );
+    }
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction(() async {
+      for (final s in norm.scenes) {
+        await db.into(db.scenes).insertOnConflictUpdate(sceneToRow(s));
+      }
+      await db.into(db.batches).insertOnConflictUpdate(BatchesCompanion.insert(
+            id: newBatchId(),
+            kind: 'scenes',
+            at: now,
+            language: Value(uiLanguage),
+            promptVersion: const Value(pr.PromptVersions.scenes),
+            counts: Value(jsonEncode({
+              'scenes': norm.scenes.length,
+              'rejected': norm.rejected.length,
+            })),
+          ));
+    });
+
+    return SceneOutcome(
+      ok: true,
+      scenes: norm.scenes.length,
+      rejected: norm.rejected,
+      partial: ex.repaired,
+    );
+  }
+
+  Future<List<SceneResult>> sceneResults() async {
+    final rows =
+        await (db.select(db.sceneResults)..orderBy([(t) => OrderingTerm.asc(t.at)])).get();
+    return [for (final r in rows) r.toDomain()];
+  }
+
+  /// One exchange answered. Written down as it was, and a miss books its
+  /// reviews: the next day first, then three days on. A review answered
+  /// right moves to the next gap; answered wrong, it comes back tomorrow.
+  Future<SceneResult> recordSceneExchange({
+    required String sceneId,
+    required int exchange,
+    required bool gistOk,
+    required bool replyOk,
+    bool peeked = false,
+    bool review = false,
+  }) async {
+    final day = today();
+    final r = SceneResult(
+      sceneId: sceneId,
+      exchange: exchange,
+      gistOk: gistOk,
+      replyOk: replyOk,
+      peeked: peeked,
+      review: review,
+      day: day,
+      at: DateTime.now().millisecondsSinceEpoch,
+    );
+    await db.into(db.sceneResults).insert(sceneResultToRow(r));
+
+    final key = (db.select(db.reviews)
+      ..where((t) => t.sceneId.equals(sceneId) & t.exchange.equals(exchange)));
+    final existing = await key.getSingleOrNull();
+    final missed = !gistOk || !replyOk;
+
+    if (missed) {
+      // Back to the first gap — whether this was the first miss or a review
+      // that did not stick.
+      await db.into(db.reviews).insertOnConflictUpdate(ReviewsCompanion.insert(
+            sceneId: sceneId,
+            exchange: exchange,
+            dueDay: addDays(day, reviewGaps[0]),
+            stage: const Value(0),
+          ));
+    } else if (review && existing != null) {
+      final next = existing.stage + 1;
+      if (next >= reviewGaps.length) {
+        await (db.delete(db.reviews)
+              ..where((t) => t.sceneId.equals(sceneId) & t.exchange.equals(exchange)))
+            .go();
+      } else {
+        await (db.update(db.reviews)
+              ..where((t) => t.sceneId.equals(sceneId) & t.exchange.equals(exchange)))
+            .write(ReviewsCompanion(dueDay: Value(addDays(day, reviewGaps[next])), stage: Value(next)));
+      }
+    }
+    return r;
+  }
+
+  /// The exchanges owed another look today, oldest due first.
+  Future<List<ReviewItem>> reviewsDue({String? day, int limit = 3}) async {
+    final t = day ?? today();
+    final rows = await (db.select(db.reviews)
+          ..where((x) => x.dueDay.isSmallerOrEqualValue(t))
+          ..orderBy([(x) => OrderingTerm.asc(x.dueDay)])
+          ..limit(limit))
+        .get();
+    return [for (final r in rows) r.toDomain()];
+  }
+
+  Future<List<ReviewItem>> reviews() async {
+    final rows = await db.select(db.reviews).get();
+    return [for (final r in rows) r.toDomain()];
+  }
+
+  /// A scene finished: the day counted as studied, the Seeds paid. Finishing
+  /// is what keeps the streak, however the questions went.
+  Future<({Progress progress, int seeds})> completeScene({
+    required int gistRight,
+    required int replyRight,
+  }) async {
+    final progress = await loadProgress();
+    final streak = registerStudyDay(progress, today());
+    final gained = gistRight * gistSeeds + replyRight * replySeeds + sceneCompleteSeeds;
+    final milestone =
+        streak.result.advanced && streak.result.to % streakBonusEvery == 0 ? streakBonus : 0;
+    final next = streak.progress.copyWith(seeds: streak.progress.seeds + gained + milestone);
+    await saveProgress(next);
+    return (progress: next, seeds: gained + milestone);
+  }
+
+  /// The prompt for the next five scenes, from everything this phone knows:
+  /// the profile, the first-run answers, the topics already here (own and
+  /// built-in, so nothing is written twice) and the last week's results.
+  ///
+  /// [lookup] resolves a scene id to its scene for the built-ins, which are
+  /// not in the database; the mistakes are described by the line that was
+  /// misheard, so the AI can aim at that kind of line.
+  Future<String> scenesPromptText({
+    required String uiLanguage,
+    List<String> extraTopics = const [],
+    Map<String, Scene> lookup = const {},
+    int scenes = 5,
+  }) async {
+    final profile = await loadProfile();
+    final settings = await loadSettings();
+    final results = await sceneResults();
+    final stats = skillStats(results, today: today());
+    final own = await this.scenes(includeDisabled: true);
+    final all = {for (final s in own) s.id: s, ...lookup};
+
+    // The most recent misses, described by their lines. Gist misses are
+    // mishearings; reply misses are the same thing one step later.
+    final tendencies = <String>[];
+    for (final r in results.reversed) {
+      if (tendencies.length >= 6) break;
+      if (r.gistOk && r.replyOk) continue;
+      final line = all[r.sceneId]?.exchanges.elementAtOrNull(r.exchange)?.line;
+      if (line == null) continue;
+      tendencies.add(
+          '${r.gistOk ? 'chose a reply to a misheard version of' : 'misheard'}: "$line"');
+    }
+
+    final areas = [for (final r in await realms()) if (r.unlocked) r.label];
+    final week = stats.week;
+    return pr.scenesPrompt(
+      uiLanguage: uiLanguage,
+      level: profile?.englishLevel ?? 'A2',
+      ageBand: ageBandDescription(settings.ageBand),
+      roles: profile?.roles ?? const [],
+      priorities: uniqueBy(
+        [...?profile?.learningPriorities, ...settings.interests.map(interestDescription)],
+        normKey,
+      ),
+      areas: areas,
+      existingTopics: uniqueBy([for (final s in own) s.topic, ...extraTopics], normKey),
+      difficulty: switch (difficultyFor(stats)) {
+        'harder' => pr.SceneDifficulty.harder,
+        'easier' => pr.SceneDifficulty.easier,
+        _ => pr.SceneDifficulty.easy,
+      },
+      recent: week.gist.of == 0
+          ? null
+          : (gistPct: week.gist.pct ?? 0, replyPct: week.reply.pct ?? 0, exchanges: week.gist.of),
+      tendencies: tendencies,
+      scenes: scenes,
+    );
+  }
+
   // ------------------------------------------------------------ export/import
 
   static const backupVersion = '1.0';
@@ -1589,6 +1834,9 @@ class Repository {
           'attempts',
           'captures',
           'failures',
+          'scenes',
+          'scene_results',
+          'reviews',
         ])
           t: await dump(t),
       },

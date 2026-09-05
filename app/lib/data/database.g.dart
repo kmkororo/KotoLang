@@ -8448,6 +8448,1426 @@ class FailuresCompanion extends UpdateCompanion<FailureRow> {
   }
 }
 
+class $ScenesTable extends Scenes with TableInfo<$ScenesTable, SceneRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ScenesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _topicMeta = const VerificationMeta('topic');
+  @override
+  late final GeneratedColumn<String> topic = GeneratedColumn<String>(
+    'topic',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _topicNativeMeta = const VerificationMeta(
+    'topicNative',
+  );
+  @override
+  late final GeneratedColumn<String> topicNative = GeneratedColumn<String>(
+    'topic_native',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _settingNativeMeta = const VerificationMeta(
+    'settingNative',
+  );
+  @override
+  late final GeneratedColumn<String> settingNative = GeneratedColumn<String>(
+    'setting_native',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _exchangesMeta = const VerificationMeta(
+    'exchanges',
+  );
+  @override
+  late final GeneratedColumn<String> exchanges = GeneratedColumn<String>(
+    'exchanges',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+    'source',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('ai'),
+  );
+  static const VerificationMeta _realmIdMeta = const VerificationMeta(
+    'realmId',
+  );
+  @override
+  late final GeneratedColumn<String> realmId = GeneratedColumn<String>(
+    'realm_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _disabledMeta = const VerificationMeta(
+    'disabled',
+  );
+  @override
+  late final GeneratedColumn<bool> disabled = GeneratedColumn<bool>(
+    'disabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("disabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    topic,
+    topicNative,
+    settingNative,
+    exchanges,
+    source,
+    realmId,
+    createdAt,
+    disabled,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'scenes';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SceneRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('topic')) {
+      context.handle(
+        _topicMeta,
+        topic.isAcceptableOrUnknown(data['topic']!, _topicMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_topicMeta);
+    }
+    if (data.containsKey('topic_native')) {
+      context.handle(
+        _topicNativeMeta,
+        topicNative.isAcceptableOrUnknown(
+          data['topic_native']!,
+          _topicNativeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('setting_native')) {
+      context.handle(
+        _settingNativeMeta,
+        settingNative.isAcceptableOrUnknown(
+          data['setting_native']!,
+          _settingNativeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('exchanges')) {
+      context.handle(
+        _exchangesMeta,
+        exchanges.isAcceptableOrUnknown(data['exchanges']!, _exchangesMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_exchangesMeta);
+    }
+    if (data.containsKey('source')) {
+      context.handle(
+        _sourceMeta,
+        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    }
+    if (data.containsKey('realm_id')) {
+      context.handle(
+        _realmIdMeta,
+        realmId.isAcceptableOrUnknown(data['realm_id']!, _realmIdMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('disabled')) {
+      context.handle(
+        _disabledMeta,
+        disabled.isAcceptableOrUnknown(data['disabled']!, _disabledMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SceneRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SceneRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      topic: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}topic'],
+      )!,
+      topicNative: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}topic_native'],
+      )!,
+      settingNative: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}setting_native'],
+      )!,
+      exchanges: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}exchanges'],
+      )!,
+      source: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source'],
+      )!,
+      realmId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}realm_id'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
+      disabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}disabled'],
+      )!,
+    );
+  }
+
+  @override
+  $ScenesTable createAlias(String alias) {
+    return $ScenesTable(attachedDatabase, alias);
+  }
+}
+
+class SceneRow extends DataClass implements Insertable<SceneRow> {
+  final String id;
+  final String topic;
+  final String topicNative;
+  final String settingNative;
+
+  /// The exchanges as JSON, in order.
+  final String exchanges;
+
+  /// 'ai' for scenes the learner's own AI made. Built-ins never sit here.
+  final String source;
+  final String? realmId;
+  final int createdAt;
+  final bool disabled;
+  const SceneRow({
+    required this.id,
+    required this.topic,
+    required this.topicNative,
+    required this.settingNative,
+    required this.exchanges,
+    required this.source,
+    this.realmId,
+    required this.createdAt,
+    required this.disabled,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['topic'] = Variable<String>(topic);
+    map['topic_native'] = Variable<String>(topicNative);
+    map['setting_native'] = Variable<String>(settingNative);
+    map['exchanges'] = Variable<String>(exchanges);
+    map['source'] = Variable<String>(source);
+    if (!nullToAbsent || realmId != null) {
+      map['realm_id'] = Variable<String>(realmId);
+    }
+    map['created_at'] = Variable<int>(createdAt);
+    map['disabled'] = Variable<bool>(disabled);
+    return map;
+  }
+
+  ScenesCompanion toCompanion(bool nullToAbsent) {
+    return ScenesCompanion(
+      id: Value(id),
+      topic: Value(topic),
+      topicNative: Value(topicNative),
+      settingNative: Value(settingNative),
+      exchanges: Value(exchanges),
+      source: Value(source),
+      realmId: realmId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(realmId),
+      createdAt: Value(createdAt),
+      disabled: Value(disabled),
+    );
+  }
+
+  factory SceneRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SceneRow(
+      id: serializer.fromJson<String>(json['id']),
+      topic: serializer.fromJson<String>(json['topic']),
+      topicNative: serializer.fromJson<String>(json['topicNative']),
+      settingNative: serializer.fromJson<String>(json['settingNative']),
+      exchanges: serializer.fromJson<String>(json['exchanges']),
+      source: serializer.fromJson<String>(json['source']),
+      realmId: serializer.fromJson<String?>(json['realmId']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      disabled: serializer.fromJson<bool>(json['disabled']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'topic': serializer.toJson<String>(topic),
+      'topicNative': serializer.toJson<String>(topicNative),
+      'settingNative': serializer.toJson<String>(settingNative),
+      'exchanges': serializer.toJson<String>(exchanges),
+      'source': serializer.toJson<String>(source),
+      'realmId': serializer.toJson<String?>(realmId),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'disabled': serializer.toJson<bool>(disabled),
+    };
+  }
+
+  SceneRow copyWith({
+    String? id,
+    String? topic,
+    String? topicNative,
+    String? settingNative,
+    String? exchanges,
+    String? source,
+    Value<String?> realmId = const Value.absent(),
+    int? createdAt,
+    bool? disabled,
+  }) => SceneRow(
+    id: id ?? this.id,
+    topic: topic ?? this.topic,
+    topicNative: topicNative ?? this.topicNative,
+    settingNative: settingNative ?? this.settingNative,
+    exchanges: exchanges ?? this.exchanges,
+    source: source ?? this.source,
+    realmId: realmId.present ? realmId.value : this.realmId,
+    createdAt: createdAt ?? this.createdAt,
+    disabled: disabled ?? this.disabled,
+  );
+  SceneRow copyWithCompanion(ScenesCompanion data) {
+    return SceneRow(
+      id: data.id.present ? data.id.value : this.id,
+      topic: data.topic.present ? data.topic.value : this.topic,
+      topicNative: data.topicNative.present
+          ? data.topicNative.value
+          : this.topicNative,
+      settingNative: data.settingNative.present
+          ? data.settingNative.value
+          : this.settingNative,
+      exchanges: data.exchanges.present ? data.exchanges.value : this.exchanges,
+      source: data.source.present ? data.source.value : this.source,
+      realmId: data.realmId.present ? data.realmId.value : this.realmId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      disabled: data.disabled.present ? data.disabled.value : this.disabled,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SceneRow(')
+          ..write('id: $id, ')
+          ..write('topic: $topic, ')
+          ..write('topicNative: $topicNative, ')
+          ..write('settingNative: $settingNative, ')
+          ..write('exchanges: $exchanges, ')
+          ..write('source: $source, ')
+          ..write('realmId: $realmId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('disabled: $disabled')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    topic,
+    topicNative,
+    settingNative,
+    exchanges,
+    source,
+    realmId,
+    createdAt,
+    disabled,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SceneRow &&
+          other.id == this.id &&
+          other.topic == this.topic &&
+          other.topicNative == this.topicNative &&
+          other.settingNative == this.settingNative &&
+          other.exchanges == this.exchanges &&
+          other.source == this.source &&
+          other.realmId == this.realmId &&
+          other.createdAt == this.createdAt &&
+          other.disabled == this.disabled);
+}
+
+class ScenesCompanion extends UpdateCompanion<SceneRow> {
+  final Value<String> id;
+  final Value<String> topic;
+  final Value<String> topicNative;
+  final Value<String> settingNative;
+  final Value<String> exchanges;
+  final Value<String> source;
+  final Value<String?> realmId;
+  final Value<int> createdAt;
+  final Value<bool> disabled;
+  final Value<int> rowid;
+  const ScenesCompanion({
+    this.id = const Value.absent(),
+    this.topic = const Value.absent(),
+    this.topicNative = const Value.absent(),
+    this.settingNative = const Value.absent(),
+    this.exchanges = const Value.absent(),
+    this.source = const Value.absent(),
+    this.realmId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.disabled = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ScenesCompanion.insert({
+    required String id,
+    required String topic,
+    this.topicNative = const Value.absent(),
+    this.settingNative = const Value.absent(),
+    required String exchanges,
+    this.source = const Value.absent(),
+    this.realmId = const Value.absent(),
+    required int createdAt,
+    this.disabled = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       topic = Value(topic),
+       exchanges = Value(exchanges),
+       createdAt = Value(createdAt);
+  static Insertable<SceneRow> custom({
+    Expression<String>? id,
+    Expression<String>? topic,
+    Expression<String>? topicNative,
+    Expression<String>? settingNative,
+    Expression<String>? exchanges,
+    Expression<String>? source,
+    Expression<String>? realmId,
+    Expression<int>? createdAt,
+    Expression<bool>? disabled,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (topic != null) 'topic': topic,
+      if (topicNative != null) 'topic_native': topicNative,
+      if (settingNative != null) 'setting_native': settingNative,
+      if (exchanges != null) 'exchanges': exchanges,
+      if (source != null) 'source': source,
+      if (realmId != null) 'realm_id': realmId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (disabled != null) 'disabled': disabled,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ScenesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? topic,
+    Value<String>? topicNative,
+    Value<String>? settingNative,
+    Value<String>? exchanges,
+    Value<String>? source,
+    Value<String?>? realmId,
+    Value<int>? createdAt,
+    Value<bool>? disabled,
+    Value<int>? rowid,
+  }) {
+    return ScenesCompanion(
+      id: id ?? this.id,
+      topic: topic ?? this.topic,
+      topicNative: topicNative ?? this.topicNative,
+      settingNative: settingNative ?? this.settingNative,
+      exchanges: exchanges ?? this.exchanges,
+      source: source ?? this.source,
+      realmId: realmId ?? this.realmId,
+      createdAt: createdAt ?? this.createdAt,
+      disabled: disabled ?? this.disabled,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (topic.present) {
+      map['topic'] = Variable<String>(topic.value);
+    }
+    if (topicNative.present) {
+      map['topic_native'] = Variable<String>(topicNative.value);
+    }
+    if (settingNative.present) {
+      map['setting_native'] = Variable<String>(settingNative.value);
+    }
+    if (exchanges.present) {
+      map['exchanges'] = Variable<String>(exchanges.value);
+    }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
+    if (realmId.present) {
+      map['realm_id'] = Variable<String>(realmId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (disabled.present) {
+      map['disabled'] = Variable<bool>(disabled.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ScenesCompanion(')
+          ..write('id: $id, ')
+          ..write('topic: $topic, ')
+          ..write('topicNative: $topicNative, ')
+          ..write('settingNative: $settingNative, ')
+          ..write('exchanges: $exchanges, ')
+          ..write('source: $source, ')
+          ..write('realmId: $realmId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('disabled: $disabled, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SceneResultsTable extends SceneResults
+    with TableInfo<$SceneResultsTable, SceneResultRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SceneResultsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _sceneIdMeta = const VerificationMeta(
+    'sceneId',
+  );
+  @override
+  late final GeneratedColumn<String> sceneId = GeneratedColumn<String>(
+    'scene_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _exchangeMeta = const VerificationMeta(
+    'exchange',
+  );
+  @override
+  late final GeneratedColumn<int> exchange = GeneratedColumn<int>(
+    'exchange',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _gistOkMeta = const VerificationMeta('gistOk');
+  @override
+  late final GeneratedColumn<bool> gistOk = GeneratedColumn<bool>(
+    'gist_ok',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("gist_ok" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _replyOkMeta = const VerificationMeta(
+    'replyOk',
+  );
+  @override
+  late final GeneratedColumn<bool> replyOk = GeneratedColumn<bool>(
+    'reply_ok',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("reply_ok" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _peekedMeta = const VerificationMeta('peeked');
+  @override
+  late final GeneratedColumn<bool> peeked = GeneratedColumn<bool>(
+    'peeked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("peeked" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _reviewMeta = const VerificationMeta('review');
+  @override
+  late final GeneratedColumn<bool> review = GeneratedColumn<bool>(
+    'review',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("review" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _dayMeta = const VerificationMeta('day');
+  @override
+  late final GeneratedColumn<String> day = GeneratedColumn<String>(
+    'day',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _atMeta = const VerificationMeta('at');
+  @override
+  late final GeneratedColumn<int> at = GeneratedColumn<int>(
+    'at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sceneId,
+    exchange,
+    gistOk,
+    replyOk,
+    peeked,
+    review,
+    day,
+    at,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'scene_results';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SceneResultRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('scene_id')) {
+      context.handle(
+        _sceneIdMeta,
+        sceneId.isAcceptableOrUnknown(data['scene_id']!, _sceneIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sceneIdMeta);
+    }
+    if (data.containsKey('exchange')) {
+      context.handle(
+        _exchangeMeta,
+        exchange.isAcceptableOrUnknown(data['exchange']!, _exchangeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_exchangeMeta);
+    }
+    if (data.containsKey('gist_ok')) {
+      context.handle(
+        _gistOkMeta,
+        gistOk.isAcceptableOrUnknown(data['gist_ok']!, _gistOkMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_gistOkMeta);
+    }
+    if (data.containsKey('reply_ok')) {
+      context.handle(
+        _replyOkMeta,
+        replyOk.isAcceptableOrUnknown(data['reply_ok']!, _replyOkMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_replyOkMeta);
+    }
+    if (data.containsKey('peeked')) {
+      context.handle(
+        _peekedMeta,
+        peeked.isAcceptableOrUnknown(data['peeked']!, _peekedMeta),
+      );
+    }
+    if (data.containsKey('review')) {
+      context.handle(
+        _reviewMeta,
+        review.isAcceptableOrUnknown(data['review']!, _reviewMeta),
+      );
+    }
+    if (data.containsKey('day')) {
+      context.handle(
+        _dayMeta,
+        day.isAcceptableOrUnknown(data['day']!, _dayMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dayMeta);
+    }
+    if (data.containsKey('at')) {
+      context.handle(_atMeta, at.isAcceptableOrUnknown(data['at']!, _atMeta));
+    } else if (isInserting) {
+      context.missing(_atMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SceneResultRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SceneResultRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      sceneId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}scene_id'],
+      )!,
+      exchange: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}exchange'],
+      )!,
+      gistOk: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}gist_ok'],
+      )!,
+      replyOk: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}reply_ok'],
+      )!,
+      peeked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}peeked'],
+      )!,
+      review: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}review'],
+      )!,
+      day: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}day'],
+      )!,
+      at: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}at'],
+      )!,
+    );
+  }
+
+  @override
+  $SceneResultsTable createAlias(String alias) {
+    return $SceneResultsTable(attachedDatabase, alias);
+  }
+}
+
+class SceneResultRow extends DataClass implements Insertable<SceneResultRow> {
+  final int id;
+  final String sceneId;
+  final int exchange;
+  final bool gistOk;
+  final bool replyOk;
+  final bool peeked;
+
+  /// True when this exchange came up as a review rather than inside its scene.
+  final bool review;
+  final String day;
+  final int at;
+  const SceneResultRow({
+    required this.id,
+    required this.sceneId,
+    required this.exchange,
+    required this.gistOk,
+    required this.replyOk,
+    required this.peeked,
+    required this.review,
+    required this.day,
+    required this.at,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['scene_id'] = Variable<String>(sceneId);
+    map['exchange'] = Variable<int>(exchange);
+    map['gist_ok'] = Variable<bool>(gistOk);
+    map['reply_ok'] = Variable<bool>(replyOk);
+    map['peeked'] = Variable<bool>(peeked);
+    map['review'] = Variable<bool>(review);
+    map['day'] = Variable<String>(day);
+    map['at'] = Variable<int>(at);
+    return map;
+  }
+
+  SceneResultsCompanion toCompanion(bool nullToAbsent) {
+    return SceneResultsCompanion(
+      id: Value(id),
+      sceneId: Value(sceneId),
+      exchange: Value(exchange),
+      gistOk: Value(gistOk),
+      replyOk: Value(replyOk),
+      peeked: Value(peeked),
+      review: Value(review),
+      day: Value(day),
+      at: Value(at),
+    );
+  }
+
+  factory SceneResultRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SceneResultRow(
+      id: serializer.fromJson<int>(json['id']),
+      sceneId: serializer.fromJson<String>(json['sceneId']),
+      exchange: serializer.fromJson<int>(json['exchange']),
+      gistOk: serializer.fromJson<bool>(json['gistOk']),
+      replyOk: serializer.fromJson<bool>(json['replyOk']),
+      peeked: serializer.fromJson<bool>(json['peeked']),
+      review: serializer.fromJson<bool>(json['review']),
+      day: serializer.fromJson<String>(json['day']),
+      at: serializer.fromJson<int>(json['at']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'sceneId': serializer.toJson<String>(sceneId),
+      'exchange': serializer.toJson<int>(exchange),
+      'gistOk': serializer.toJson<bool>(gistOk),
+      'replyOk': serializer.toJson<bool>(replyOk),
+      'peeked': serializer.toJson<bool>(peeked),
+      'review': serializer.toJson<bool>(review),
+      'day': serializer.toJson<String>(day),
+      'at': serializer.toJson<int>(at),
+    };
+  }
+
+  SceneResultRow copyWith({
+    int? id,
+    String? sceneId,
+    int? exchange,
+    bool? gistOk,
+    bool? replyOk,
+    bool? peeked,
+    bool? review,
+    String? day,
+    int? at,
+  }) => SceneResultRow(
+    id: id ?? this.id,
+    sceneId: sceneId ?? this.sceneId,
+    exchange: exchange ?? this.exchange,
+    gistOk: gistOk ?? this.gistOk,
+    replyOk: replyOk ?? this.replyOk,
+    peeked: peeked ?? this.peeked,
+    review: review ?? this.review,
+    day: day ?? this.day,
+    at: at ?? this.at,
+  );
+  SceneResultRow copyWithCompanion(SceneResultsCompanion data) {
+    return SceneResultRow(
+      id: data.id.present ? data.id.value : this.id,
+      sceneId: data.sceneId.present ? data.sceneId.value : this.sceneId,
+      exchange: data.exchange.present ? data.exchange.value : this.exchange,
+      gistOk: data.gistOk.present ? data.gistOk.value : this.gistOk,
+      replyOk: data.replyOk.present ? data.replyOk.value : this.replyOk,
+      peeked: data.peeked.present ? data.peeked.value : this.peeked,
+      review: data.review.present ? data.review.value : this.review,
+      day: data.day.present ? data.day.value : this.day,
+      at: data.at.present ? data.at.value : this.at,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SceneResultRow(')
+          ..write('id: $id, ')
+          ..write('sceneId: $sceneId, ')
+          ..write('exchange: $exchange, ')
+          ..write('gistOk: $gistOk, ')
+          ..write('replyOk: $replyOk, ')
+          ..write('peeked: $peeked, ')
+          ..write('review: $review, ')
+          ..write('day: $day, ')
+          ..write('at: $at')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sceneId,
+    exchange,
+    gistOk,
+    replyOk,
+    peeked,
+    review,
+    day,
+    at,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SceneResultRow &&
+          other.id == this.id &&
+          other.sceneId == this.sceneId &&
+          other.exchange == this.exchange &&
+          other.gistOk == this.gistOk &&
+          other.replyOk == this.replyOk &&
+          other.peeked == this.peeked &&
+          other.review == this.review &&
+          other.day == this.day &&
+          other.at == this.at);
+}
+
+class SceneResultsCompanion extends UpdateCompanion<SceneResultRow> {
+  final Value<int> id;
+  final Value<String> sceneId;
+  final Value<int> exchange;
+  final Value<bool> gistOk;
+  final Value<bool> replyOk;
+  final Value<bool> peeked;
+  final Value<bool> review;
+  final Value<String> day;
+  final Value<int> at;
+  const SceneResultsCompanion({
+    this.id = const Value.absent(),
+    this.sceneId = const Value.absent(),
+    this.exchange = const Value.absent(),
+    this.gistOk = const Value.absent(),
+    this.replyOk = const Value.absent(),
+    this.peeked = const Value.absent(),
+    this.review = const Value.absent(),
+    this.day = const Value.absent(),
+    this.at = const Value.absent(),
+  });
+  SceneResultsCompanion.insert({
+    this.id = const Value.absent(),
+    required String sceneId,
+    required int exchange,
+    required bool gistOk,
+    required bool replyOk,
+    this.peeked = const Value.absent(),
+    this.review = const Value.absent(),
+    required String day,
+    required int at,
+  }) : sceneId = Value(sceneId),
+       exchange = Value(exchange),
+       gistOk = Value(gistOk),
+       replyOk = Value(replyOk),
+       day = Value(day),
+       at = Value(at);
+  static Insertable<SceneResultRow> custom({
+    Expression<int>? id,
+    Expression<String>? sceneId,
+    Expression<int>? exchange,
+    Expression<bool>? gistOk,
+    Expression<bool>? replyOk,
+    Expression<bool>? peeked,
+    Expression<bool>? review,
+    Expression<String>? day,
+    Expression<int>? at,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sceneId != null) 'scene_id': sceneId,
+      if (exchange != null) 'exchange': exchange,
+      if (gistOk != null) 'gist_ok': gistOk,
+      if (replyOk != null) 'reply_ok': replyOk,
+      if (peeked != null) 'peeked': peeked,
+      if (review != null) 'review': review,
+      if (day != null) 'day': day,
+      if (at != null) 'at': at,
+    });
+  }
+
+  SceneResultsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? sceneId,
+    Value<int>? exchange,
+    Value<bool>? gistOk,
+    Value<bool>? replyOk,
+    Value<bool>? peeked,
+    Value<bool>? review,
+    Value<String>? day,
+    Value<int>? at,
+  }) {
+    return SceneResultsCompanion(
+      id: id ?? this.id,
+      sceneId: sceneId ?? this.sceneId,
+      exchange: exchange ?? this.exchange,
+      gistOk: gistOk ?? this.gistOk,
+      replyOk: replyOk ?? this.replyOk,
+      peeked: peeked ?? this.peeked,
+      review: review ?? this.review,
+      day: day ?? this.day,
+      at: at ?? this.at,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (sceneId.present) {
+      map['scene_id'] = Variable<String>(sceneId.value);
+    }
+    if (exchange.present) {
+      map['exchange'] = Variable<int>(exchange.value);
+    }
+    if (gistOk.present) {
+      map['gist_ok'] = Variable<bool>(gistOk.value);
+    }
+    if (replyOk.present) {
+      map['reply_ok'] = Variable<bool>(replyOk.value);
+    }
+    if (peeked.present) {
+      map['peeked'] = Variable<bool>(peeked.value);
+    }
+    if (review.present) {
+      map['review'] = Variable<bool>(review.value);
+    }
+    if (day.present) {
+      map['day'] = Variable<String>(day.value);
+    }
+    if (at.present) {
+      map['at'] = Variable<int>(at.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SceneResultsCompanion(')
+          ..write('id: $id, ')
+          ..write('sceneId: $sceneId, ')
+          ..write('exchange: $exchange, ')
+          ..write('gistOk: $gistOk, ')
+          ..write('replyOk: $replyOk, ')
+          ..write('peeked: $peeked, ')
+          ..write('review: $review, ')
+          ..write('day: $day, ')
+          ..write('at: $at')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ReviewsTable extends Reviews with TableInfo<$ReviewsTable, ReviewRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ReviewsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _sceneIdMeta = const VerificationMeta(
+    'sceneId',
+  );
+  @override
+  late final GeneratedColumn<String> sceneId = GeneratedColumn<String>(
+    'scene_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _exchangeMeta = const VerificationMeta(
+    'exchange',
+  );
+  @override
+  late final GeneratedColumn<int> exchange = GeneratedColumn<int>(
+    'exchange',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dueDayMeta = const VerificationMeta('dueDay');
+  @override
+  late final GeneratedColumn<String> dueDay = GeneratedColumn<String>(
+    'due_day',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stageMeta = const VerificationMeta('stage');
+  @override
+  late final GeneratedColumn<int> stage = GeneratedColumn<int>(
+    'stage',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [sceneId, exchange, dueDay, stage];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'reviews';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ReviewRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('scene_id')) {
+      context.handle(
+        _sceneIdMeta,
+        sceneId.isAcceptableOrUnknown(data['scene_id']!, _sceneIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sceneIdMeta);
+    }
+    if (data.containsKey('exchange')) {
+      context.handle(
+        _exchangeMeta,
+        exchange.isAcceptableOrUnknown(data['exchange']!, _exchangeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_exchangeMeta);
+    }
+    if (data.containsKey('due_day')) {
+      context.handle(
+        _dueDayMeta,
+        dueDay.isAcceptableOrUnknown(data['due_day']!, _dueDayMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dueDayMeta);
+    }
+    if (data.containsKey('stage')) {
+      context.handle(
+        _stageMeta,
+        stage.isAcceptableOrUnknown(data['stage']!, _stageMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {sceneId, exchange};
+  @override
+  ReviewRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ReviewRow(
+      sceneId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}scene_id'],
+      )!,
+      exchange: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}exchange'],
+      )!,
+      dueDay: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}due_day'],
+      )!,
+      stage: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}stage'],
+      )!,
+    );
+  }
+
+  @override
+  $ReviewsTable createAlias(String alias) {
+    return $ReviewsTable(attachedDatabase, alias);
+  }
+}
+
+class ReviewRow extends DataClass implements Insertable<ReviewRow> {
+  final String sceneId;
+  final int exchange;
+  final String dueDay;
+  final int stage;
+  const ReviewRow({
+    required this.sceneId,
+    required this.exchange,
+    required this.dueDay,
+    required this.stage,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['scene_id'] = Variable<String>(sceneId);
+    map['exchange'] = Variable<int>(exchange);
+    map['due_day'] = Variable<String>(dueDay);
+    map['stage'] = Variable<int>(stage);
+    return map;
+  }
+
+  ReviewsCompanion toCompanion(bool nullToAbsent) {
+    return ReviewsCompanion(
+      sceneId: Value(sceneId),
+      exchange: Value(exchange),
+      dueDay: Value(dueDay),
+      stage: Value(stage),
+    );
+  }
+
+  factory ReviewRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ReviewRow(
+      sceneId: serializer.fromJson<String>(json['sceneId']),
+      exchange: serializer.fromJson<int>(json['exchange']),
+      dueDay: serializer.fromJson<String>(json['dueDay']),
+      stage: serializer.fromJson<int>(json['stage']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'sceneId': serializer.toJson<String>(sceneId),
+      'exchange': serializer.toJson<int>(exchange),
+      'dueDay': serializer.toJson<String>(dueDay),
+      'stage': serializer.toJson<int>(stage),
+    };
+  }
+
+  ReviewRow copyWith({
+    String? sceneId,
+    int? exchange,
+    String? dueDay,
+    int? stage,
+  }) => ReviewRow(
+    sceneId: sceneId ?? this.sceneId,
+    exchange: exchange ?? this.exchange,
+    dueDay: dueDay ?? this.dueDay,
+    stage: stage ?? this.stage,
+  );
+  ReviewRow copyWithCompanion(ReviewsCompanion data) {
+    return ReviewRow(
+      sceneId: data.sceneId.present ? data.sceneId.value : this.sceneId,
+      exchange: data.exchange.present ? data.exchange.value : this.exchange,
+      dueDay: data.dueDay.present ? data.dueDay.value : this.dueDay,
+      stage: data.stage.present ? data.stage.value : this.stage,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReviewRow(')
+          ..write('sceneId: $sceneId, ')
+          ..write('exchange: $exchange, ')
+          ..write('dueDay: $dueDay, ')
+          ..write('stage: $stage')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(sceneId, exchange, dueDay, stage);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ReviewRow &&
+          other.sceneId == this.sceneId &&
+          other.exchange == this.exchange &&
+          other.dueDay == this.dueDay &&
+          other.stage == this.stage);
+}
+
+class ReviewsCompanion extends UpdateCompanion<ReviewRow> {
+  final Value<String> sceneId;
+  final Value<int> exchange;
+  final Value<String> dueDay;
+  final Value<int> stage;
+  final Value<int> rowid;
+  const ReviewsCompanion({
+    this.sceneId = const Value.absent(),
+    this.exchange = const Value.absent(),
+    this.dueDay = const Value.absent(),
+    this.stage = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ReviewsCompanion.insert({
+    required String sceneId,
+    required int exchange,
+    required String dueDay,
+    this.stage = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : sceneId = Value(sceneId),
+       exchange = Value(exchange),
+       dueDay = Value(dueDay);
+  static Insertable<ReviewRow> custom({
+    Expression<String>? sceneId,
+    Expression<int>? exchange,
+    Expression<String>? dueDay,
+    Expression<int>? stage,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (sceneId != null) 'scene_id': sceneId,
+      if (exchange != null) 'exchange': exchange,
+      if (dueDay != null) 'due_day': dueDay,
+      if (stage != null) 'stage': stage,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ReviewsCompanion copyWith({
+    Value<String>? sceneId,
+    Value<int>? exchange,
+    Value<String>? dueDay,
+    Value<int>? stage,
+    Value<int>? rowid,
+  }) {
+    return ReviewsCompanion(
+      sceneId: sceneId ?? this.sceneId,
+      exchange: exchange ?? this.exchange,
+      dueDay: dueDay ?? this.dueDay,
+      stage: stage ?? this.stage,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (sceneId.present) {
+      map['scene_id'] = Variable<String>(sceneId.value);
+    }
+    if (exchange.present) {
+      map['exchange'] = Variable<int>(exchange.value);
+    }
+    if (dueDay.present) {
+      map['due_day'] = Variable<String>(dueDay.value);
+    }
+    if (stage.present) {
+      map['stage'] = Variable<int>(stage.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReviewsCompanion(')
+          ..write('sceneId: $sceneId, ')
+          ..write('exchange: $exchange, ')
+          ..write('dueDay: $dueDay, ')
+          ..write('stage: $stage, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -8465,6 +9885,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $AttemptsTable attempts = $AttemptsTable(this);
   late final $CapturesTable captures = $CapturesTable(this);
   late final $FailuresTable failures = $FailuresTable(this);
+  late final $ScenesTable scenes = $ScenesTable(this);
+  late final $SceneResultsTable sceneResults = $SceneResultsTable(this);
+  late final $ReviewsTable reviews = $ReviewsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8484,6 +9907,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     attempts,
     captures,
     failures,
+    scenes,
+    sceneResults,
+    reviews,
   ];
 }
 
@@ -12637,6 +14063,725 @@ typedef $$FailuresTableProcessedTableManager =
       FailureRow,
       PrefetchHooks Function()
     >;
+typedef $$ScenesTableCreateCompanionBuilder =
+    ScenesCompanion Function({
+      required String id,
+      required String topic,
+      Value<String> topicNative,
+      Value<String> settingNative,
+      required String exchanges,
+      Value<String> source,
+      Value<String?> realmId,
+      required int createdAt,
+      Value<bool> disabled,
+      Value<int> rowid,
+    });
+typedef $$ScenesTableUpdateCompanionBuilder =
+    ScenesCompanion Function({
+      Value<String> id,
+      Value<String> topic,
+      Value<String> topicNative,
+      Value<String> settingNative,
+      Value<String> exchanges,
+      Value<String> source,
+      Value<String?> realmId,
+      Value<int> createdAt,
+      Value<bool> disabled,
+      Value<int> rowid,
+    });
+
+class $$ScenesTableFilterComposer
+    extends Composer<_$AppDatabase, $ScenesTable> {
+  $$ScenesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get topic => $composableBuilder(
+    column: $table.topic,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get topicNative => $composableBuilder(
+    column: $table.topicNative,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get settingNative => $composableBuilder(
+    column: $table.settingNative,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get exchanges => $composableBuilder(
+    column: $table.exchanges,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get realmId => $composableBuilder(
+    column: $table.realmId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get disabled => $composableBuilder(
+    column: $table.disabled,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ScenesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ScenesTable> {
+  $$ScenesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get topic => $composableBuilder(
+    column: $table.topic,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get topicNative => $composableBuilder(
+    column: $table.topicNative,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get settingNative => $composableBuilder(
+    column: $table.settingNative,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get exchanges => $composableBuilder(
+    column: $table.exchanges,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get realmId => $composableBuilder(
+    column: $table.realmId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get disabled => $composableBuilder(
+    column: $table.disabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ScenesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ScenesTable> {
+  $$ScenesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get topic =>
+      $composableBuilder(column: $table.topic, builder: (column) => column);
+
+  GeneratedColumn<String> get topicNative => $composableBuilder(
+    column: $table.topicNative,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get settingNative => $composableBuilder(
+    column: $table.settingNative,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get exchanges =>
+      $composableBuilder(column: $table.exchanges, builder: (column) => column);
+
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
+
+  GeneratedColumn<String> get realmId =>
+      $composableBuilder(column: $table.realmId, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get disabled =>
+      $composableBuilder(column: $table.disabled, builder: (column) => column);
+}
+
+class $$ScenesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ScenesTable,
+          SceneRow,
+          $$ScenesTableFilterComposer,
+          $$ScenesTableOrderingComposer,
+          $$ScenesTableAnnotationComposer,
+          $$ScenesTableCreateCompanionBuilder,
+          $$ScenesTableUpdateCompanionBuilder,
+          (SceneRow, BaseReferences<_$AppDatabase, $ScenesTable, SceneRow>),
+          SceneRow,
+          PrefetchHooks Function()
+        > {
+  $$ScenesTableTableManager(_$AppDatabase db, $ScenesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ScenesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ScenesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ScenesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> topic = const Value.absent(),
+                Value<String> topicNative = const Value.absent(),
+                Value<String> settingNative = const Value.absent(),
+                Value<String> exchanges = const Value.absent(),
+                Value<String> source = const Value.absent(),
+                Value<String?> realmId = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<bool> disabled = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ScenesCompanion(
+                id: id,
+                topic: topic,
+                topicNative: topicNative,
+                settingNative: settingNative,
+                exchanges: exchanges,
+                source: source,
+                realmId: realmId,
+                createdAt: createdAt,
+                disabled: disabled,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String topic,
+                Value<String> topicNative = const Value.absent(),
+                Value<String> settingNative = const Value.absent(),
+                required String exchanges,
+                Value<String> source = const Value.absent(),
+                Value<String?> realmId = const Value.absent(),
+                required int createdAt,
+                Value<bool> disabled = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ScenesCompanion.insert(
+                id: id,
+                topic: topic,
+                topicNative: topicNative,
+                settingNative: settingNative,
+                exchanges: exchanges,
+                source: source,
+                realmId: realmId,
+                createdAt: createdAt,
+                disabled: disabled,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ScenesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ScenesTable,
+      SceneRow,
+      $$ScenesTableFilterComposer,
+      $$ScenesTableOrderingComposer,
+      $$ScenesTableAnnotationComposer,
+      $$ScenesTableCreateCompanionBuilder,
+      $$ScenesTableUpdateCompanionBuilder,
+      (SceneRow, BaseReferences<_$AppDatabase, $ScenesTable, SceneRow>),
+      SceneRow,
+      PrefetchHooks Function()
+    >;
+typedef $$SceneResultsTableCreateCompanionBuilder =
+    SceneResultsCompanion Function({
+      Value<int> id,
+      required String sceneId,
+      required int exchange,
+      required bool gistOk,
+      required bool replyOk,
+      Value<bool> peeked,
+      Value<bool> review,
+      required String day,
+      required int at,
+    });
+typedef $$SceneResultsTableUpdateCompanionBuilder =
+    SceneResultsCompanion Function({
+      Value<int> id,
+      Value<String> sceneId,
+      Value<int> exchange,
+      Value<bool> gistOk,
+      Value<bool> replyOk,
+      Value<bool> peeked,
+      Value<bool> review,
+      Value<String> day,
+      Value<int> at,
+    });
+
+class $$SceneResultsTableFilterComposer
+    extends Composer<_$AppDatabase, $SceneResultsTable> {
+  $$SceneResultsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sceneId => $composableBuilder(
+    column: $table.sceneId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get exchange => $composableBuilder(
+    column: $table.exchange,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get gistOk => $composableBuilder(
+    column: $table.gistOk,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get replyOk => $composableBuilder(
+    column: $table.replyOk,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get peeked => $composableBuilder(
+    column: $table.peeked,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get review => $composableBuilder(
+    column: $table.review,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get day => $composableBuilder(
+    column: $table.day,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get at => $composableBuilder(
+    column: $table.at,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SceneResultsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SceneResultsTable> {
+  $$SceneResultsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sceneId => $composableBuilder(
+    column: $table.sceneId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get exchange => $composableBuilder(
+    column: $table.exchange,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get gistOk => $composableBuilder(
+    column: $table.gistOk,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get replyOk => $composableBuilder(
+    column: $table.replyOk,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get peeked => $composableBuilder(
+    column: $table.peeked,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get review => $composableBuilder(
+    column: $table.review,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get day => $composableBuilder(
+    column: $table.day,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get at => $composableBuilder(
+    column: $table.at,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SceneResultsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SceneResultsTable> {
+  $$SceneResultsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sceneId =>
+      $composableBuilder(column: $table.sceneId, builder: (column) => column);
+
+  GeneratedColumn<int> get exchange =>
+      $composableBuilder(column: $table.exchange, builder: (column) => column);
+
+  GeneratedColumn<bool> get gistOk =>
+      $composableBuilder(column: $table.gistOk, builder: (column) => column);
+
+  GeneratedColumn<bool> get replyOk =>
+      $composableBuilder(column: $table.replyOk, builder: (column) => column);
+
+  GeneratedColumn<bool> get peeked =>
+      $composableBuilder(column: $table.peeked, builder: (column) => column);
+
+  GeneratedColumn<bool> get review =>
+      $composableBuilder(column: $table.review, builder: (column) => column);
+
+  GeneratedColumn<String> get day =>
+      $composableBuilder(column: $table.day, builder: (column) => column);
+
+  GeneratedColumn<int> get at =>
+      $composableBuilder(column: $table.at, builder: (column) => column);
+}
+
+class $$SceneResultsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SceneResultsTable,
+          SceneResultRow,
+          $$SceneResultsTableFilterComposer,
+          $$SceneResultsTableOrderingComposer,
+          $$SceneResultsTableAnnotationComposer,
+          $$SceneResultsTableCreateCompanionBuilder,
+          $$SceneResultsTableUpdateCompanionBuilder,
+          (
+            SceneResultRow,
+            BaseReferences<_$AppDatabase, $SceneResultsTable, SceneResultRow>,
+          ),
+          SceneResultRow,
+          PrefetchHooks Function()
+        > {
+  $$SceneResultsTableTableManager(_$AppDatabase db, $SceneResultsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SceneResultsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SceneResultsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SceneResultsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> sceneId = const Value.absent(),
+                Value<int> exchange = const Value.absent(),
+                Value<bool> gistOk = const Value.absent(),
+                Value<bool> replyOk = const Value.absent(),
+                Value<bool> peeked = const Value.absent(),
+                Value<bool> review = const Value.absent(),
+                Value<String> day = const Value.absent(),
+                Value<int> at = const Value.absent(),
+              }) => SceneResultsCompanion(
+                id: id,
+                sceneId: sceneId,
+                exchange: exchange,
+                gistOk: gistOk,
+                replyOk: replyOk,
+                peeked: peeked,
+                review: review,
+                day: day,
+                at: at,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String sceneId,
+                required int exchange,
+                required bool gistOk,
+                required bool replyOk,
+                Value<bool> peeked = const Value.absent(),
+                Value<bool> review = const Value.absent(),
+                required String day,
+                required int at,
+              }) => SceneResultsCompanion.insert(
+                id: id,
+                sceneId: sceneId,
+                exchange: exchange,
+                gistOk: gistOk,
+                replyOk: replyOk,
+                peeked: peeked,
+                review: review,
+                day: day,
+                at: at,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SceneResultsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SceneResultsTable,
+      SceneResultRow,
+      $$SceneResultsTableFilterComposer,
+      $$SceneResultsTableOrderingComposer,
+      $$SceneResultsTableAnnotationComposer,
+      $$SceneResultsTableCreateCompanionBuilder,
+      $$SceneResultsTableUpdateCompanionBuilder,
+      (
+        SceneResultRow,
+        BaseReferences<_$AppDatabase, $SceneResultsTable, SceneResultRow>,
+      ),
+      SceneResultRow,
+      PrefetchHooks Function()
+    >;
+typedef $$ReviewsTableCreateCompanionBuilder =
+    ReviewsCompanion Function({
+      required String sceneId,
+      required int exchange,
+      required String dueDay,
+      Value<int> stage,
+      Value<int> rowid,
+    });
+typedef $$ReviewsTableUpdateCompanionBuilder =
+    ReviewsCompanion Function({
+      Value<String> sceneId,
+      Value<int> exchange,
+      Value<String> dueDay,
+      Value<int> stage,
+      Value<int> rowid,
+    });
+
+class $$ReviewsTableFilterComposer
+    extends Composer<_$AppDatabase, $ReviewsTable> {
+  $$ReviewsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get sceneId => $composableBuilder(
+    column: $table.sceneId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get exchange => $composableBuilder(
+    column: $table.exchange,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get dueDay => $composableBuilder(
+    column: $table.dueDay,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stage => $composableBuilder(
+    column: $table.stage,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ReviewsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ReviewsTable> {
+  $$ReviewsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get sceneId => $composableBuilder(
+    column: $table.sceneId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get exchange => $composableBuilder(
+    column: $table.exchange,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get dueDay => $composableBuilder(
+    column: $table.dueDay,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stage => $composableBuilder(
+    column: $table.stage,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ReviewsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ReviewsTable> {
+  $$ReviewsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get sceneId =>
+      $composableBuilder(column: $table.sceneId, builder: (column) => column);
+
+  GeneratedColumn<int> get exchange =>
+      $composableBuilder(column: $table.exchange, builder: (column) => column);
+
+  GeneratedColumn<String> get dueDay =>
+      $composableBuilder(column: $table.dueDay, builder: (column) => column);
+
+  GeneratedColumn<int> get stage =>
+      $composableBuilder(column: $table.stage, builder: (column) => column);
+}
+
+class $$ReviewsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ReviewsTable,
+          ReviewRow,
+          $$ReviewsTableFilterComposer,
+          $$ReviewsTableOrderingComposer,
+          $$ReviewsTableAnnotationComposer,
+          $$ReviewsTableCreateCompanionBuilder,
+          $$ReviewsTableUpdateCompanionBuilder,
+          (ReviewRow, BaseReferences<_$AppDatabase, $ReviewsTable, ReviewRow>),
+          ReviewRow,
+          PrefetchHooks Function()
+        > {
+  $$ReviewsTableTableManager(_$AppDatabase db, $ReviewsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ReviewsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ReviewsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ReviewsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> sceneId = const Value.absent(),
+                Value<int> exchange = const Value.absent(),
+                Value<String> dueDay = const Value.absent(),
+                Value<int> stage = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ReviewsCompanion(
+                sceneId: sceneId,
+                exchange: exchange,
+                dueDay: dueDay,
+                stage: stage,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String sceneId,
+                required int exchange,
+                required String dueDay,
+                Value<int> stage = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ReviewsCompanion.insert(
+                sceneId: sceneId,
+                exchange: exchange,
+                dueDay: dueDay,
+                stage: stage,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ReviewsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ReviewsTable,
+      ReviewRow,
+      $$ReviewsTableFilterComposer,
+      $$ReviewsTableOrderingComposer,
+      $$ReviewsTableAnnotationComposer,
+      $$ReviewsTableCreateCompanionBuilder,
+      $$ReviewsTableUpdateCompanionBuilder,
+      (ReviewRow, BaseReferences<_$AppDatabase, $ReviewsTable, ReviewRow>),
+      ReviewRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -12668,4 +14813,10 @@ class $AppDatabaseManager {
       $$CapturesTableTableManager(_db, _db.captures);
   $$FailuresTableTableManager get failures =>
       $$FailuresTableTableManager(_db, _db.failures);
+  $$ScenesTableTableManager get scenes =>
+      $$ScenesTableTableManager(_db, _db.scenes);
+  $$SceneResultsTableTableManager get sceneResults =>
+      $$SceneResultsTableTableManager(_db, _db.sceneResults);
+  $$ReviewsTableTableManager get reviews =>
+      $$ReviewsTableTableManager(_db, _db.reviews);
 }

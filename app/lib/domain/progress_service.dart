@@ -80,6 +80,18 @@ class AppSettings {
   /// answer feel like it landed.
   final bool haptics;
 
+  /// Asked once, at first run, so the scenes fit the learner's life: '10s',
+  /// '20s', '30s', '40s', '50s+' or '' when not answered. Handed to the AI
+  /// as a description, never shown back as a number.
+  final String ageBand;
+
+  /// Where they want to use English — 'work', 'travel', 'school', 'daily'.
+  /// Orders the built-in scenes and steers the AI's.
+  final List<String> interests;
+
+  /// The first-run walkthrough has been completed (or skipped).
+  final bool tutorialDone;
+
   const AppSettings({
     this.voiceName,
     this.speechRate,
@@ -90,6 +102,9 @@ class AppSettings {
     this.batchSize = 'standard',
     this.sessionSize = baseSessionSize,
     this.haptics = true,
+    this.ageBand = '',
+    this.interests = const [],
+    this.tutorialDone = false,
   });
 
   Difficulty get level => difficulties[difficulty] ?? difficulties['normal']!;
@@ -108,8 +123,14 @@ class AppSettings {
     String? batchSize,
     int? sessionSize,
     bool? haptics,
+    String? ageBand,
+    List<String>? interests,
+    bool? tutorialDone,
   }) =>
       AppSettings(
+        ageBand: ageBand ?? this.ageBand,
+        interests: interests ?? this.interests,
+        tutorialDone: tutorialDone ?? this.tutorialDone,
         voiceName: voiceName ?? this.voiceName,
         speechRate: clearSpeechRate ? null : (speechRate ?? this.speechRate),
         difficulty: difficulty ?? this.difficulty,
@@ -453,6 +474,13 @@ const lowMaterialMark = 6;
 
 /// All three things caught: claim, reason and the weak point. The core of the
 /// listening, weighted like the gist question it replaces.
+/// Scenes: what one exchange and one finished scene pay. Understanding is
+/// worth a little, the reply a little more, and finishing is worth showing
+/// up for — the streak is decided by finishing, not by being right.
+const gistSeeds = 3;
+const replySeeds = 5;
+const sceneCompleteSeeds = 5;
+
 const graspSeeds = 3;
 
 /// The reply came closest to the strong model. The hardest thing here.
@@ -546,3 +574,30 @@ Set<QuestionType>? typesFor(String filter) {
 const ornamentCost = 40;
 
 const ornamentKinds = <String>['ribbon', 'star', 'lantern', 'bell'];
+
+// ------------------------------------------------------------- first run
+
+/// The age groups offered at first run, as stored. Empty means not answered.
+const ageBands = ['10s', '20s', '30s', '40s', '50s+'];
+
+/// Where the learner wants to use English, as stored.
+const interestKinds = ['work', 'travel', 'school', 'daily'];
+
+/// The stored age band as the AI should read it. A description, not a
+/// number: the AI chooses settings and register from it.
+String ageBandDescription(String band) => switch (band) {
+      '10s' => 'teenager (secondary school age)',
+      '20s' => 'in their twenties (student or early career)',
+      '30s' => 'in their thirties',
+      '40s' => 'in their forties',
+      '50s+' => 'fifty or older',
+      _ => '',
+    };
+
+String interestDescription(String kind) => switch (kind) {
+      'work' => 'English at work',
+      'travel' => 'English while travelling abroad',
+      'school' => 'English at school and on campus',
+      'daily' => 'everyday English',
+      _ => kind,
+    };

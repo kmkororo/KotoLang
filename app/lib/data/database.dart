@@ -18,6 +18,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 
 import '../core/util.dart';
 import '../domain/debate.dart' as d;
+import '../domain/scene.dart' as sc;
 import '../domain/models.dart' as m;
 
 part 'database.g.dart';
@@ -277,6 +278,60 @@ class Failures extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// -------------------------------------------------------- schema 5: scenes
+// Listen, choose, grow. A scene is two exchanges, each with a gist question
+// and a reply question; it is stored whole as JSON, like a debate tree was.
+// Built-in scenes are not rows here — they ship with the app in every
+// language and are merged in at read time. Results and reviews refer to
+// scenes by id, which for a built-in scene is stable across languages.
+
+@DataClassName('SceneRow')
+class Scenes extends Table {
+  TextColumn get id => text()();
+  TextColumn get topic => text()();
+  TextColumn get topicNative => text().withDefault(const Constant(''))();
+  TextColumn get settingNative => text().withDefault(const Constant(''))();
+  /// The exchanges as JSON, in order.
+  TextColumn get exchanges => text()();
+  /// 'ai' for scenes the learner's own AI made. Built-ins never sit here.
+  TextColumn get source => text().withDefault(const Constant('ai'))();
+  TextColumn get realmId => text().nullable()();
+  IntColumn get createdAt => integer()();
+  BoolColumn get disabled => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One exchange answered: both questions, and whether the words were shown
+/// before the line was grasped.
+@DataClassName('SceneResultRow')
+class SceneResults extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get sceneId => text()();
+  IntColumn get exchange => integer()();
+  BoolColumn get gistOk => boolean()();
+  BoolColumn get replyOk => boolean()();
+  BoolColumn get peeked => boolean().withDefault(const Constant(false))();
+  /// True when this exchange came up as a review rather than inside its scene.
+  BoolColumn get review => boolean().withDefault(const Constant(false))();
+  TextColumn get day => text()();
+  IntColumn get at => integer()();
+}
+
+/// An exchange that was missed and is owed another look: due the next day,
+/// then three days on, then gone.
+@DataClassName('ReviewRow')
+class Reviews extends Table {
+  TextColumn get sceneId => text()();
+  IntColumn get exchange => integer()();
+  TextColumn get dueDay => text()();
+  IntColumn get stage => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {sceneId, exchange};
+}
+
 /// Single-row-per-key store for settings, profile and progress.
 @DataClassName('MetaRow')
 class Meta extends Table {
@@ -304,13 +359,16 @@ class Meta extends Table {
   Attempts,
   Captures,
   Failures,
+  Scenes,
+  SceneResults,
+  Reviews,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
       : super(executor ?? driftDatabase(name: 'kotolang'));
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -362,6 +420,14 @@ class AppDatabase extends _$AppDatabase {
               await mig.createTable(t);
             }
           }
+          // 4 -> 5 is the scenes: three new tables, nothing reshaped. The
+          // debate tables stay as they are so nothing already stored is lost,
+          // even though the app no longer reads them.
+          if (from < 5) {
+            for (final t in <TableInfo>[scenes, sceneResults, reviews]) {
+              await mig.createTable(t);
+            }
+          }
           await _createIndexes();
         },
         beforeOpen: (details) async {
@@ -389,6 +455,11 @@ class AppDatabase extends _$AppDatabase {
       'CREATE INDEX IF NOT EXISTS idx_captures_consumed ON captures (consumed_at)',
       'CREATE INDEX IF NOT EXISTS idx_failures_consumed ON failures (consumed_at)',
       'CREATE INDEX IF NOT EXISTS idx_debates_event ON debates (event)',
+      // The skills read every result; the day's and the scene's are asked
+      // for directly. Reviews are looked up by what is due.
+      'CREATE INDEX IF NOT EXISTS idx_scene_results_scene ON scene_results (scene_id)',
+      'CREATE INDEX IF NOT EXISTS idx_scene_results_day ON scene_results (day)',
+      'CREATE INDEX IF NOT EXISTS idx_reviews_due ON reviews (due_day)',
     ];
     for (final s in statements) {
       await customStatement(s);
@@ -776,3 +847,67 @@ FailuresCompanion failureToRow(d.Failure f) => FailuresCompanion.insert(
 
 /// Convenience for import batches and reset flows.
 String newBatchId() => uid('batch');
+
+// ------------------------------------------------------------ scenes mapping
+
+extension SceneRowX on SceneRow {
+  sc.Scene toDomain() {
+    final decoded = jsonDecode(exchanges);
+    return sc.Scene(
+      id: id,
+      topic: topic,
+      topicNative: topicNative,
+      settingNative: settingNative,
+      exchanges: [
+        if (decoded is List)
+          for (final e in decoded)
+            if (e is Map) sc.Exchange.fromJson(Map<String, dynamic>.from(e))
+      ],
+      source: sc.SceneSource.parse(source),
+      realmId: realmId,
+      createdAt: createdAt,
+      disabled: disabled,
+    );
+  }
+}
+
+ScenesCompanion sceneToRow(sc.Scene s) => ScenesCompanion.insert(
+      id: s.id,
+      topic: s.topic,
+      topicNative: Value(s.topicNative),
+      settingNative: Value(s.settingNative),
+      exchanges: jsonEncode([for (final e in s.exchanges) e.toJson()]),
+      source: Value(s.source.name),
+      realmId: Value(s.realmId),
+      createdAt: s.createdAt,
+      disabled: Value(s.disabled),
+    );
+
+extension SceneResultRowX on SceneResultRow {
+  sc.SceneResult toDomain() => sc.SceneResult(
+        sceneId: sceneId,
+        exchange: exchange,
+        gistOk: gistOk,
+        replyOk: replyOk,
+        peeked: peeked,
+        review: review,
+        day: day,
+        at: at,
+      );
+}
+
+SceneResultsCompanion sceneResultToRow(sc.SceneResult r) => SceneResultsCompanion.insert(
+      sceneId: r.sceneId,
+      exchange: r.exchange,
+      gistOk: r.gistOk,
+      replyOk: r.replyOk,
+      peeked: Value(r.peeked),
+      review: Value(r.review),
+      day: r.day,
+      at: r.at,
+    );
+
+extension ReviewRowX on ReviewRow {
+  sc.ReviewItem toDomain() =>
+      sc.ReviewItem(sceneId: sceneId, exchange: exchange, dueDay: dueDay, stage: stage);
+}

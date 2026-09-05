@@ -14,12 +14,16 @@ library;
 import 'dart:convert';
 
 import '../core/l10n/languages.dart';
+import 'scene.dart';
 
 const schemaVersion = '1.0';
 
 /// The debate pack is a different shape from the material formats, so it has
 /// its own version; the importer accepts both for ever.
 const packSchemaVersion = '2.0';
+
+/// Scenes — listen, choose, grow. The importer accepts every version for ever.
+const scenesSchemaVersion = '3.0';
 
 class PromptVersions {
   static const profile = 'PROFILE_PROMPT_V1';
@@ -28,6 +32,7 @@ class PromptVersions {
   static const addRealm = 'ADD_REALM_PROMPT_V1';
   static const pack = 'PACK_PROMPT_V1';
   static const critique = 'CRITIQUE_PROMPT_V1';
+  static const scenes = 'SCENES_PROMPT_V1';
 }
 
 String _commonRules(String native) => '''
@@ -737,4 +742,177 @@ ATTEMPTS
 [
 $attemptText
 ]''';
+}
+
+// ------------------------------------------------------------------ scenes
+
+/// How the AI is asked to pitch the scenes. Decided from the learner's recent
+/// results, never typed in: the app reports the numbers and the AI adjusts.
+enum SceneDifficulty {
+  /// The default, and where everyone starts: one or two short sentences,
+  /// school-level words, wrong answers that differ on a big point.
+  easy,
+
+  /// Recent results were high: longer lines, finer mishearings.
+  harder,
+
+  /// Recent results were low: even shorter lines, the most concrete facts.
+  easier,
+}
+
+/// Five scenes for one learner, in one reply.
+///
+/// Everything the exercise relies on is spelled out: one right answer per
+/// question, wrong answers that a mishearing would produce, no names or
+/// titles in the lines, short plain English. The learner's recent results
+/// and mistakes ride along so the next scenes aim at them.
+String scenesPrompt({
+  required String uiLanguage,
+  String level = 'A2',
+  String ageBand = '',
+  List<String> roles = const [],
+  List<String> priorities = const [],
+  List<String> areas = const [],
+  List<String> existingTopics = const [],
+  SceneDifficulty difficulty = SceneDifficulty.easy,
+  ({int gistPct, int replyPct, int exchanges})? recent,
+  List<String> tendencies = const [],
+  int scenes = 5,
+}) {
+  final native = languageFor(uiLanguage).englishName;
+  String list(Iterable<String> xs, String empty) =>
+      xs.isEmpty ? empty : xs.map((x) => '- $x').join('\n');
+
+  final difficultyText = switch (difficulty) {
+    SceneDifficulty.easy =>
+      'EASY. Each line is 1 or 2 short sentences in school-level English. One line carries at most two facts. Wrong answers differ from the right one on a big point (tonight vs tomorrow, stay vs leave, free vs paid).',
+    SceneDifficulty.harder =>
+      'A STEP HARDER than easy. Lines may be 2 or 3 sentences and carry two or three facts. Wrong answers may differ on a finer detail (this morning vs tonight, forty vs four, included vs not included). Vocabulary stays everyday.',
+    SceneDifficulty.easier =>
+      'VERY EASY. One short sentence per line, one fact per line, the most concrete everyday words. Wrong answers differ on the most obvious point.',
+  };
+
+  final recentText = recent == null
+      ? '(no results yet — this is their first set)'
+      : 'Over the last 7 days, across ${recent.exchanges} exchanges: "what did they say?" ${recent.gistPct}% right, "how do you reply?" ${recent.replyPct}% right.';
+
+  final questions = scenes * exchangesPerScene * 2;
+  final perPosition = (questions / 4).floor();
+
+  final learner = StringBuffer()
+    ..writeln('- Native language: $native. Every field ending in _native is written in $native.')
+    ..writeln('- English level: $level.');
+  if (ageBand.isNotEmpty) {
+    learner.writeln('- Age group: $ageBand. Choose settings and a register that fit this age.');
+  }
+  if (roles.isNotEmpty) learner.writeln('- Roles: ${roles.join(', ')}.');
+  if (priorities.isNotEmpty) {
+    learner.writeln('- What they want English for: ${priorities.join(', ')}.');
+  }
+  if (areas.isNotEmpty) learner.writeln('- Areas they practise: ${areas.join(', ')}.');
+  learner.write('- Difficulty for this set: $difficultyText');
+
+  final tendencyText = tendencies.isEmpty
+      ? ''
+      : 'Mistakes they keep making:\n${list(tendencies, '')}\nMake 1 or 2 of the $scenes scenes target these.\n';
+
+  return '''
+You are writing listening practice for one person learning English. They will
+hear a line (spoken by their phone), then answer two three-way questions about
+it. They cannot ask you anything while practising, so everything has to be in
+this reply.
+
+Reply with ONE JSON code block in the exact shape at the end. No greeting, no
+explanation before or after it.
+
+THE LEARNER
+$learner
+
+RECENT RESULTS (aim the scenes at these)
+$recentText
+$tendencyText
+TOPICS THEY ALREADY HAVE (do not repeat any of these)
+${list(existingTopics, '(none yet)')}
+
+WHAT TO WRITE
+$scenes scenes. A scene is $exchangesPerScene exchanges: the other person says a line,
+the learner replies, the other person says one more line, the learner replies.
+It runs straight; there are no branches. The second line follows on from the
+learner having given the RIGHT reply to the first.
+
+Each exchange has two questions:
+1. gist — "What did they say?": three summaries in $native. Exactly one is right.
+2. reply — "How do you reply?": three English replies. Exactly one is right.
+
+RULES — every one of these matters
+1. Every question has exactly one right answer. The other two are answers a
+   person who MISHEARD the line would give.
+2. gist: the two wrong summaries get one key fact wrong — when, who, how
+   much, whether something happens or not (e.g. "stay tonight" becomes "come
+   in early tomorrow" or "go home now").
+3. reply: the right reply answers what was actually said. The two wrong replies
+   are natural English but respond to a misheard version of the line. Never
+   grade on politeness, tone or negotiating skill — a wrong answer must be
+   wrong on the FACTS of what was said, so that no two answers could both be
+   right.
+4. Wrong replies restate the misheard fact, so the mistake shows in the words:
+   good — "Tomorrow evening, right? OK." / bad — "I'll send it tomorrow
+   evening, is that OK?" (a correct listener might also say that). Never use
+   a proposal, preference, negotiation or question that a correct listener
+   might also make.
+5. Wrong replies must still be things people actually say. Do not write a
+   reply that merely negates the request ("OK, I won't check them today",
+   "I don't need a ticket"). Mishear a time, a day, a place, an object or a
+   person instead.
+6. Lines: 1 or 2 sentences, school-level vocabulary, no jargon.
+7. No names, job titles or organisations inside the lines ("as your manager"
+   is also banned). The one line of setting goes in setting_native only.
+8. Each option is one sentence: English up to 15 words, $native up to 40
+   characters.
+9. Spread the right answer's position (0, 1, 2) across questions. Over the
+   $questions questions, use each position at least $perPosition times.
+10. Every English string gets a $native translation (native). Each of the
+    three replies gets a one-sentence "why" in $native: why it is right, or
+    what it misheard.
+11. Fit the scenes to the learner's age, roles and areas above. Do not reuse
+    the topics they already have.
+
+OUTPUT SHAPE (keep the key names exactly; write $native in the *_native
+fields; "answer" is the 0-based index of the right option)
+```json
+{
+  "schema_version": "$scenesSchemaVersion",
+  "type": "scenes",
+  "native_language": "$native",
+  "scenes": [
+    {
+      "topic": "Asked to stay late",
+      "topic_native": "(topic in $native)",
+      "setting_native": "(one line of setting in $native: where and when, never who)",
+      "exchanges": [
+        {
+          "line": "Sorry to ask, but could you stay an extra hour tonight? The client moved the deadline to tomorrow morning.",
+          "line_native": "(translation in $native)",
+          "gist": {
+            "options": ["(wrong: come in early tomorrow)", "(right: stay one hour tonight, deadline moved to tomorrow morning)", "(wrong: go home early tonight)"],
+            "answer": 1
+          },
+          "reply": {
+            "options": [
+              { "text": "One hour is fine. What should I start on?", "native": "(translation)", "why": "(why it is right)" },
+              { "text": "Sure, I'll come in early tomorrow. What time?", "native": "(translation)", "why": "(misheard: tonight as tomorrow morning)" },
+              { "text": "Great, thanks! See you tomorrow then.", "native": "(translation)", "why": "(misheard: stay as go home)" }
+            ],
+            "answer": 0
+          }
+        },
+        { "line": "...", "line_native": "...", "gist": { "options": ["...", "...", "..."], "answer": 2 }, "reply": { "options": [ { "text": "...", "native": "...", "why": "..." }, { "text": "...", "native": "...", "why": "..." }, { "text": "...", "native": "...", "why": "..." } ], "answer": 1 } }
+      ]
+    }
+  ]
+}
+```
+The example above only shows the shape. Do not write that topic; write $scenes new
+scenes in the same shape, with real $native text in every *_native, native and
+why field.''';
 }

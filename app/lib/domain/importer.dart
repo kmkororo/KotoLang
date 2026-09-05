@@ -10,12 +10,13 @@ import 'dart:convert';
 import 'dart:math';
 
 import '../core/util.dart';
+import 'scene_import.dart';
 import 'debate.dart';
 import 'models.dart';
 
 /// 1.0 is profile / material / audit; 2.0 added the debate pack. Both are
 /// accepted for ever — a learner's old material must keep importing.
-const supportedSchemas = ['1.0', '2.0'];
+const supportedSchemas = ['1.0', '2.0', '3.0'];
 const _levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
 // ---------------------------------------------------------------- 1. extract
@@ -119,7 +120,8 @@ bool _looksLikePayload(Map<String, dynamic> m) =>
     m.containsKey('results') ||
     m.containsKey('debates') ||
     m.containsKey('chunks') ||
-    m.containsKey('critiques');
+    m.containsKey('critiques') ||
+    m.containsKey('scenes');
 
 // ------------------------------------------------------- truncation rescue
 
@@ -292,13 +294,14 @@ String appendPiece(String buffer, String piece) {
 /// progress after each piece instead of only succeeding or failing at the end.
 class ImportPreview {
   final bool ok;
-  final String? type; // 'profile' | 'material' | 'audit' | 'pack'
+  final String? type; // 'profile' | 'material' | 'audit' | 'pack' | 'scenes'
   final int realms;
   final int items;
   final int sentences;
   final int debates;
   final int chunks;
   final int critiques;
+  final int scenes;
   final bool repaired;
   const ImportPreview({
     required this.ok,
@@ -309,6 +312,7 @@ class ImportPreview {
     this.debates = 0,
     this.chunks = 0,
     this.critiques = 0,
+    this.scenes = 0,
     this.repaired = false,
   });
   static const none = ImportPreview(ok: false);
@@ -320,6 +324,14 @@ ImportPreview previewImport(String raw) {
 
   final v = validate(ex.data!);
   switch (v.type) {
+    case 'scenes':
+      final n = normaliseScenes(ex.data!);
+      return ImportPreview(
+        ok: v.ok && n.scenes.isNotEmpty,
+        type: 'scenes',
+        scenes: n.scenes.length,
+        repaired: ex.repaired,
+      );
     case 'pack':
       final n = normalisePack(ex.data!);
       return ImportPreview(
@@ -416,9 +428,11 @@ ValidationResult validate(Map<String, dynamic> data) {
   }
 
   var type = data['type'] as String?;
-  if (type == null || !['profile', 'material', 'audit', 'pack'].contains(type)) {
+  if (type == null || !['profile', 'material', 'audit', 'pack', 'scenes'].contains(type)) {
     // Infer when the AI omitted it but the shape is unambiguous.
-    if (data.containsKey('debates') ||
+    if (data.containsKey('scenes')) {
+      type = 'scenes';
+    } else if (data.containsKey('debates') ||
         data.containsKey('chunks') ||
         data.containsKey('critiques')) {
       type = 'pack';
@@ -429,11 +443,17 @@ ValidationResult validate(Map<String, dynamic> data) {
     } else if (data.containsKey('results')) {
       type = 'audit';
     } else {
-      errors.add('type is not profile, material, audit or pack');
+      errors.add('type is not profile, material, audit, pack or scenes');
     }
   }
 
   switch (type) {
+    case 'scenes':
+      if (data['scenes'] is! List) {
+        errors.add('scenes is not a list');
+      } else if ((data['scenes'] as List).isEmpty) {
+        errors.add('scenes is empty');
+      }
     case 'pack':
       // Any one of the three is enough: a critique-only reply is a real pack.
       final lists = ['debates', 'chunks', 'critiques'];

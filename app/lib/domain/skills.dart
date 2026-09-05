@@ -1,15 +1,14 @@
-/// The two skills the app exists for, read off the exchange log.
+/// The two skills the app exists for, read off the exchange results.
 ///
-/// Understanding: did the learner catch what the opponent said — claim,
-/// reason, weak point — and by ear alone? Arguing back: did the reply come
-/// nearest to the strong model, carry the strong reply's shape, and how did
-/// the arguments end? Nothing here is stored; every figure is a reading of
-/// attempts and the slips written down beside them, so a restored backup
-/// shows the same numbers and no counter can drift from the record.
+/// Understanding: did the learner catch what was said — and by ear alone?
+/// Replying: did they pick the reply that answers what was actually said?
+/// Nothing here is stored; every figure is a reading of the results, so a
+/// restored backup shows the same numbers and no counter can drift from the
+/// record.
 library;
 
-import 'debate.dart';
-import 'debate_logic.dart';
+import '../core/util.dart';
+import 'scene.dart';
 
 /// A rate as a count over a base. `pct` is null while there is nothing to
 /// divide, so the screen can say "—" rather than "0%".
@@ -20,134 +19,89 @@ class Rate {
   int? get pct => of == 0 ? null : (hit * 100 / of).round();
 }
 
+/// The two skills over one span of results.
+class SkillPair {
+  final Rate gist;
+  final Rate reply;
+
+  /// Gist answered right with the words hidden.
+  final Rate byEar;
+  const SkillPair({required this.gist, required this.reply, required this.byEar});
+
+  static const empty = SkillPair(gist: Rate(0, 0), reply: Rate(0, 0), byEar: Rate(0, 0));
+}
+
 class SkillStats {
-  /// Exchanges argued, in total and today.
+  /// Exchanges answered in total, scenes finished (exchanges / 2, reviews
+  /// excluded), and exchanges answered today.
   final int exchanges;
+  final int scenes;
   final int today;
 
-  // ---- understanding
-  final Rate claim;
-  final Rate reason;
-  final Rate weakPoint;
+  final SkillPair all;
+  final SkillPair week;
 
-  /// Exchanges where the line was caught with the words hidden.
-  final Rate byEar;
-
-  // ---- arguing back
-  /// Replies that came nearest to the strong model.
-  final Rate strong;
-
-  /// Replies carrying every move of the strong model.
-  final Rate fullShape;
-
-  /// How many replies made each move, over all exchanges.
-  final Map<Move, int> moves;
-
-  /// How the arguments that reached a leaf ended.
-  final Map<Outcome, int> outcomes;
-
-  /// Calendar days with at least one exchange.
-  final Set<String> days;
+  /// Calendar days with at least one exchange, for the streak strip and the
+  /// heatmap.
+  final Map<String, int> perDay;
 
   const SkillStats({
     required this.exchanges,
+    required this.scenes,
     required this.today,
-    required this.claim,
-    required this.reason,
-    required this.weakPoint,
-    required this.byEar,
-    required this.strong,
-    required this.fullShape,
-    required this.moves,
-    required this.outcomes,
-    required this.days,
+    required this.all,
+    required this.week,
+    required this.perDay,
   });
 
   static const empty = SkillStats(
     exchanges: 0,
+    scenes: 0,
     today: 0,
-    claim: Rate(0, 0),
-    reason: Rate(0, 0),
-    weakPoint: Rate(0, 0),
-    byEar: Rate(0, 0),
-    strong: Rate(0, 0),
-    fullShape: Rate(0, 0),
-    moves: {},
-    outcomes: {},
-    days: {},
+    all: SkillPair.empty,
+    week: SkillPair.empty,
+    perDay: {},
   );
+
+  Set<String> get days => perDay.keys.toSet();
 }
 
-/// A slip belongs to the exchange it was written beside: same tree, same
-/// line, and within this many milliseconds of the attempt. The two are
-/// written one after the other, so the gap is a few milliseconds in practice;
-/// the window is wide only so a slow disk cannot separate them.
-const _slipWindowMs = 15000;
-
-SkillStats skillStats({
-  required List<Attempt> attempts,
-  required List<Failure> failures,
-  required Map<String, DebateTree> trees,
-  required String today,
-}) {
-  if (attempts.isEmpty) return SkillStats.empty;
-
-  var claimHit = 0, reasonHit = 0, weakHit = 0, byEar = 0, strong = 0, shape = 0;
-  final moves = <Move, int>{};
-  final outcomes = <Outcome, int>{};
-  final days = <String>{};
-  var todayCount = 0;
-
-  for (final a in attempts) {
-    final kinds = <String>{
-      for (final f in failures)
-        if (f.debateId == a.debateId &&
-            f.nodeId == a.nodeId &&
-            (f.at - a.at).abs() <= _slipWindowMs)
-          f.kind
-    };
-    if (!kinds.contains(FailureKind.claimMissed)) claimHit++;
-    if (!kinds.contains(FailureKind.reasonMissed)) reasonHit++;
-    if (!kinds.contains(FailureKind.weakPointMissed)) weakHit++;
-    if (!kinds.contains(FailureKind.peeked)) byEar++;
-    if (a.closestStrength == Strength.strong) strong++;
-    if (!kinds.any((k) => k.startsWith('missing_move:'))) shape++;
-    for (final m in a.moves) {
-      moves[m] = (moves[m] ?? 0) + 1;
-    }
-    days.add(a.day);
-    if (a.day == today) todayCount++;
-
-    // The outcome is not stored on the attempt: it is what the tree says the
-    // closest reply leads to, and only a leaf ends anything.
-    final r = trees[a.debateId]
-        ?.node(a.nodeId)
-        ?.rebuttals
-        .where((r) => r.id == a.closest)
-        .firstOrNull;
-    if (r != null && r.isLeaf) {
-      final o = r.outcome ?? Outcome.forStrength(r.strength);
-      outcomes[o] = (outcomes[o] ?? 0) + 1;
-    }
+SkillPair _pair(Iterable<SceneResult> rs) {
+  var n = 0, gist = 0, reply = 0, ear = 0;
+  for (final r in rs) {
+    n++;
+    if (r.gistOk) gist++;
+    if (r.replyOk) reply++;
+    if (r.gistOk && !r.peeked) ear++;
   }
+  return SkillPair(gist: Rate(gist, n), reply: Rate(reply, n), byEar: Rate(ear, n));
+}
 
-  final n = attempts.length;
+SkillStats skillStats(List<SceneResult> results, {required String today}) {
+  if (results.isEmpty) return SkillStats.empty;
+  final weekStart = addDays(today, -6);
+  final perDay = <String, int>{};
+  for (final r in results) {
+    perDay[r.day] = (perDay[r.day] ?? 0) + 1;
+  }
   return SkillStats(
-    exchanges: n,
-    today: todayCount,
-    claim: Rate(claimHit, n),
-    reason: Rate(reasonHit, n),
-    weakPoint: Rate(weakHit, n),
-    byEar: Rate(byEar, n),
-    strong: Rate(strong, n),
-    fullShape: Rate(shape, n),
-    moves: moves,
-    outcomes: outcomes,
-    days: days,
+    exchanges: results.length,
+    scenes: results.where((r) => !r.review).length ~/ exchangesPerScene,
+    today: perDay[today] ?? 0,
+    all: _pair(results),
+    week: _pair(results.where((r) => r.day.compareTo(weekStart) >= 0)),
+    perDay: perDay,
   );
 }
 
-/// Seeds for reporting that a reply was used in a real conversation. The
-/// largest single payment in the app, because it is the only one for
-/// something that happened outside it.
-const claimUsedSeeds = 25;
+/// What the next set of scenes should be pitched at, from the last week.
+/// High and plenty of them: a step harder. Low: easier. Otherwise, and for
+/// anyone new, easy — where everyone starts.
+String difficultyFor(SkillStats s) {
+  final w = s.week;
+  if (w.gist.of < 8) return 'easy';
+  final avg = ((w.gist.pct ?? 0) + (w.reply.pct ?? 0)) / 2;
+  if (avg >= 85) return 'harder';
+  if (avg < 50) return 'easier';
+  return 'easy';
+}

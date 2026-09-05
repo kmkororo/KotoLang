@@ -1,4 +1,4 @@
-/// Upgrading an existing library across schema versions: 1 -> 2 -> 3 -> 4.
+/// Upgrading an existing library across schema versions: 1 -> 2 -> 3 -> 4 -> 5.
 ///
 /// Someone who has been studying for months has an old database on their
 /// phone, and the upgrade runs on it unattended the first time they open the
@@ -32,6 +32,7 @@ const _addedInSchema2ToSentences = [
 const _addedInSchema2ToQuestions = ['cue_text', 'cue_translation_native', 'note'];
 const _addedInSchema3ToRealms = ['unlocked'];
 const _addedInSchema4Tables = ['chunks', 'debates', 'attempts', 'captures', 'failures'];
+const _addedInSchema5Tables = ['scenes', 'scene_results', 'reviews'];
 
 void main() {
   late File file;
@@ -126,6 +127,17 @@ void main() {
       await db.customStatement('DROP TABLE $t');
     }
     await db.customStatement('PRAGMA user_version = 3');
+    await db.close();
+  }
+
+  /// Every table of the debate gym, none of the scene tables.
+  Future<void> seedSchemaFour() async {
+    final db = AppDatabase(NativeDatabase(file));
+    await seedContent(Repository(db));
+    for (final t in _addedInSchema5Tables) {
+      await db.customStatement('DROP TABLE $t');
+    }
+    await db.customStatement('PRAGMA user_version = 4');
     await db.close();
   }
 
@@ -280,10 +292,31 @@ void main() {
     expect(
         (await reopened.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        4);
+        5);
   });
 
-  test('a fresh schema 4 database needs no migration at all', () async {
+  test('a schema 4 library gains the scene tables and keeps its debates', () async {
+    await seedSchemaFour();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    final repo = Repository(reopened);
+    addTearDown(reopened.close);
+
+    expect((await repo.realms()).single.unlocked, isTrue);
+    expect((await repo.loadProgress()).streak, 1);
+    for (final t in _addedInSchema5Tables) {
+      final n = (await reopened.customSelect('SELECT COUNT(*) AS c FROM $t').getSingle())
+          .read<int>('c');
+      expect(n, 0, reason: '$t should exist and be empty after the upgrade');
+    }
+    await repo.recordSceneExchange(sceneId: 'x', exchange: 0, gistOk: true, replyOk: false);
+    expect(await repo.reviews(), hasLength(1));
+    expect(
+        (await reopened.customSelect('PRAGMA user_version').getSingle()).read<int>('user_version'),
+        5);
+  });
+
+  test('a fresh schema 5 database needs no migration at all', () async {
     final db = AppDatabase(NativeDatabase(file));
     await seedContent(Repository(db));
     await db.close();
