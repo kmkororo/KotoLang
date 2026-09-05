@@ -5973,6 +5973,2481 @@ class MetaCompanion extends UpdateCompanion<MetaRow> {
   }
 }
 
+class $ChunksTable extends Chunks with TableInfo<$ChunksTable, ChunkRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ChunksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _moveMeta = const VerificationMeta('move');
+  @override
+  late final GeneratedColumn<String> move = GeneratedColumn<String>(
+    'move',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'text',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nativeMeta = const VerificationMeta('native');
+  @override
+  late final GeneratedColumn<String> native = GeneratedColumn<String>(
+    'native',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, move, body, native];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'chunks';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ChunkRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('move')) {
+      context.handle(
+        _moveMeta,
+        move.isAcceptableOrUnknown(data['move']!, _moveMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_moveMeta);
+    }
+    if (data.containsKey('text')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['text']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('native')) {
+      context.handle(
+        _nativeMeta,
+        native.isAcceptableOrUnknown(data['native']!, _nativeMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ChunkRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ChunkRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      move: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}move'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}text'],
+      )!,
+      native: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}native'],
+      )!,
+    );
+  }
+
+  @override
+  $ChunksTable createAlias(String alias) {
+    return $ChunksTable(attachedDatabase, alias);
+  }
+}
+
+class ChunkRow extends DataClass implements Insertable<ChunkRow> {
+  final String id;
+  final String move;
+  final String body;
+  final String native;
+  const ChunkRow({
+    required this.id,
+    required this.move,
+    required this.body,
+    required this.native,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['move'] = Variable<String>(move);
+    map['text'] = Variable<String>(body);
+    map['native'] = Variable<String>(native);
+    return map;
+  }
+
+  ChunksCompanion toCompanion(bool nullToAbsent) {
+    return ChunksCompanion(
+      id: Value(id),
+      move: Value(move),
+      body: Value(body),
+      native: Value(native),
+    );
+  }
+
+  factory ChunkRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ChunkRow(
+      id: serializer.fromJson<String>(json['id']),
+      move: serializer.fromJson<String>(json['move']),
+      body: serializer.fromJson<String>(json['body']),
+      native: serializer.fromJson<String>(json['native']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'move': serializer.toJson<String>(move),
+      'body': serializer.toJson<String>(body),
+      'native': serializer.toJson<String>(native),
+    };
+  }
+
+  ChunkRow copyWith({String? id, String? move, String? body, String? native}) =>
+      ChunkRow(
+        id: id ?? this.id,
+        move: move ?? this.move,
+        body: body ?? this.body,
+        native: native ?? this.native,
+      );
+  ChunkRow copyWithCompanion(ChunksCompanion data) {
+    return ChunkRow(
+      id: data.id.present ? data.id.value : this.id,
+      move: data.move.present ? data.move.value : this.move,
+      body: data.body.present ? data.body.value : this.body,
+      native: data.native.present ? data.native.value : this.native,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ChunkRow(')
+          ..write('id: $id, ')
+          ..write('move: $move, ')
+          ..write('body: $body, ')
+          ..write('native: $native')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, move, body, native);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ChunkRow &&
+          other.id == this.id &&
+          other.move == this.move &&
+          other.body == this.body &&
+          other.native == this.native);
+}
+
+class ChunksCompanion extends UpdateCompanion<ChunkRow> {
+  final Value<String> id;
+  final Value<String> move;
+  final Value<String> body;
+  final Value<String> native;
+  final Value<int> rowid;
+  const ChunksCompanion({
+    this.id = const Value.absent(),
+    this.move = const Value.absent(),
+    this.body = const Value.absent(),
+    this.native = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ChunksCompanion.insert({
+    required String id,
+    required String move,
+    required String body,
+    this.native = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       move = Value(move),
+       body = Value(body);
+  static Insertable<ChunkRow> custom({
+    Expression<String>? id,
+    Expression<String>? move,
+    Expression<String>? body,
+    Expression<String>? native,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (move != null) 'move': move,
+      if (body != null) 'text': body,
+      if (native != null) 'native': native,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ChunksCompanion copyWith({
+    Value<String>? id,
+    Value<String>? move,
+    Value<String>? body,
+    Value<String>? native,
+    Value<int>? rowid,
+  }) {
+    return ChunksCompanion(
+      id: id ?? this.id,
+      move: move ?? this.move,
+      body: body ?? this.body,
+      native: native ?? this.native,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (move.present) {
+      map['move'] = Variable<String>(move.value);
+    }
+    if (body.present) {
+      map['text'] = Variable<String>(body.value);
+    }
+    if (native.present) {
+      map['native'] = Variable<String>(native.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ChunksCompanion(')
+          ..write('id: $id, ')
+          ..write('move: $move, ')
+          ..write('body: $body, ')
+          ..write('native: $native, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DebatesTable extends Debates with TableInfo<$DebatesTable, DebateRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DebatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _topicMeta = const VerificationMeta('topic');
+  @override
+  late final GeneratedColumn<String> topic = GeneratedColumn<String>(
+    'topic',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _topicNativeMeta = const VerificationMeta(
+    'topicNative',
+  );
+  @override
+  late final GeneratedColumn<String> topicNative = GeneratedColumn<String>(
+    'topic_native',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _eventMeta = const VerificationMeta('event');
+  @override
+  late final GeneratedColumn<String> event = GeneratedColumn<String>(
+    'event',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _personaMeta = const VerificationMeta(
+    'persona',
+  );
+  @override
+  late final GeneratedColumn<String> persona = GeneratedColumn<String>(
+    'persona',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _personaNativeMeta = const VerificationMeta(
+    'personaNative',
+  );
+  @override
+  late final GeneratedColumn<String> personaNative = GeneratedColumn<String>(
+    'persona_native',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<String> position = GeneratedColumn<String>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _positionNativeMeta = const VerificationMeta(
+    'positionNative',
+  );
+  @override
+  late final GeneratedColumn<String> positionNative = GeneratedColumn<String>(
+    'position_native',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _realmIdMeta = const VerificationMeta(
+    'realmId',
+  );
+  @override
+  late final GeneratedColumn<String> realmId = GeneratedColumn<String>(
+    'realm_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _nodesMeta = const VerificationMeta('nodes');
+  @override
+  late final GeneratedColumn<String> nodes = GeneratedColumn<String>(
+    'nodes',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _disabledMeta = const VerificationMeta(
+    'disabled',
+  );
+  @override
+  late final GeneratedColumn<bool> disabled = GeneratedColumn<bool>(
+    'disabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("disabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    topic,
+    topicNative,
+    event,
+    persona,
+    personaNative,
+    position,
+    positionNative,
+    realmId,
+    nodes,
+    createdAt,
+    disabled,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'debates';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DebateRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('topic')) {
+      context.handle(
+        _topicMeta,
+        topic.isAcceptableOrUnknown(data['topic']!, _topicMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_topicMeta);
+    }
+    if (data.containsKey('topic_native')) {
+      context.handle(
+        _topicNativeMeta,
+        topicNative.isAcceptableOrUnknown(
+          data['topic_native']!,
+          _topicNativeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('event')) {
+      context.handle(
+        _eventMeta,
+        event.isAcceptableOrUnknown(data['event']!, _eventMeta),
+      );
+    }
+    if (data.containsKey('persona')) {
+      context.handle(
+        _personaMeta,
+        persona.isAcceptableOrUnknown(data['persona']!, _personaMeta),
+      );
+    }
+    if (data.containsKey('persona_native')) {
+      context.handle(
+        _personaNativeMeta,
+        personaNative.isAcceptableOrUnknown(
+          data['persona_native']!,
+          _personaNativeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    }
+    if (data.containsKey('position_native')) {
+      context.handle(
+        _positionNativeMeta,
+        positionNative.isAcceptableOrUnknown(
+          data['position_native']!,
+          _positionNativeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('realm_id')) {
+      context.handle(
+        _realmIdMeta,
+        realmId.isAcceptableOrUnknown(data['realm_id']!, _realmIdMeta),
+      );
+    }
+    if (data.containsKey('nodes')) {
+      context.handle(
+        _nodesMeta,
+        nodes.isAcceptableOrUnknown(data['nodes']!, _nodesMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nodesMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('disabled')) {
+      context.handle(
+        _disabledMeta,
+        disabled.isAcceptableOrUnknown(data['disabled']!, _disabledMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DebateRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DebateRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      topic: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}topic'],
+      )!,
+      topicNative: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}topic_native'],
+      )!,
+      event: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event'],
+      ),
+      persona: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}persona'],
+      )!,
+      personaNative: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}persona_native'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}position'],
+      )!,
+      positionNative: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}position_native'],
+      )!,
+      realmId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}realm_id'],
+      ),
+      nodes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}nodes'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
+      disabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}disabled'],
+      )!,
+    );
+  }
+
+  @override
+  $DebatesTable createAlias(String alias) {
+    return $DebatesTable(attachedDatabase, alias);
+  }
+}
+
+class DebateRow extends DataClass implements Insertable<DebateRow> {
+  final String id;
+  final String topic;
+  final String topicNative;
+  final String? event;
+  final String persona;
+  final String personaNative;
+  final String position;
+  final String positionNative;
+  final String? realmId;
+
+  /// The node list as JSON, in tree order; the first node is the root.
+  final String nodes;
+  final int createdAt;
+  final bool disabled;
+  const DebateRow({
+    required this.id,
+    required this.topic,
+    required this.topicNative,
+    this.event,
+    required this.persona,
+    required this.personaNative,
+    required this.position,
+    required this.positionNative,
+    this.realmId,
+    required this.nodes,
+    required this.createdAt,
+    required this.disabled,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['topic'] = Variable<String>(topic);
+    map['topic_native'] = Variable<String>(topicNative);
+    if (!nullToAbsent || event != null) {
+      map['event'] = Variable<String>(event);
+    }
+    map['persona'] = Variable<String>(persona);
+    map['persona_native'] = Variable<String>(personaNative);
+    map['position'] = Variable<String>(position);
+    map['position_native'] = Variable<String>(positionNative);
+    if (!nullToAbsent || realmId != null) {
+      map['realm_id'] = Variable<String>(realmId);
+    }
+    map['nodes'] = Variable<String>(nodes);
+    map['created_at'] = Variable<int>(createdAt);
+    map['disabled'] = Variable<bool>(disabled);
+    return map;
+  }
+
+  DebatesCompanion toCompanion(bool nullToAbsent) {
+    return DebatesCompanion(
+      id: Value(id),
+      topic: Value(topic),
+      topicNative: Value(topicNative),
+      event: event == null && nullToAbsent
+          ? const Value.absent()
+          : Value(event),
+      persona: Value(persona),
+      personaNative: Value(personaNative),
+      position: Value(position),
+      positionNative: Value(positionNative),
+      realmId: realmId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(realmId),
+      nodes: Value(nodes),
+      createdAt: Value(createdAt),
+      disabled: Value(disabled),
+    );
+  }
+
+  factory DebateRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DebateRow(
+      id: serializer.fromJson<String>(json['id']),
+      topic: serializer.fromJson<String>(json['topic']),
+      topicNative: serializer.fromJson<String>(json['topicNative']),
+      event: serializer.fromJson<String?>(json['event']),
+      persona: serializer.fromJson<String>(json['persona']),
+      personaNative: serializer.fromJson<String>(json['personaNative']),
+      position: serializer.fromJson<String>(json['position']),
+      positionNative: serializer.fromJson<String>(json['positionNative']),
+      realmId: serializer.fromJson<String?>(json['realmId']),
+      nodes: serializer.fromJson<String>(json['nodes']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      disabled: serializer.fromJson<bool>(json['disabled']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'topic': serializer.toJson<String>(topic),
+      'topicNative': serializer.toJson<String>(topicNative),
+      'event': serializer.toJson<String?>(event),
+      'persona': serializer.toJson<String>(persona),
+      'personaNative': serializer.toJson<String>(personaNative),
+      'position': serializer.toJson<String>(position),
+      'positionNative': serializer.toJson<String>(positionNative),
+      'realmId': serializer.toJson<String?>(realmId),
+      'nodes': serializer.toJson<String>(nodes),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'disabled': serializer.toJson<bool>(disabled),
+    };
+  }
+
+  DebateRow copyWith({
+    String? id,
+    String? topic,
+    String? topicNative,
+    Value<String?> event = const Value.absent(),
+    String? persona,
+    String? personaNative,
+    String? position,
+    String? positionNative,
+    Value<String?> realmId = const Value.absent(),
+    String? nodes,
+    int? createdAt,
+    bool? disabled,
+  }) => DebateRow(
+    id: id ?? this.id,
+    topic: topic ?? this.topic,
+    topicNative: topicNative ?? this.topicNative,
+    event: event.present ? event.value : this.event,
+    persona: persona ?? this.persona,
+    personaNative: personaNative ?? this.personaNative,
+    position: position ?? this.position,
+    positionNative: positionNative ?? this.positionNative,
+    realmId: realmId.present ? realmId.value : this.realmId,
+    nodes: nodes ?? this.nodes,
+    createdAt: createdAt ?? this.createdAt,
+    disabled: disabled ?? this.disabled,
+  );
+  DebateRow copyWithCompanion(DebatesCompanion data) {
+    return DebateRow(
+      id: data.id.present ? data.id.value : this.id,
+      topic: data.topic.present ? data.topic.value : this.topic,
+      topicNative: data.topicNative.present
+          ? data.topicNative.value
+          : this.topicNative,
+      event: data.event.present ? data.event.value : this.event,
+      persona: data.persona.present ? data.persona.value : this.persona,
+      personaNative: data.personaNative.present
+          ? data.personaNative.value
+          : this.personaNative,
+      position: data.position.present ? data.position.value : this.position,
+      positionNative: data.positionNative.present
+          ? data.positionNative.value
+          : this.positionNative,
+      realmId: data.realmId.present ? data.realmId.value : this.realmId,
+      nodes: data.nodes.present ? data.nodes.value : this.nodes,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      disabled: data.disabled.present ? data.disabled.value : this.disabled,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DebateRow(')
+          ..write('id: $id, ')
+          ..write('topic: $topic, ')
+          ..write('topicNative: $topicNative, ')
+          ..write('event: $event, ')
+          ..write('persona: $persona, ')
+          ..write('personaNative: $personaNative, ')
+          ..write('position: $position, ')
+          ..write('positionNative: $positionNative, ')
+          ..write('realmId: $realmId, ')
+          ..write('nodes: $nodes, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('disabled: $disabled')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    topic,
+    topicNative,
+    event,
+    persona,
+    personaNative,
+    position,
+    positionNative,
+    realmId,
+    nodes,
+    createdAt,
+    disabled,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DebateRow &&
+          other.id == this.id &&
+          other.topic == this.topic &&
+          other.topicNative == this.topicNative &&
+          other.event == this.event &&
+          other.persona == this.persona &&
+          other.personaNative == this.personaNative &&
+          other.position == this.position &&
+          other.positionNative == this.positionNative &&
+          other.realmId == this.realmId &&
+          other.nodes == this.nodes &&
+          other.createdAt == this.createdAt &&
+          other.disabled == this.disabled);
+}
+
+class DebatesCompanion extends UpdateCompanion<DebateRow> {
+  final Value<String> id;
+  final Value<String> topic;
+  final Value<String> topicNative;
+  final Value<String?> event;
+  final Value<String> persona;
+  final Value<String> personaNative;
+  final Value<String> position;
+  final Value<String> positionNative;
+  final Value<String?> realmId;
+  final Value<String> nodes;
+  final Value<int> createdAt;
+  final Value<bool> disabled;
+  final Value<int> rowid;
+  const DebatesCompanion({
+    this.id = const Value.absent(),
+    this.topic = const Value.absent(),
+    this.topicNative = const Value.absent(),
+    this.event = const Value.absent(),
+    this.persona = const Value.absent(),
+    this.personaNative = const Value.absent(),
+    this.position = const Value.absent(),
+    this.positionNative = const Value.absent(),
+    this.realmId = const Value.absent(),
+    this.nodes = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.disabled = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DebatesCompanion.insert({
+    required String id,
+    required String topic,
+    this.topicNative = const Value.absent(),
+    this.event = const Value.absent(),
+    this.persona = const Value.absent(),
+    this.personaNative = const Value.absent(),
+    this.position = const Value.absent(),
+    this.positionNative = const Value.absent(),
+    this.realmId = const Value.absent(),
+    required String nodes,
+    required int createdAt,
+    this.disabled = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       topic = Value(topic),
+       nodes = Value(nodes),
+       createdAt = Value(createdAt);
+  static Insertable<DebateRow> custom({
+    Expression<String>? id,
+    Expression<String>? topic,
+    Expression<String>? topicNative,
+    Expression<String>? event,
+    Expression<String>? persona,
+    Expression<String>? personaNative,
+    Expression<String>? position,
+    Expression<String>? positionNative,
+    Expression<String>? realmId,
+    Expression<String>? nodes,
+    Expression<int>? createdAt,
+    Expression<bool>? disabled,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (topic != null) 'topic': topic,
+      if (topicNative != null) 'topic_native': topicNative,
+      if (event != null) 'event': event,
+      if (persona != null) 'persona': persona,
+      if (personaNative != null) 'persona_native': personaNative,
+      if (position != null) 'position': position,
+      if (positionNative != null) 'position_native': positionNative,
+      if (realmId != null) 'realm_id': realmId,
+      if (nodes != null) 'nodes': nodes,
+      if (createdAt != null) 'created_at': createdAt,
+      if (disabled != null) 'disabled': disabled,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DebatesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? topic,
+    Value<String>? topicNative,
+    Value<String?>? event,
+    Value<String>? persona,
+    Value<String>? personaNative,
+    Value<String>? position,
+    Value<String>? positionNative,
+    Value<String?>? realmId,
+    Value<String>? nodes,
+    Value<int>? createdAt,
+    Value<bool>? disabled,
+    Value<int>? rowid,
+  }) {
+    return DebatesCompanion(
+      id: id ?? this.id,
+      topic: topic ?? this.topic,
+      topicNative: topicNative ?? this.topicNative,
+      event: event ?? this.event,
+      persona: persona ?? this.persona,
+      personaNative: personaNative ?? this.personaNative,
+      position: position ?? this.position,
+      positionNative: positionNative ?? this.positionNative,
+      realmId: realmId ?? this.realmId,
+      nodes: nodes ?? this.nodes,
+      createdAt: createdAt ?? this.createdAt,
+      disabled: disabled ?? this.disabled,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (topic.present) {
+      map['topic'] = Variable<String>(topic.value);
+    }
+    if (topicNative.present) {
+      map['topic_native'] = Variable<String>(topicNative.value);
+    }
+    if (event.present) {
+      map['event'] = Variable<String>(event.value);
+    }
+    if (persona.present) {
+      map['persona'] = Variable<String>(persona.value);
+    }
+    if (personaNative.present) {
+      map['persona_native'] = Variable<String>(personaNative.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<String>(position.value);
+    }
+    if (positionNative.present) {
+      map['position_native'] = Variable<String>(positionNative.value);
+    }
+    if (realmId.present) {
+      map['realm_id'] = Variable<String>(realmId.value);
+    }
+    if (nodes.present) {
+      map['nodes'] = Variable<String>(nodes.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (disabled.present) {
+      map['disabled'] = Variable<bool>(disabled.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DebatesCompanion(')
+          ..write('id: $id, ')
+          ..write('topic: $topic, ')
+          ..write('topicNative: $topicNative, ')
+          ..write('event: $event, ')
+          ..write('persona: $persona, ')
+          ..write('personaNative: $personaNative, ')
+          ..write('position: $position, ')
+          ..write('positionNative: $positionNative, ')
+          ..write('realmId: $realmId, ')
+          ..write('nodes: $nodes, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('disabled: $disabled, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AttemptsTable extends Attempts
+    with TableInfo<$AttemptsTable, AttemptRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AttemptsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _debateIdMeta = const VerificationMeta(
+    'debateId',
+  );
+  @override
+  late final GeneratedColumn<String> debateId = GeneratedColumn<String>(
+    'debate_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nodeIdMeta = const VerificationMeta('nodeId');
+  @override
+  late final GeneratedColumn<String> nodeId = GeneratedColumn<String>(
+    'node_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _youSaidMeta = const VerificationMeta(
+    'youSaid',
+  );
+  @override
+  late final GeneratedColumn<String> youSaid = GeneratedColumn<String>(
+    'you_said',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<List<String>, String> moves =
+      GeneratedColumn<String>(
+        'moves',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('[]'),
+      ).withConverter<List<String>>($AttemptsTable.$convertermoves);
+  static const VerificationMeta _closestMeta = const VerificationMeta(
+    'closest',
+  );
+  @override
+  late final GeneratedColumn<String> closest = GeneratedColumn<String>(
+    'closest',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _closestStrengthMeta = const VerificationMeta(
+    'closestStrength',
+  );
+  @override
+  late final GeneratedColumn<String> closestStrength = GeneratedColumn<String>(
+    'closest_strength',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _dayMeta = const VerificationMeta('day');
+  @override
+  late final GeneratedColumn<String> day = GeneratedColumn<String>(
+    'day',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _atMeta = const VerificationMeta('at');
+  @override
+  late final GeneratedColumn<int> at = GeneratedColumn<int>(
+    'at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _critiqueMeta = const VerificationMeta(
+    'critique',
+  );
+  @override
+  late final GeneratedColumn<String> critique = GeneratedColumn<String>(
+    'critique',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    debateId,
+    nodeId,
+    youSaid,
+    moves,
+    closest,
+    closestStrength,
+    day,
+    at,
+    critique,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'attempts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AttemptRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('debate_id')) {
+      context.handle(
+        _debateIdMeta,
+        debateId.isAcceptableOrUnknown(data['debate_id']!, _debateIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_debateIdMeta);
+    }
+    if (data.containsKey('node_id')) {
+      context.handle(
+        _nodeIdMeta,
+        nodeId.isAcceptableOrUnknown(data['node_id']!, _nodeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nodeIdMeta);
+    }
+    if (data.containsKey('you_said')) {
+      context.handle(
+        _youSaidMeta,
+        youSaid.isAcceptableOrUnknown(data['you_said']!, _youSaidMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_youSaidMeta);
+    }
+    if (data.containsKey('closest')) {
+      context.handle(
+        _closestMeta,
+        closest.isAcceptableOrUnknown(data['closest']!, _closestMeta),
+      );
+    }
+    if (data.containsKey('closest_strength')) {
+      context.handle(
+        _closestStrengthMeta,
+        closestStrength.isAcceptableOrUnknown(
+          data['closest_strength']!,
+          _closestStrengthMeta,
+        ),
+      );
+    }
+    if (data.containsKey('day')) {
+      context.handle(
+        _dayMeta,
+        day.isAcceptableOrUnknown(data['day']!, _dayMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dayMeta);
+    }
+    if (data.containsKey('at')) {
+      context.handle(_atMeta, at.isAcceptableOrUnknown(data['at']!, _atMeta));
+    } else if (isInserting) {
+      context.missing(_atMeta);
+    }
+    if (data.containsKey('critique')) {
+      context.handle(
+        _critiqueMeta,
+        critique.isAcceptableOrUnknown(data['critique']!, _critiqueMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AttemptRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AttemptRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      debateId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}debate_id'],
+      )!,
+      nodeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}node_id'],
+      )!,
+      youSaid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}you_said'],
+      )!,
+      moves: $AttemptsTable.$convertermoves.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}moves'],
+        )!,
+      ),
+      closest: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}closest'],
+      ),
+      closestStrength: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}closest_strength'],
+      ),
+      day: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}day'],
+      )!,
+      at: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}at'],
+      )!,
+      critique: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}critique'],
+      ),
+    );
+  }
+
+  @override
+  $AttemptsTable createAlias(String alias) {
+    return $AttemptsTable(attachedDatabase, alias);
+  }
+
+  static TypeConverter<List<String>, String> $convertermoves =
+      const StringListConverter();
+}
+
+class AttemptRow extends DataClass implements Insertable<AttemptRow> {
+  final String id;
+  final String debateId;
+  final String nodeId;
+  final String youSaid;
+  final List<String> moves;
+  final String? closest;
+  final String? closestStrength;
+  final String day;
+  final int at;
+
+  /// The critique as JSON once it has come back, null until then.
+  final String? critique;
+  const AttemptRow({
+    required this.id,
+    required this.debateId,
+    required this.nodeId,
+    required this.youSaid,
+    required this.moves,
+    this.closest,
+    this.closestStrength,
+    required this.day,
+    required this.at,
+    this.critique,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['debate_id'] = Variable<String>(debateId);
+    map['node_id'] = Variable<String>(nodeId);
+    map['you_said'] = Variable<String>(youSaid);
+    {
+      map['moves'] = Variable<String>(
+        $AttemptsTable.$convertermoves.toSql(moves),
+      );
+    }
+    if (!nullToAbsent || closest != null) {
+      map['closest'] = Variable<String>(closest);
+    }
+    if (!nullToAbsent || closestStrength != null) {
+      map['closest_strength'] = Variable<String>(closestStrength);
+    }
+    map['day'] = Variable<String>(day);
+    map['at'] = Variable<int>(at);
+    if (!nullToAbsent || critique != null) {
+      map['critique'] = Variable<String>(critique);
+    }
+    return map;
+  }
+
+  AttemptsCompanion toCompanion(bool nullToAbsent) {
+    return AttemptsCompanion(
+      id: Value(id),
+      debateId: Value(debateId),
+      nodeId: Value(nodeId),
+      youSaid: Value(youSaid),
+      moves: Value(moves),
+      closest: closest == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closest),
+      closestStrength: closestStrength == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closestStrength),
+      day: Value(day),
+      at: Value(at),
+      critique: critique == null && nullToAbsent
+          ? const Value.absent()
+          : Value(critique),
+    );
+  }
+
+  factory AttemptRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AttemptRow(
+      id: serializer.fromJson<String>(json['id']),
+      debateId: serializer.fromJson<String>(json['debateId']),
+      nodeId: serializer.fromJson<String>(json['nodeId']),
+      youSaid: serializer.fromJson<String>(json['youSaid']),
+      moves: serializer.fromJson<List<String>>(json['moves']),
+      closest: serializer.fromJson<String?>(json['closest']),
+      closestStrength: serializer.fromJson<String?>(json['closestStrength']),
+      day: serializer.fromJson<String>(json['day']),
+      at: serializer.fromJson<int>(json['at']),
+      critique: serializer.fromJson<String?>(json['critique']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'debateId': serializer.toJson<String>(debateId),
+      'nodeId': serializer.toJson<String>(nodeId),
+      'youSaid': serializer.toJson<String>(youSaid),
+      'moves': serializer.toJson<List<String>>(moves),
+      'closest': serializer.toJson<String?>(closest),
+      'closestStrength': serializer.toJson<String?>(closestStrength),
+      'day': serializer.toJson<String>(day),
+      'at': serializer.toJson<int>(at),
+      'critique': serializer.toJson<String?>(critique),
+    };
+  }
+
+  AttemptRow copyWith({
+    String? id,
+    String? debateId,
+    String? nodeId,
+    String? youSaid,
+    List<String>? moves,
+    Value<String?> closest = const Value.absent(),
+    Value<String?> closestStrength = const Value.absent(),
+    String? day,
+    int? at,
+    Value<String?> critique = const Value.absent(),
+  }) => AttemptRow(
+    id: id ?? this.id,
+    debateId: debateId ?? this.debateId,
+    nodeId: nodeId ?? this.nodeId,
+    youSaid: youSaid ?? this.youSaid,
+    moves: moves ?? this.moves,
+    closest: closest.present ? closest.value : this.closest,
+    closestStrength: closestStrength.present
+        ? closestStrength.value
+        : this.closestStrength,
+    day: day ?? this.day,
+    at: at ?? this.at,
+    critique: critique.present ? critique.value : this.critique,
+  );
+  AttemptRow copyWithCompanion(AttemptsCompanion data) {
+    return AttemptRow(
+      id: data.id.present ? data.id.value : this.id,
+      debateId: data.debateId.present ? data.debateId.value : this.debateId,
+      nodeId: data.nodeId.present ? data.nodeId.value : this.nodeId,
+      youSaid: data.youSaid.present ? data.youSaid.value : this.youSaid,
+      moves: data.moves.present ? data.moves.value : this.moves,
+      closest: data.closest.present ? data.closest.value : this.closest,
+      closestStrength: data.closestStrength.present
+          ? data.closestStrength.value
+          : this.closestStrength,
+      day: data.day.present ? data.day.value : this.day,
+      at: data.at.present ? data.at.value : this.at,
+      critique: data.critique.present ? data.critique.value : this.critique,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AttemptRow(')
+          ..write('id: $id, ')
+          ..write('debateId: $debateId, ')
+          ..write('nodeId: $nodeId, ')
+          ..write('youSaid: $youSaid, ')
+          ..write('moves: $moves, ')
+          ..write('closest: $closest, ')
+          ..write('closestStrength: $closestStrength, ')
+          ..write('day: $day, ')
+          ..write('at: $at, ')
+          ..write('critique: $critique')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    debateId,
+    nodeId,
+    youSaid,
+    moves,
+    closest,
+    closestStrength,
+    day,
+    at,
+    critique,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AttemptRow &&
+          other.id == this.id &&
+          other.debateId == this.debateId &&
+          other.nodeId == this.nodeId &&
+          other.youSaid == this.youSaid &&
+          other.moves == this.moves &&
+          other.closest == this.closest &&
+          other.closestStrength == this.closestStrength &&
+          other.day == this.day &&
+          other.at == this.at &&
+          other.critique == this.critique);
+}
+
+class AttemptsCompanion extends UpdateCompanion<AttemptRow> {
+  final Value<String> id;
+  final Value<String> debateId;
+  final Value<String> nodeId;
+  final Value<String> youSaid;
+  final Value<List<String>> moves;
+  final Value<String?> closest;
+  final Value<String?> closestStrength;
+  final Value<String> day;
+  final Value<int> at;
+  final Value<String?> critique;
+  final Value<int> rowid;
+  const AttemptsCompanion({
+    this.id = const Value.absent(),
+    this.debateId = const Value.absent(),
+    this.nodeId = const Value.absent(),
+    this.youSaid = const Value.absent(),
+    this.moves = const Value.absent(),
+    this.closest = const Value.absent(),
+    this.closestStrength = const Value.absent(),
+    this.day = const Value.absent(),
+    this.at = const Value.absent(),
+    this.critique = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AttemptsCompanion.insert({
+    required String id,
+    required String debateId,
+    required String nodeId,
+    required String youSaid,
+    this.moves = const Value.absent(),
+    this.closest = const Value.absent(),
+    this.closestStrength = const Value.absent(),
+    required String day,
+    required int at,
+    this.critique = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       debateId = Value(debateId),
+       nodeId = Value(nodeId),
+       youSaid = Value(youSaid),
+       day = Value(day),
+       at = Value(at);
+  static Insertable<AttemptRow> custom({
+    Expression<String>? id,
+    Expression<String>? debateId,
+    Expression<String>? nodeId,
+    Expression<String>? youSaid,
+    Expression<String>? moves,
+    Expression<String>? closest,
+    Expression<String>? closestStrength,
+    Expression<String>? day,
+    Expression<int>? at,
+    Expression<String>? critique,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (debateId != null) 'debate_id': debateId,
+      if (nodeId != null) 'node_id': nodeId,
+      if (youSaid != null) 'you_said': youSaid,
+      if (moves != null) 'moves': moves,
+      if (closest != null) 'closest': closest,
+      if (closestStrength != null) 'closest_strength': closestStrength,
+      if (day != null) 'day': day,
+      if (at != null) 'at': at,
+      if (critique != null) 'critique': critique,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AttemptsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? debateId,
+    Value<String>? nodeId,
+    Value<String>? youSaid,
+    Value<List<String>>? moves,
+    Value<String?>? closest,
+    Value<String?>? closestStrength,
+    Value<String>? day,
+    Value<int>? at,
+    Value<String?>? critique,
+    Value<int>? rowid,
+  }) {
+    return AttemptsCompanion(
+      id: id ?? this.id,
+      debateId: debateId ?? this.debateId,
+      nodeId: nodeId ?? this.nodeId,
+      youSaid: youSaid ?? this.youSaid,
+      moves: moves ?? this.moves,
+      closest: closest ?? this.closest,
+      closestStrength: closestStrength ?? this.closestStrength,
+      day: day ?? this.day,
+      at: at ?? this.at,
+      critique: critique ?? this.critique,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (debateId.present) {
+      map['debate_id'] = Variable<String>(debateId.value);
+    }
+    if (nodeId.present) {
+      map['node_id'] = Variable<String>(nodeId.value);
+    }
+    if (youSaid.present) {
+      map['you_said'] = Variable<String>(youSaid.value);
+    }
+    if (moves.present) {
+      map['moves'] = Variable<String>(
+        $AttemptsTable.$convertermoves.toSql(moves.value),
+      );
+    }
+    if (closest.present) {
+      map['closest'] = Variable<String>(closest.value);
+    }
+    if (closestStrength.present) {
+      map['closest_strength'] = Variable<String>(closestStrength.value);
+    }
+    if (day.present) {
+      map['day'] = Variable<String>(day.value);
+    }
+    if (at.present) {
+      map['at'] = Variable<int>(at.value);
+    }
+    if (critique.present) {
+      map['critique'] = Variable<String>(critique.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AttemptsCompanion(')
+          ..write('id: $id, ')
+          ..write('debateId: $debateId, ')
+          ..write('nodeId: $nodeId, ')
+          ..write('youSaid: $youSaid, ')
+          ..write('moves: $moves, ')
+          ..write('closest: $closest, ')
+          ..write('closestStrength: $closestStrength, ')
+          ..write('day: $day, ')
+          ..write('at: $at, ')
+          ..write('critique: $critique, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CapturesTable extends Captures
+    with TableInfo<$CapturesTable, CaptureRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CapturesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteNativeMeta = const VerificationMeta(
+    'noteNative',
+  );
+  @override
+  late final GeneratedColumn<String> noteNative = GeneratedColumn<String>(
+    'note_native',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<String> date = GeneratedColumn<String>(
+    'date',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _whoMeta = const VerificationMeta('who');
+  @override
+  late final GeneratedColumn<String> who = GeneratedColumn<String>(
+    'who',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _consumedAtMeta = const VerificationMeta(
+    'consumedAt',
+  );
+  @override
+  late final GeneratedColumn<int> consumedAt = GeneratedColumn<int>(
+    'consumed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    noteNative,
+    date,
+    who,
+    createdAt,
+    consumedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'captures';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CaptureRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('note_native')) {
+      context.handle(
+        _noteNativeMeta,
+        noteNative.isAcceptableOrUnknown(data['note_native']!, _noteNativeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_noteNativeMeta);
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+        _dateMeta,
+        date.isAcceptableOrUnknown(data['date']!, _dateMeta),
+      );
+    }
+    if (data.containsKey('who')) {
+      context.handle(
+        _whoMeta,
+        who.isAcceptableOrUnknown(data['who']!, _whoMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('consumed_at')) {
+      context.handle(
+        _consumedAtMeta,
+        consumedAt.isAcceptableOrUnknown(data['consumed_at']!, _consumedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CaptureRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CaptureRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      noteNative: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note_native'],
+      )!,
+      date: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}date'],
+      ),
+      who: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}who'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
+      consumedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}consumed_at'],
+      ),
+    );
+  }
+
+  @override
+  $CapturesTable createAlias(String alias) {
+    return $CapturesTable(attachedDatabase, alias);
+  }
+}
+
+class CaptureRow extends DataClass implements Insertable<CaptureRow> {
+  final String id;
+  final String noteNative;
+  final String? date;
+  final String who;
+  final int createdAt;
+  final int? consumedAt;
+  const CaptureRow({
+    required this.id,
+    required this.noteNative,
+    this.date,
+    required this.who,
+    required this.createdAt,
+    this.consumedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['note_native'] = Variable<String>(noteNative);
+    if (!nullToAbsent || date != null) {
+      map['date'] = Variable<String>(date);
+    }
+    map['who'] = Variable<String>(who);
+    map['created_at'] = Variable<int>(createdAt);
+    if (!nullToAbsent || consumedAt != null) {
+      map['consumed_at'] = Variable<int>(consumedAt);
+    }
+    return map;
+  }
+
+  CapturesCompanion toCompanion(bool nullToAbsent) {
+    return CapturesCompanion(
+      id: Value(id),
+      noteNative: Value(noteNative),
+      date: date == null && nullToAbsent ? const Value.absent() : Value(date),
+      who: Value(who),
+      createdAt: Value(createdAt),
+      consumedAt: consumedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(consumedAt),
+    );
+  }
+
+  factory CaptureRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CaptureRow(
+      id: serializer.fromJson<String>(json['id']),
+      noteNative: serializer.fromJson<String>(json['noteNative']),
+      date: serializer.fromJson<String?>(json['date']),
+      who: serializer.fromJson<String>(json['who']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      consumedAt: serializer.fromJson<int?>(json['consumedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'noteNative': serializer.toJson<String>(noteNative),
+      'date': serializer.toJson<String?>(date),
+      'who': serializer.toJson<String>(who),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'consumedAt': serializer.toJson<int?>(consumedAt),
+    };
+  }
+
+  CaptureRow copyWith({
+    String? id,
+    String? noteNative,
+    Value<String?> date = const Value.absent(),
+    String? who,
+    int? createdAt,
+    Value<int?> consumedAt = const Value.absent(),
+  }) => CaptureRow(
+    id: id ?? this.id,
+    noteNative: noteNative ?? this.noteNative,
+    date: date.present ? date.value : this.date,
+    who: who ?? this.who,
+    createdAt: createdAt ?? this.createdAt,
+    consumedAt: consumedAt.present ? consumedAt.value : this.consumedAt,
+  );
+  CaptureRow copyWithCompanion(CapturesCompanion data) {
+    return CaptureRow(
+      id: data.id.present ? data.id.value : this.id,
+      noteNative: data.noteNative.present
+          ? data.noteNative.value
+          : this.noteNative,
+      date: data.date.present ? data.date.value : this.date,
+      who: data.who.present ? data.who.value : this.who,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      consumedAt: data.consumedAt.present
+          ? data.consumedAt.value
+          : this.consumedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CaptureRow(')
+          ..write('id: $id, ')
+          ..write('noteNative: $noteNative, ')
+          ..write('date: $date, ')
+          ..write('who: $who, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('consumedAt: $consumedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, noteNative, date, who, createdAt, consumedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CaptureRow &&
+          other.id == this.id &&
+          other.noteNative == this.noteNative &&
+          other.date == this.date &&
+          other.who == this.who &&
+          other.createdAt == this.createdAt &&
+          other.consumedAt == this.consumedAt);
+}
+
+class CapturesCompanion extends UpdateCompanion<CaptureRow> {
+  final Value<String> id;
+  final Value<String> noteNative;
+  final Value<String?> date;
+  final Value<String> who;
+  final Value<int> createdAt;
+  final Value<int?> consumedAt;
+  final Value<int> rowid;
+  const CapturesCompanion({
+    this.id = const Value.absent(),
+    this.noteNative = const Value.absent(),
+    this.date = const Value.absent(),
+    this.who = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.consumedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CapturesCompanion.insert({
+    required String id,
+    required String noteNative,
+    this.date = const Value.absent(),
+    this.who = const Value.absent(),
+    required int createdAt,
+    this.consumedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       noteNative = Value(noteNative),
+       createdAt = Value(createdAt);
+  static Insertable<CaptureRow> custom({
+    Expression<String>? id,
+    Expression<String>? noteNative,
+    Expression<String>? date,
+    Expression<String>? who,
+    Expression<int>? createdAt,
+    Expression<int>? consumedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (noteNative != null) 'note_native': noteNative,
+      if (date != null) 'date': date,
+      if (who != null) 'who': who,
+      if (createdAt != null) 'created_at': createdAt,
+      if (consumedAt != null) 'consumed_at': consumedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CapturesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? noteNative,
+    Value<String?>? date,
+    Value<String>? who,
+    Value<int>? createdAt,
+    Value<int?>? consumedAt,
+    Value<int>? rowid,
+  }) {
+    return CapturesCompanion(
+      id: id ?? this.id,
+      noteNative: noteNative ?? this.noteNative,
+      date: date ?? this.date,
+      who: who ?? this.who,
+      createdAt: createdAt ?? this.createdAt,
+      consumedAt: consumedAt ?? this.consumedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (noteNative.present) {
+      map['note_native'] = Variable<String>(noteNative.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<String>(date.value);
+    }
+    if (who.present) {
+      map['who'] = Variable<String>(who.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (consumedAt.present) {
+      map['consumed_at'] = Variable<int>(consumedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CapturesCompanion(')
+          ..write('id: $id, ')
+          ..write('noteNative: $noteNative, ')
+          ..write('date: $date, ')
+          ..write('who: $who, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('consumedAt: $consumedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $FailuresTable extends Failures
+    with TableInfo<$FailuresTable, FailureRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FailuresTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _debateIdMeta = const VerificationMeta(
+    'debateId',
+  );
+  @override
+  late final GeneratedColumn<String> debateId = GeneratedColumn<String>(
+    'debate_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nodeIdMeta = const VerificationMeta('nodeId');
+  @override
+  late final GeneratedColumn<String> nodeId = GeneratedColumn<String>(
+    'node_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteNativeMeta = const VerificationMeta(
+    'noteNative',
+  );
+  @override
+  late final GeneratedColumn<String> noteNative = GeneratedColumn<String>(
+    'note_native',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _atMeta = const VerificationMeta('at');
+  @override
+  late final GeneratedColumn<int> at = GeneratedColumn<int>(
+    'at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _consumedAtMeta = const VerificationMeta(
+    'consumedAt',
+  );
+  @override
+  late final GeneratedColumn<int> consumedAt = GeneratedColumn<int>(
+    'consumed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    debateId,
+    nodeId,
+    kind,
+    noteNative,
+    at,
+    consumedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'failures';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FailureRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('debate_id')) {
+      context.handle(
+        _debateIdMeta,
+        debateId.isAcceptableOrUnknown(data['debate_id']!, _debateIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_debateIdMeta);
+    }
+    if (data.containsKey('node_id')) {
+      context.handle(
+        _nodeIdMeta,
+        nodeId.isAcceptableOrUnknown(data['node_id']!, _nodeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nodeIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('note_native')) {
+      context.handle(
+        _noteNativeMeta,
+        noteNative.isAcceptableOrUnknown(data['note_native']!, _noteNativeMeta),
+      );
+    }
+    if (data.containsKey('at')) {
+      context.handle(_atMeta, at.isAcceptableOrUnknown(data['at']!, _atMeta));
+    } else if (isInserting) {
+      context.missing(_atMeta);
+    }
+    if (data.containsKey('consumed_at')) {
+      context.handle(
+        _consumedAtMeta,
+        consumedAt.isAcceptableOrUnknown(data['consumed_at']!, _consumedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  FailureRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FailureRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      debateId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}debate_id'],
+      )!,
+      nodeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}node_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      noteNative: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note_native'],
+      )!,
+      at: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}at'],
+      )!,
+      consumedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}consumed_at'],
+      ),
+    );
+  }
+
+  @override
+  $FailuresTable createAlias(String alias) {
+    return $FailuresTable(attachedDatabase, alias);
+  }
+}
+
+class FailureRow extends DataClass implements Insertable<FailureRow> {
+  final String id;
+  final String debateId;
+  final String nodeId;
+  final String kind;
+  final String noteNative;
+  final int at;
+  final int? consumedAt;
+  const FailureRow({
+    required this.id,
+    required this.debateId,
+    required this.nodeId,
+    required this.kind,
+    required this.noteNative,
+    required this.at,
+    this.consumedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['debate_id'] = Variable<String>(debateId);
+    map['node_id'] = Variable<String>(nodeId);
+    map['kind'] = Variable<String>(kind);
+    map['note_native'] = Variable<String>(noteNative);
+    map['at'] = Variable<int>(at);
+    if (!nullToAbsent || consumedAt != null) {
+      map['consumed_at'] = Variable<int>(consumedAt);
+    }
+    return map;
+  }
+
+  FailuresCompanion toCompanion(bool nullToAbsent) {
+    return FailuresCompanion(
+      id: Value(id),
+      debateId: Value(debateId),
+      nodeId: Value(nodeId),
+      kind: Value(kind),
+      noteNative: Value(noteNative),
+      at: Value(at),
+      consumedAt: consumedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(consumedAt),
+    );
+  }
+
+  factory FailureRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FailureRow(
+      id: serializer.fromJson<String>(json['id']),
+      debateId: serializer.fromJson<String>(json['debateId']),
+      nodeId: serializer.fromJson<String>(json['nodeId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      noteNative: serializer.fromJson<String>(json['noteNative']),
+      at: serializer.fromJson<int>(json['at']),
+      consumedAt: serializer.fromJson<int?>(json['consumedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'debateId': serializer.toJson<String>(debateId),
+      'nodeId': serializer.toJson<String>(nodeId),
+      'kind': serializer.toJson<String>(kind),
+      'noteNative': serializer.toJson<String>(noteNative),
+      'at': serializer.toJson<int>(at),
+      'consumedAt': serializer.toJson<int?>(consumedAt),
+    };
+  }
+
+  FailureRow copyWith({
+    String? id,
+    String? debateId,
+    String? nodeId,
+    String? kind,
+    String? noteNative,
+    int? at,
+    Value<int?> consumedAt = const Value.absent(),
+  }) => FailureRow(
+    id: id ?? this.id,
+    debateId: debateId ?? this.debateId,
+    nodeId: nodeId ?? this.nodeId,
+    kind: kind ?? this.kind,
+    noteNative: noteNative ?? this.noteNative,
+    at: at ?? this.at,
+    consumedAt: consumedAt.present ? consumedAt.value : this.consumedAt,
+  );
+  FailureRow copyWithCompanion(FailuresCompanion data) {
+    return FailureRow(
+      id: data.id.present ? data.id.value : this.id,
+      debateId: data.debateId.present ? data.debateId.value : this.debateId,
+      nodeId: data.nodeId.present ? data.nodeId.value : this.nodeId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      noteNative: data.noteNative.present
+          ? data.noteNative.value
+          : this.noteNative,
+      at: data.at.present ? data.at.value : this.at,
+      consumedAt: data.consumedAt.present
+          ? data.consumedAt.value
+          : this.consumedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FailureRow(')
+          ..write('id: $id, ')
+          ..write('debateId: $debateId, ')
+          ..write('nodeId: $nodeId, ')
+          ..write('kind: $kind, ')
+          ..write('noteNative: $noteNative, ')
+          ..write('at: $at, ')
+          ..write('consumedAt: $consumedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, debateId, nodeId, kind, noteNative, at, consumedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FailureRow &&
+          other.id == this.id &&
+          other.debateId == this.debateId &&
+          other.nodeId == this.nodeId &&
+          other.kind == this.kind &&
+          other.noteNative == this.noteNative &&
+          other.at == this.at &&
+          other.consumedAt == this.consumedAt);
+}
+
+class FailuresCompanion extends UpdateCompanion<FailureRow> {
+  final Value<String> id;
+  final Value<String> debateId;
+  final Value<String> nodeId;
+  final Value<String> kind;
+  final Value<String> noteNative;
+  final Value<int> at;
+  final Value<int?> consumedAt;
+  final Value<int> rowid;
+  const FailuresCompanion({
+    this.id = const Value.absent(),
+    this.debateId = const Value.absent(),
+    this.nodeId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.noteNative = const Value.absent(),
+    this.at = const Value.absent(),
+    this.consumedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FailuresCompanion.insert({
+    required String id,
+    required String debateId,
+    required String nodeId,
+    required String kind,
+    this.noteNative = const Value.absent(),
+    required int at,
+    this.consumedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       debateId = Value(debateId),
+       nodeId = Value(nodeId),
+       kind = Value(kind),
+       at = Value(at);
+  static Insertable<FailureRow> custom({
+    Expression<String>? id,
+    Expression<String>? debateId,
+    Expression<String>? nodeId,
+    Expression<String>? kind,
+    Expression<String>? noteNative,
+    Expression<int>? at,
+    Expression<int>? consumedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (debateId != null) 'debate_id': debateId,
+      if (nodeId != null) 'node_id': nodeId,
+      if (kind != null) 'kind': kind,
+      if (noteNative != null) 'note_native': noteNative,
+      if (at != null) 'at': at,
+      if (consumedAt != null) 'consumed_at': consumedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FailuresCompanion copyWith({
+    Value<String>? id,
+    Value<String>? debateId,
+    Value<String>? nodeId,
+    Value<String>? kind,
+    Value<String>? noteNative,
+    Value<int>? at,
+    Value<int?>? consumedAt,
+    Value<int>? rowid,
+  }) {
+    return FailuresCompanion(
+      id: id ?? this.id,
+      debateId: debateId ?? this.debateId,
+      nodeId: nodeId ?? this.nodeId,
+      kind: kind ?? this.kind,
+      noteNative: noteNative ?? this.noteNative,
+      at: at ?? this.at,
+      consumedAt: consumedAt ?? this.consumedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (debateId.present) {
+      map['debate_id'] = Variable<String>(debateId.value);
+    }
+    if (nodeId.present) {
+      map['node_id'] = Variable<String>(nodeId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (noteNative.present) {
+      map['note_native'] = Variable<String>(noteNative.value);
+    }
+    if (at.present) {
+      map['at'] = Variable<int>(at.value);
+    }
+    if (consumedAt.present) {
+      map['consumed_at'] = Variable<int>(consumedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FailuresCompanion(')
+          ..write('id: $id, ')
+          ..write('debateId: $debateId, ')
+          ..write('nodeId: $nodeId, ')
+          ..write('kind: $kind, ')
+          ..write('noteNative: $noteNative, ')
+          ..write('at: $at, ')
+          ..write('consumedAt: $consumedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -5985,6 +8460,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $HistoriesTable histories = $HistoriesTable(this);
   late final $BatchesTable batches = $BatchesTable(this);
   late final $MetaTable meta = $MetaTable(this);
+  late final $ChunksTable chunks = $ChunksTable(this);
+  late final $DebatesTable debates = $DebatesTable(this);
+  late final $AttemptsTable attempts = $AttemptsTable(this);
+  late final $CapturesTable captures = $CapturesTable(this);
+  late final $FailuresTable failures = $FailuresTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -5999,6 +8479,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     histories,
     batches,
     meta,
+    chunks,
+    debates,
+    attempts,
+    captures,
+    failures,
   ];
 }
 
@@ -8890,6 +11375,1268 @@ typedef $$MetaTableProcessedTableManager =
       MetaRow,
       PrefetchHooks Function()
     >;
+typedef $$ChunksTableCreateCompanionBuilder =
+    ChunksCompanion Function({
+      required String id,
+      required String move,
+      required String body,
+      Value<String> native,
+      Value<int> rowid,
+    });
+typedef $$ChunksTableUpdateCompanionBuilder =
+    ChunksCompanion Function({
+      Value<String> id,
+      Value<String> move,
+      Value<String> body,
+      Value<String> native,
+      Value<int> rowid,
+    });
+
+class $$ChunksTableFilterComposer
+    extends Composer<_$AppDatabase, $ChunksTable> {
+  $$ChunksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get move => $composableBuilder(
+    column: $table.move,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get native => $composableBuilder(
+    column: $table.native,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ChunksTableOrderingComposer
+    extends Composer<_$AppDatabase, $ChunksTable> {
+  $$ChunksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get move => $composableBuilder(
+    column: $table.move,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get native => $composableBuilder(
+    column: $table.native,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ChunksTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ChunksTable> {
+  $$ChunksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get move =>
+      $composableBuilder(column: $table.move, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<String> get native =>
+      $composableBuilder(column: $table.native, builder: (column) => column);
+}
+
+class $$ChunksTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ChunksTable,
+          ChunkRow,
+          $$ChunksTableFilterComposer,
+          $$ChunksTableOrderingComposer,
+          $$ChunksTableAnnotationComposer,
+          $$ChunksTableCreateCompanionBuilder,
+          $$ChunksTableUpdateCompanionBuilder,
+          (ChunkRow, BaseReferences<_$AppDatabase, $ChunksTable, ChunkRow>),
+          ChunkRow,
+          PrefetchHooks Function()
+        > {
+  $$ChunksTableTableManager(_$AppDatabase db, $ChunksTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ChunksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ChunksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ChunksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> move = const Value.absent(),
+                Value<String> body = const Value.absent(),
+                Value<String> native = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ChunksCompanion(
+                id: id,
+                move: move,
+                body: body,
+                native: native,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String move,
+                required String body,
+                Value<String> native = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ChunksCompanion.insert(
+                id: id,
+                move: move,
+                body: body,
+                native: native,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ChunksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ChunksTable,
+      ChunkRow,
+      $$ChunksTableFilterComposer,
+      $$ChunksTableOrderingComposer,
+      $$ChunksTableAnnotationComposer,
+      $$ChunksTableCreateCompanionBuilder,
+      $$ChunksTableUpdateCompanionBuilder,
+      (ChunkRow, BaseReferences<_$AppDatabase, $ChunksTable, ChunkRow>),
+      ChunkRow,
+      PrefetchHooks Function()
+    >;
+typedef $$DebatesTableCreateCompanionBuilder =
+    DebatesCompanion Function({
+      required String id,
+      required String topic,
+      Value<String> topicNative,
+      Value<String?> event,
+      Value<String> persona,
+      Value<String> personaNative,
+      Value<String> position,
+      Value<String> positionNative,
+      Value<String?> realmId,
+      required String nodes,
+      required int createdAt,
+      Value<bool> disabled,
+      Value<int> rowid,
+    });
+typedef $$DebatesTableUpdateCompanionBuilder =
+    DebatesCompanion Function({
+      Value<String> id,
+      Value<String> topic,
+      Value<String> topicNative,
+      Value<String?> event,
+      Value<String> persona,
+      Value<String> personaNative,
+      Value<String> position,
+      Value<String> positionNative,
+      Value<String?> realmId,
+      Value<String> nodes,
+      Value<int> createdAt,
+      Value<bool> disabled,
+      Value<int> rowid,
+    });
+
+class $$DebatesTableFilterComposer
+    extends Composer<_$AppDatabase, $DebatesTable> {
+  $$DebatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get topic => $composableBuilder(
+    column: $table.topic,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get topicNative => $composableBuilder(
+    column: $table.topicNative,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get event => $composableBuilder(
+    column: $table.event,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get persona => $composableBuilder(
+    column: $table.persona,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get personaNative => $composableBuilder(
+    column: $table.personaNative,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get positionNative => $composableBuilder(
+    column: $table.positionNative,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get realmId => $composableBuilder(
+    column: $table.realmId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get nodes => $composableBuilder(
+    column: $table.nodes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get disabled => $composableBuilder(
+    column: $table.disabled,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DebatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $DebatesTable> {
+  $$DebatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get topic => $composableBuilder(
+    column: $table.topic,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get topicNative => $composableBuilder(
+    column: $table.topicNative,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get event => $composableBuilder(
+    column: $table.event,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get persona => $composableBuilder(
+    column: $table.persona,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get personaNative => $composableBuilder(
+    column: $table.personaNative,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get positionNative => $composableBuilder(
+    column: $table.positionNative,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get realmId => $composableBuilder(
+    column: $table.realmId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get nodes => $composableBuilder(
+    column: $table.nodes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get disabled => $composableBuilder(
+    column: $table.disabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DebatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DebatesTable> {
+  $$DebatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get topic =>
+      $composableBuilder(column: $table.topic, builder: (column) => column);
+
+  GeneratedColumn<String> get topicNative => $composableBuilder(
+    column: $table.topicNative,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get event =>
+      $composableBuilder(column: $table.event, builder: (column) => column);
+
+  GeneratedColumn<String> get persona =>
+      $composableBuilder(column: $table.persona, builder: (column) => column);
+
+  GeneratedColumn<String> get personaNative => $composableBuilder(
+    column: $table.personaNative,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<String> get positionNative => $composableBuilder(
+    column: $table.positionNative,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get realmId =>
+      $composableBuilder(column: $table.realmId, builder: (column) => column);
+
+  GeneratedColumn<String> get nodes =>
+      $composableBuilder(column: $table.nodes, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get disabled =>
+      $composableBuilder(column: $table.disabled, builder: (column) => column);
+}
+
+class $$DebatesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DebatesTable,
+          DebateRow,
+          $$DebatesTableFilterComposer,
+          $$DebatesTableOrderingComposer,
+          $$DebatesTableAnnotationComposer,
+          $$DebatesTableCreateCompanionBuilder,
+          $$DebatesTableUpdateCompanionBuilder,
+          (DebateRow, BaseReferences<_$AppDatabase, $DebatesTable, DebateRow>),
+          DebateRow,
+          PrefetchHooks Function()
+        > {
+  $$DebatesTableTableManager(_$AppDatabase db, $DebatesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DebatesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DebatesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DebatesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> topic = const Value.absent(),
+                Value<String> topicNative = const Value.absent(),
+                Value<String?> event = const Value.absent(),
+                Value<String> persona = const Value.absent(),
+                Value<String> personaNative = const Value.absent(),
+                Value<String> position = const Value.absent(),
+                Value<String> positionNative = const Value.absent(),
+                Value<String?> realmId = const Value.absent(),
+                Value<String> nodes = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<bool> disabled = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DebatesCompanion(
+                id: id,
+                topic: topic,
+                topicNative: topicNative,
+                event: event,
+                persona: persona,
+                personaNative: personaNative,
+                position: position,
+                positionNative: positionNative,
+                realmId: realmId,
+                nodes: nodes,
+                createdAt: createdAt,
+                disabled: disabled,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String topic,
+                Value<String> topicNative = const Value.absent(),
+                Value<String?> event = const Value.absent(),
+                Value<String> persona = const Value.absent(),
+                Value<String> personaNative = const Value.absent(),
+                Value<String> position = const Value.absent(),
+                Value<String> positionNative = const Value.absent(),
+                Value<String?> realmId = const Value.absent(),
+                required String nodes,
+                required int createdAt,
+                Value<bool> disabled = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DebatesCompanion.insert(
+                id: id,
+                topic: topic,
+                topicNative: topicNative,
+                event: event,
+                persona: persona,
+                personaNative: personaNative,
+                position: position,
+                positionNative: positionNative,
+                realmId: realmId,
+                nodes: nodes,
+                createdAt: createdAt,
+                disabled: disabled,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DebatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DebatesTable,
+      DebateRow,
+      $$DebatesTableFilterComposer,
+      $$DebatesTableOrderingComposer,
+      $$DebatesTableAnnotationComposer,
+      $$DebatesTableCreateCompanionBuilder,
+      $$DebatesTableUpdateCompanionBuilder,
+      (DebateRow, BaseReferences<_$AppDatabase, $DebatesTable, DebateRow>),
+      DebateRow,
+      PrefetchHooks Function()
+    >;
+typedef $$AttemptsTableCreateCompanionBuilder =
+    AttemptsCompanion Function({
+      required String id,
+      required String debateId,
+      required String nodeId,
+      required String youSaid,
+      Value<List<String>> moves,
+      Value<String?> closest,
+      Value<String?> closestStrength,
+      required String day,
+      required int at,
+      Value<String?> critique,
+      Value<int> rowid,
+    });
+typedef $$AttemptsTableUpdateCompanionBuilder =
+    AttemptsCompanion Function({
+      Value<String> id,
+      Value<String> debateId,
+      Value<String> nodeId,
+      Value<String> youSaid,
+      Value<List<String>> moves,
+      Value<String?> closest,
+      Value<String?> closestStrength,
+      Value<String> day,
+      Value<int> at,
+      Value<String?> critique,
+      Value<int> rowid,
+    });
+
+class $$AttemptsTableFilterComposer
+    extends Composer<_$AppDatabase, $AttemptsTable> {
+  $$AttemptsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get debateId => $composableBuilder(
+    column: $table.debateId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get nodeId => $composableBuilder(
+    column: $table.nodeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get youSaid => $composableBuilder(
+    column: $table.youSaid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<List<String>, List<String>, String>
+  get moves => $composableBuilder(
+    column: $table.moves,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<String> get closest => $composableBuilder(
+    column: $table.closest,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get closestStrength => $composableBuilder(
+    column: $table.closestStrength,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get day => $composableBuilder(
+    column: $table.day,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get at => $composableBuilder(
+    column: $table.at,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get critique => $composableBuilder(
+    column: $table.critique,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AttemptsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AttemptsTable> {
+  $$AttemptsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get debateId => $composableBuilder(
+    column: $table.debateId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get nodeId => $composableBuilder(
+    column: $table.nodeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get youSaid => $composableBuilder(
+    column: $table.youSaid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get moves => $composableBuilder(
+    column: $table.moves,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get closest => $composableBuilder(
+    column: $table.closest,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get closestStrength => $composableBuilder(
+    column: $table.closestStrength,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get day => $composableBuilder(
+    column: $table.day,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get at => $composableBuilder(
+    column: $table.at,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get critique => $composableBuilder(
+    column: $table.critique,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AttemptsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AttemptsTable> {
+  $$AttemptsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get debateId =>
+      $composableBuilder(column: $table.debateId, builder: (column) => column);
+
+  GeneratedColumn<String> get nodeId =>
+      $composableBuilder(column: $table.nodeId, builder: (column) => column);
+
+  GeneratedColumn<String> get youSaid =>
+      $composableBuilder(column: $table.youSaid, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<List<String>, String> get moves =>
+      $composableBuilder(column: $table.moves, builder: (column) => column);
+
+  GeneratedColumn<String> get closest =>
+      $composableBuilder(column: $table.closest, builder: (column) => column);
+
+  GeneratedColumn<String> get closestStrength => $composableBuilder(
+    column: $table.closestStrength,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get day =>
+      $composableBuilder(column: $table.day, builder: (column) => column);
+
+  GeneratedColumn<int> get at =>
+      $composableBuilder(column: $table.at, builder: (column) => column);
+
+  GeneratedColumn<String> get critique =>
+      $composableBuilder(column: $table.critique, builder: (column) => column);
+}
+
+class $$AttemptsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AttemptsTable,
+          AttemptRow,
+          $$AttemptsTableFilterComposer,
+          $$AttemptsTableOrderingComposer,
+          $$AttemptsTableAnnotationComposer,
+          $$AttemptsTableCreateCompanionBuilder,
+          $$AttemptsTableUpdateCompanionBuilder,
+          (
+            AttemptRow,
+            BaseReferences<_$AppDatabase, $AttemptsTable, AttemptRow>,
+          ),
+          AttemptRow,
+          PrefetchHooks Function()
+        > {
+  $$AttemptsTableTableManager(_$AppDatabase db, $AttemptsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AttemptsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AttemptsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AttemptsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> debateId = const Value.absent(),
+                Value<String> nodeId = const Value.absent(),
+                Value<String> youSaid = const Value.absent(),
+                Value<List<String>> moves = const Value.absent(),
+                Value<String?> closest = const Value.absent(),
+                Value<String?> closestStrength = const Value.absent(),
+                Value<String> day = const Value.absent(),
+                Value<int> at = const Value.absent(),
+                Value<String?> critique = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AttemptsCompanion(
+                id: id,
+                debateId: debateId,
+                nodeId: nodeId,
+                youSaid: youSaid,
+                moves: moves,
+                closest: closest,
+                closestStrength: closestStrength,
+                day: day,
+                at: at,
+                critique: critique,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String debateId,
+                required String nodeId,
+                required String youSaid,
+                Value<List<String>> moves = const Value.absent(),
+                Value<String?> closest = const Value.absent(),
+                Value<String?> closestStrength = const Value.absent(),
+                required String day,
+                required int at,
+                Value<String?> critique = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AttemptsCompanion.insert(
+                id: id,
+                debateId: debateId,
+                nodeId: nodeId,
+                youSaid: youSaid,
+                moves: moves,
+                closest: closest,
+                closestStrength: closestStrength,
+                day: day,
+                at: at,
+                critique: critique,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AttemptsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AttemptsTable,
+      AttemptRow,
+      $$AttemptsTableFilterComposer,
+      $$AttemptsTableOrderingComposer,
+      $$AttemptsTableAnnotationComposer,
+      $$AttemptsTableCreateCompanionBuilder,
+      $$AttemptsTableUpdateCompanionBuilder,
+      (AttemptRow, BaseReferences<_$AppDatabase, $AttemptsTable, AttemptRow>),
+      AttemptRow,
+      PrefetchHooks Function()
+    >;
+typedef $$CapturesTableCreateCompanionBuilder =
+    CapturesCompanion Function({
+      required String id,
+      required String noteNative,
+      Value<String?> date,
+      Value<String> who,
+      required int createdAt,
+      Value<int?> consumedAt,
+      Value<int> rowid,
+    });
+typedef $$CapturesTableUpdateCompanionBuilder =
+    CapturesCompanion Function({
+      Value<String> id,
+      Value<String> noteNative,
+      Value<String?> date,
+      Value<String> who,
+      Value<int> createdAt,
+      Value<int?> consumedAt,
+      Value<int> rowid,
+    });
+
+class $$CapturesTableFilterComposer
+    extends Composer<_$AppDatabase, $CapturesTable> {
+  $$CapturesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get noteNative => $composableBuilder(
+    column: $table.noteNative,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get who => $composableBuilder(
+    column: $table.who,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get consumedAt => $composableBuilder(
+    column: $table.consumedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CapturesTableOrderingComposer
+    extends Composer<_$AppDatabase, $CapturesTable> {
+  $$CapturesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get noteNative => $composableBuilder(
+    column: $table.noteNative,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get who => $composableBuilder(
+    column: $table.who,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get consumedAt => $composableBuilder(
+    column: $table.consumedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CapturesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CapturesTable> {
+  $$CapturesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get noteNative => $composableBuilder(
+    column: $table.noteNative,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  GeneratedColumn<String> get who =>
+      $composableBuilder(column: $table.who, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get consumedAt => $composableBuilder(
+    column: $table.consumedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$CapturesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CapturesTable,
+          CaptureRow,
+          $$CapturesTableFilterComposer,
+          $$CapturesTableOrderingComposer,
+          $$CapturesTableAnnotationComposer,
+          $$CapturesTableCreateCompanionBuilder,
+          $$CapturesTableUpdateCompanionBuilder,
+          (
+            CaptureRow,
+            BaseReferences<_$AppDatabase, $CapturesTable, CaptureRow>,
+          ),
+          CaptureRow,
+          PrefetchHooks Function()
+        > {
+  $$CapturesTableTableManager(_$AppDatabase db, $CapturesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CapturesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CapturesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CapturesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> noteNative = const Value.absent(),
+                Value<String?> date = const Value.absent(),
+                Value<String> who = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<int?> consumedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CapturesCompanion(
+                id: id,
+                noteNative: noteNative,
+                date: date,
+                who: who,
+                createdAt: createdAt,
+                consumedAt: consumedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String noteNative,
+                Value<String?> date = const Value.absent(),
+                Value<String> who = const Value.absent(),
+                required int createdAt,
+                Value<int?> consumedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CapturesCompanion.insert(
+                id: id,
+                noteNative: noteNative,
+                date: date,
+                who: who,
+                createdAt: createdAt,
+                consumedAt: consumedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CapturesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CapturesTable,
+      CaptureRow,
+      $$CapturesTableFilterComposer,
+      $$CapturesTableOrderingComposer,
+      $$CapturesTableAnnotationComposer,
+      $$CapturesTableCreateCompanionBuilder,
+      $$CapturesTableUpdateCompanionBuilder,
+      (CaptureRow, BaseReferences<_$AppDatabase, $CapturesTable, CaptureRow>),
+      CaptureRow,
+      PrefetchHooks Function()
+    >;
+typedef $$FailuresTableCreateCompanionBuilder =
+    FailuresCompanion Function({
+      required String id,
+      required String debateId,
+      required String nodeId,
+      required String kind,
+      Value<String> noteNative,
+      required int at,
+      Value<int?> consumedAt,
+      Value<int> rowid,
+    });
+typedef $$FailuresTableUpdateCompanionBuilder =
+    FailuresCompanion Function({
+      Value<String> id,
+      Value<String> debateId,
+      Value<String> nodeId,
+      Value<String> kind,
+      Value<String> noteNative,
+      Value<int> at,
+      Value<int?> consumedAt,
+      Value<int> rowid,
+    });
+
+class $$FailuresTableFilterComposer
+    extends Composer<_$AppDatabase, $FailuresTable> {
+  $$FailuresTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get debateId => $composableBuilder(
+    column: $table.debateId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get nodeId => $composableBuilder(
+    column: $table.nodeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get noteNative => $composableBuilder(
+    column: $table.noteNative,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get at => $composableBuilder(
+    column: $table.at,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get consumedAt => $composableBuilder(
+    column: $table.consumedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FailuresTableOrderingComposer
+    extends Composer<_$AppDatabase, $FailuresTable> {
+  $$FailuresTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get debateId => $composableBuilder(
+    column: $table.debateId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get nodeId => $composableBuilder(
+    column: $table.nodeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get noteNative => $composableBuilder(
+    column: $table.noteNative,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get at => $composableBuilder(
+    column: $table.at,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get consumedAt => $composableBuilder(
+    column: $table.consumedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FailuresTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FailuresTable> {
+  $$FailuresTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get debateId =>
+      $composableBuilder(column: $table.debateId, builder: (column) => column);
+
+  GeneratedColumn<String> get nodeId =>
+      $composableBuilder(column: $table.nodeId, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get noteNative => $composableBuilder(
+    column: $table.noteNative,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get at =>
+      $composableBuilder(column: $table.at, builder: (column) => column);
+
+  GeneratedColumn<int> get consumedAt => $composableBuilder(
+    column: $table.consumedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$FailuresTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FailuresTable,
+          FailureRow,
+          $$FailuresTableFilterComposer,
+          $$FailuresTableOrderingComposer,
+          $$FailuresTableAnnotationComposer,
+          $$FailuresTableCreateCompanionBuilder,
+          $$FailuresTableUpdateCompanionBuilder,
+          (
+            FailureRow,
+            BaseReferences<_$AppDatabase, $FailuresTable, FailureRow>,
+          ),
+          FailureRow,
+          PrefetchHooks Function()
+        > {
+  $$FailuresTableTableManager(_$AppDatabase db, $FailuresTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FailuresTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FailuresTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FailuresTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> debateId = const Value.absent(),
+                Value<String> nodeId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> noteNative = const Value.absent(),
+                Value<int> at = const Value.absent(),
+                Value<int?> consumedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FailuresCompanion(
+                id: id,
+                debateId: debateId,
+                nodeId: nodeId,
+                kind: kind,
+                noteNative: noteNative,
+                at: at,
+                consumedAt: consumedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String debateId,
+                required String nodeId,
+                required String kind,
+                Value<String> noteNative = const Value.absent(),
+                required int at,
+                Value<int?> consumedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FailuresCompanion.insert(
+                id: id,
+                debateId: debateId,
+                nodeId: nodeId,
+                kind: kind,
+                noteNative: noteNative,
+                at: at,
+                consumedAt: consumedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FailuresTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FailuresTable,
+      FailureRow,
+      $$FailuresTableFilterComposer,
+      $$FailuresTableOrderingComposer,
+      $$FailuresTableAnnotationComposer,
+      $$FailuresTableCreateCompanionBuilder,
+      $$FailuresTableUpdateCompanionBuilder,
+      (FailureRow, BaseReferences<_$AppDatabase, $FailuresTable, FailureRow>),
+      FailureRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -8911,4 +12658,14 @@ class $AppDatabaseManager {
   $$BatchesTableTableManager get batches =>
       $$BatchesTableTableManager(_db, _db.batches);
   $$MetaTableTableManager get meta => $$MetaTableTableManager(_db, _db.meta);
+  $$ChunksTableTableManager get chunks =>
+      $$ChunksTableTableManager(_db, _db.chunks);
+  $$DebatesTableTableManager get debates =>
+      $$DebatesTableTableManager(_db, _db.debates);
+  $$AttemptsTableTableManager get attempts =>
+      $$AttemptsTableTableManager(_db, _db.attempts);
+  $$CapturesTableTableManager get captures =>
+      $$CapturesTableTableManager(_db, _db.captures);
+  $$FailuresTableTableManager get failures =>
+      $$FailuresTableTableManager(_db, _db.failures);
 }

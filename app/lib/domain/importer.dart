@@ -10,9 +10,12 @@ import 'dart:convert';
 import 'dart:math';
 
 import '../core/util.dart';
+import 'debate.dart';
 import 'models.dart';
 
-const supportedSchemas = ['1.0'];
+/// 1.0 is profile / material / audit; 2.0 added the debate pack. Both are
+/// accepted for ever — a learner's old material must keep importing.
+const supportedSchemas = ['1.0', '2.0'];
 const _levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
 // ---------------------------------------------------------------- 1. extract
@@ -113,7 +116,10 @@ bool _looksLikePayload(Map<String, dynamic> m) =>
     m.containsKey('sentences') ||
     m.containsKey('learning_items') ||
     m.containsKey('domains') ||
-    m.containsKey('results');
+    m.containsKey('results') ||
+    m.containsKey('debates') ||
+    m.containsKey('chunks') ||
+    m.containsKey('critiques');
 
 // ------------------------------------------------------- truncation rescue
 
@@ -286,10 +292,13 @@ String appendPiece(String buffer, String piece) {
 /// progress after each piece instead of only succeeding or failing at the end.
 class ImportPreview {
   final bool ok;
-  final String? type; // 'profile' | 'material' | 'audit'
+  final String? type; // 'profile' | 'material' | 'audit' | 'pack'
   final int realms;
   final int items;
   final int sentences;
+  final int debates;
+  final int chunks;
+  final int critiques;
   final bool repaired;
   const ImportPreview({
     required this.ok,
@@ -297,6 +306,9 @@ class ImportPreview {
     this.realms = 0,
     this.items = 0,
     this.sentences = 0,
+    this.debates = 0,
+    this.chunks = 0,
+    this.critiques = 0,
     this.repaired = false,
   });
   static const none = ImportPreview(ok: false);
@@ -308,6 +320,16 @@ ImportPreview previewImport(String raw) {
 
   final v = validate(ex.data!);
   switch (v.type) {
+    case 'pack':
+      final n = normalisePack(ex.data!);
+      return ImportPreview(
+        ok: v.ok && (n.debates.isNotEmpty || n.chunks.isNotEmpty || n.critiques.isNotEmpty),
+        type: 'pack',
+        debates: n.debates.length,
+        chunks: n.chunks.length,
+        critiques: n.critiques.length,
+        repaired: ex.repaired,
+      );
     case 'material':
       final n = normaliseMaterial(ex.data!);
       return ImportPreview(
@@ -394,20 +416,33 @@ ValidationResult validate(Map<String, dynamic> data) {
   }
 
   var type = data['type'] as String?;
-  if (type == null || !['profile', 'material', 'audit'].contains(type)) {
+  if (type == null || !['profile', 'material', 'audit', 'pack'].contains(type)) {
     // Infer when the AI omitted it but the shape is unambiguous.
-    if (data.containsKey('learning_items') || data.containsKey('sentences')) {
+    if (data.containsKey('debates') ||
+        data.containsKey('chunks') ||
+        data.containsKey('critiques')) {
+      type = 'pack';
+    } else if (data.containsKey('learning_items') || data.containsKey('sentences')) {
       type = 'material';
     } else if (data.containsKey('domains') || data.containsKey('profile')) {
       type = 'profile';
     } else if (data.containsKey('results')) {
       type = 'audit';
     } else {
-      errors.add('type is not profile, material or audit');
+      errors.add('type is not profile, material, audit or pack');
     }
   }
 
   switch (type) {
+    case 'pack':
+      // Any one of the three is enough: a critique-only reply is a real pack.
+      final lists = ['debates', 'chunks', 'critiques'];
+      for (final k in lists) {
+        if (data.containsKey(k) && data[k] is! List) errors.add('$k is not a list');
+      }
+      if (!lists.any((k) => data[k] is List && (data[k] as List).isNotEmpty)) {
+        errors.add('pack has no debates, chunks or critiques');
+      }
     case 'profile':
       if (data['domains'] is! List) {
         errors.add('domains is not a list');
@@ -656,6 +691,231 @@ List<AuditEntry> normaliseAudit(Map<String, dynamic> data) {
     ));
   }
   return out;
+}
+
+// ------------------------------------------------------------------- 4. pack
+
+/// A debate pack after normalisation. Trees that could not be made sound are
+/// listed in [rejected] with the reason, rather than dropped in silence: the
+/// learner pasted them and deserves to know what happened to them.
+class NormalisedPack {
+  final List<Chunk> chunks;
+  final List<DebateTree> debates;
+  final List<Critique> critiques;
+  final List<({String topic, String reason})> rejected;
+  const NormalisedPack(this.chunks, this.debates, this.critiques, this.rejected);
+}
+
+/// The deepest an exchange may run: three lines from the opponent. Long
+/// enough to be an argument, short enough to finish on a train.
+const maxDebateDepth = 3;
+
+NormalisedPack normalisePack(Map<String, dynamic> data) {
+  final chunks = <Chunk>[];
+  for (final raw in (data['chunks'] as List? ?? const [])) {
+    if (raw is! Map) continue;
+    final text = clean(raw['text']);
+    final move = Move.parse(clean(raw['move']));
+    // A chunk with no move cannot take part in the structural check, and a
+    // chunk with no words is nothing at all.
+    if (text.isEmpty || text.length > 160 || move == null) continue;
+    chunks.add(Chunk(
+      id: slugId('chunk', normKey(text)),
+      move: move,
+      text: text,
+      native: clean(raw['native']),
+    ));
+  }
+
+  final debates = <DebateTree>[];
+  final rejected = <({String topic, String reason})>[];
+  final now = DateTime.now().millisecondsSinceEpoch;
+  for (final raw in (data['debates'] as List? ?? const [])) {
+    if (raw is! Map) continue;
+    final r = _normaliseDebate(Map<String, dynamic>.from(raw), now);
+    if (r.tree != null) {
+      debates.add(r.tree!);
+    } else {
+      rejected.add((topic: r.topic, reason: r.reason!));
+    }
+  }
+
+  final critiques = <Critique>[];
+  for (final raw in (data['critiques'] as List? ?? const [])) {
+    if (raw is! Map) continue;
+    final attempt = clean(raw['attempt']);
+    final verdict = clean(raw['verdict_native']);
+    if (attempt.isEmpty || verdict.isEmpty) continue;
+    critiques.add(Critique(
+      attemptId: attempt,
+      verdictNative: verdict,
+      better: _normList(raw['better'], 4),
+      watchNative: clean(raw['watch_native']),
+    ));
+  }
+
+  return NormalisedPack(
+    uniqueBy(chunks, (c) => c.id),
+    uniqueBy(debates, (d) => d.id),
+    uniqueBy(critiques, (c) => c.attemptId),
+    rejected,
+  );
+}
+
+/// One of the three things to catch. Dropped as a whole when the answer is
+/// missing or is not among the options — a question with no right answer on
+/// the screen would be unanswerable.
+GraspItem? _normGraspItem(Object? raw) {
+  if (raw is! Map) return null;
+  final answer = clean(raw['answer']);
+  if (answer.isEmpty) return null;
+  final options = _normList(raw['options'], 4);
+  if (!options.any((o) => normKey(o) == normKey(answer))) {
+    options.insert(0, answer);
+  }
+  if (options.length < 2) return null;
+  return GraspItem(answer: answer, options: take(options, 4));
+}
+
+({DebateTree? tree, String topic, String? reason}) _normaliseDebate(
+    Map<String, dynamic> raw, int now) {
+  final topic = clean(raw['topic']);
+  final topicNative = clean(raw['topic_native']);
+  final label = topicNative.isNotEmpty ? topicNative : topic;
+  ({DebateTree? tree, String topic, String? reason}) reject(String why) =>
+      (tree: null, topic: label.isEmpty ? '(untitled)' : label, reason: why);
+
+  if (topic.isEmpty && topicNative.isEmpty) return reject('no topic');
+
+  final opponent = raw['opponent'];
+  final persona = opponent is Map ? clean(opponent['persona']) : '';
+  final personaNative = opponent is Map ? clean(opponent['persona_native']) : '';
+
+  final rawNodes = raw['nodes'];
+  if (rawNodes is! List || rawNodes.isEmpty) return reject('no nodes');
+
+  // -- nodes, each sound on its own --
+  final nodes = <DebateNode>[];
+  final ids = <String>{};
+  for (final n in rawNodes) {
+    if (n is! Map) continue;
+    final id = clean(n['id']);
+    final line = clean(n['line']);
+    if (id.isEmpty) return reject('a node has no id');
+    if (!ids.add(id)) return reject('node "$id" appears twice');
+    if (line.isEmpty) return reject('node "$id" has no line');
+
+    final g = n['grasp'];
+    final claim = g is Map ? _normGraspItem(g['claim']) : null;
+    final reason = g is Map ? _normGraspItem(g['reason']) : null;
+    final weak = g is Map ? _normGraspItem(g['weak_point']) : null;
+    if (claim == null || reason == null || weak == null) {
+      return reject('node "$id" is missing claim, reason or weak_point');
+    }
+
+    final rebuttals = <Rebuttal>[];
+    final rids = <String>{};
+    for (final rb in (n['rebuttals'] as List? ?? const [])) {
+      if (rb is! Map) continue;
+      final rid = clean(rb['id']);
+      final model = clean(rb['model']);
+      if (rid.isEmpty || model.isEmpty || !rids.add(rid)) continue;
+      final strength = Strength.parse(clean(rb['strength'])) ?? Strength.weak;
+      final nextRaw = clean(rb['next']);
+      final next = nextRaw.isEmpty || nextRaw == 'null' ? null : nextRaw;
+      final outcome = Outcome.parse(clean(rb['outcome']));
+      final slots = <String, String>{};
+      if (rb['slots'] is Map) {
+        (rb['slots'] as Map).forEach((k, v) {
+          final key = clean(k), val = clean(v);
+          if (key.isNotEmpty && val.isNotEmpty) slots[key] = val;
+        });
+      }
+      rebuttals.add(Rebuttal(
+        id: rid,
+        strength: strength,
+        model: model,
+        moves: [
+          for (final m in (rb['moves'] as List? ?? const []))
+            if (Move.parse(clean(m)) != null) Move.parse(clean(m))!
+        ],
+        slots: slots,
+        next: next,
+        // A leaf the AI forgot to close is closed the way its strength says.
+        outcome: next == null ? (outcome ?? Outcome.forStrength(strength)) : null,
+      ));
+    }
+    if (rebuttals.isEmpty) return reject('node "$id" has no rebuttals');
+    if (!rebuttals.any((r) => r.strength == Strength.strong)) {
+      // Without a strong reply there is nothing to aim at and no branch that
+      // can be won — the node would only teach how to lose.
+      return reject('node "$id" has no strong rebuttal');
+    }
+
+    nodes.add(DebateNode(
+      id: id,
+      line: line,
+      lineNative: clean(n['line_native']),
+      grasp: Grasp(claim: claim, reason: reason, weakPoint: weak),
+      rebuttals: rebuttals,
+    ));
+  }
+  if (nodes.isEmpty) return reject('no usable nodes');
+
+  // -- the tree as a whole: every branch leads somewhere, nothing runs too
+  //    deep, and nothing is left dangling --
+  final byId = {for (final n in nodes) n.id: n};
+  final reachable = <String>{};
+  var tooDeep = false;
+  void walk(String id, int depth) {
+    if (depth > maxDebateDepth) {
+      tooDeep = true;
+      return;
+    }
+    if (!reachable.add(id)) return; // a cycle, or two paths meeting
+    for (final r in byId[id]!.rebuttals) {
+      if (r.next != null) walk(r.next!, depth + 1);
+    }
+  }
+
+  for (final n in nodes) {
+    for (final r in n.rebuttals) {
+      if (r.next != null && !byId.containsKey(r.next)) {
+        return reject('rebuttal "${r.id}" points at a node "${r.next}" that does not exist');
+      }
+    }
+  }
+  walk(nodes.first.id, 1);
+  if (tooDeep) return reject('runs deeper than $maxDebateDepth lines');
+
+  // Unreachable nodes are not an error — the AI wrote something it never
+  // pointed at — but they are not part of the argument either.
+  final kept = nodes.where((n) => reachable.contains(n.id)).toList();
+
+  final eventRaw = clean(raw['event']);
+  final event = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(eventRaw) ? eventRaw : null;
+
+  // Content-derived, so the same argument pasted twice lands on itself. The
+  // date takes part: the same topic prepared for two different meetings is
+  // two different trees.
+  final id = slugId('deb', '${normKey(topic.isEmpty ? topicNative : topic)}|${event ?? ''}');
+
+  return (
+    tree: DebateTree(
+      id: id,
+      topic: topic.isEmpty ? topicNative : topic,
+      topicNative: topicNative,
+      event: event,
+      persona: persona,
+      personaNative: personaNative,
+      position: clean(raw['your_position']),
+      positionNative: clean(raw['your_position_native']),
+      nodes: kept,
+      createdAt: now,
+    ),
+    topic: label,
+    reason: null,
+  );
 }
 
 /// The language the AI was asked to write translations in, echoed back so the

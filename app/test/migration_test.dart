@@ -1,4 +1,4 @@
-/// Upgrading an existing library across schema versions: 1 -> 2 -> 3.
+/// Upgrading an existing library across schema versions: 1 -> 2 -> 3 -> 4.
 ///
 /// Someone who has been studying for months has an old database on their
 /// phone, and the upgrade runs on it unattended the first time they open the
@@ -31,6 +31,7 @@ const _addedInSchema2ToSentences = [
 ];
 const _addedInSchema2ToQuestions = ['cue_text', 'cue_translation_native', 'note'];
 const _addedInSchema3ToRealms = ['unlocked'];
+const _addedInSchema4Tables = ['chunks', 'debates', 'attempts', 'captures', 'failures'];
 
 void main() {
   late File file;
@@ -87,6 +88,9 @@ void main() {
     for (final c in _addedInSchema3ToRealms) {
       await db.customStatement('ALTER TABLE realms DROP COLUMN $c');
     }
+    for (final t in _addedInSchema4Tables) {
+      await db.customStatement('DROP TABLE $t');
+    }
     await db.customStatement('PRAGMA user_version = 1');
     await db.close();
   }
@@ -106,7 +110,22 @@ void main() {
     for (final c in _addedInSchema3ToRealms) {
       await db.customStatement('ALTER TABLE realms DROP COLUMN $c');
     }
+    for (final t in _addedInSchema4Tables) {
+      await db.customStatement('DROP TABLE $t');
+    }
     await db.customStatement('PRAGMA user_version = 2');
+    await db.close();
+  }
+
+  /// Builds a database shaped like the release just before the debate gym:
+  /// every column of today's tables, none of the five new tables.
+  Future<void> seedSchemaThree() async {
+    final db = AppDatabase(NativeDatabase(file));
+    await seedContent(Repository(db));
+    for (final t in _addedInSchema4Tables) {
+      await db.customStatement('DROP TABLE $t');
+    }
+    await db.customStatement('PRAGMA user_version = 3');
     await db.close();
   }
 
@@ -234,7 +253,37 @@ void main() {
     expect(realms.every((r) => !r.unlocked), isTrue);
   });
 
-  test('a fresh schema 3 database needs no migration at all', () async {
+  test('a schema 3 library gains the debate tables and keeps everything else',
+      () async {
+    await seedSchemaThree();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    final repo = Repository(reopened);
+    addTearDown(reopened.close);
+
+    // Nothing the learner had is touched.
+    expect((await repo.realms()).single.unlocked, isTrue);
+    expect(await repo.questions(), isNotEmpty);
+    expect((await repo.history()), hasLength(1));
+    expect((await repo.loadProgress()).streak, 1);
+
+    // The new tables are there, empty, and usable at once.
+    for (final t in _addedInSchema4Tables) {
+      final n = (await reopened
+              .customSelect('SELECT COUNT(*) AS c FROM $t')
+              .getSingle())
+          .read<int>('c');
+      expect(n, 0, reason: '$t should exist and be empty after the upgrade');
+    }
+    await repo.addCapture(note: 'after the upgrade');
+    expect(await repo.captures(), hasLength(1));
+    expect(
+        (await reopened.customSelect('PRAGMA user_version').getSingle())
+            .read<int>('user_version'),
+        4);
+  });
+
+  test('a fresh schema 4 database needs no migration at all', () async {
     final db = AppDatabase(NativeDatabase(file));
     await seedContent(Repository(db));
     await db.close();
@@ -247,5 +296,6 @@ void main() {
     // unlocked because `importMaterial` marks it so, not through migration
     // grandfathering.
     expect((await repo.realms()).single.unlocked, isTrue);
+    expect(await repo.debates(), isEmpty);
   });
 }

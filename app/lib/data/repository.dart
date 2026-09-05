@@ -10,7 +10,9 @@ import 'package:drift/drift.dart';
 import '../core/l10n/languages.dart';
 import '../core/util.dart';
 import '../domain/importer.dart' as imp;
+import '../domain/debate.dart';
 import '../domain/models.dart';
+import '../domain/prompts.dart' as pr;
 import '../domain/progress_service.dart';
 import '../domain/question_generator.dart' as qg;
 import '../domain/srs.dart' as srs;
@@ -55,6 +57,43 @@ class ImportOutcome {
         duplicateSentences = 0,
         questions = 0,
         realmName = null,
+        partial = false;
+}
+
+/// What came of importing a debate pack. Trees the importer could not make
+/// sound are named, with the reason: the learner pasted them, and "3 of 4"
+/// with no explanation would leave them wondering what they did wrong.
+class PackOutcome {
+  final bool ok;
+  final List<String> errors;
+  final int chunks;
+  final int debates;
+  final int critiques;
+
+  /// Critiques for attempts this phone does not have — a pack pasted onto a
+  /// different device, or attempts since deleted. Counted, not stored.
+  final int unmatchedCritiques;
+  final List<({String topic, String reason})> rejected;
+  final bool partial;
+
+  const PackOutcome({
+    required this.ok,
+    this.errors = const [],
+    this.chunks = 0,
+    this.debates = 0,
+    this.critiques = 0,
+    this.unmatchedCritiques = 0,
+    this.rejected = const [],
+    this.partial = false,
+  });
+
+  const PackOutcome.failure(this.errors)
+      : ok = false,
+        chunks = 0,
+        debates = 0,
+        critiques = 0,
+        unmatchedCritiques = 0,
+        rejected = const [],
         partial = false;
 }
 
@@ -1143,6 +1182,10 @@ class Repository {
       await db.delete(db.srsStates).go();
       await (db.delete(db.batches)..where((t) => t.kind.equals('material'))).go();
       await db.update(db.realms).write(const RealmsCompanion(hasMaterial: Value(false)));
+      // Debates and the chunk library are material too; the learner's own
+      // captures and attempts are a record of what they did, and stay.
+      await db.delete(db.debates).go();
+      await db.delete(db.chunks).go();
     });
     await _delMeta('recentSentences');
   }
@@ -1153,6 +1196,10 @@ class Repository {
       await db.delete(db.srsStates).go();
       await db.delete(db.questionStats).go();
       await db.delete(db.histories).go();
+      // What the learner said in debates, and where they slipped, is progress
+      // in the same sense; the trees themselves are material and stay.
+      await db.delete(db.attempts).go();
+      await db.delete(db.failures).go();
     });
     await saveProgress(const Progress());
     await _delMeta('recentSentences');
@@ -1169,6 +1216,13 @@ class Repository {
       await db.delete(db.srsStates).go();
       await db.delete(db.realms).go();
       await db.delete(db.batches).go();
+      // The debates were built for the areas being cleared, and the attempts
+      // and failures point into those debates. Captures are the learner's own
+      // notes about their life, not about the material, so they stay.
+      await db.delete(db.debates).go();
+      await db.delete(db.chunks).go();
+      await db.delete(db.attempts).go();
+      await db.delete(db.failures).go();
     });
     await _delMeta('profile');
     await _delMeta('recentSentences');
@@ -1190,10 +1244,255 @@ class Repository {
       await db.delete(db.histories).go();
       await db.delete(db.batches).go();
       await db.delete(db.meta).go();
+      await db.delete(db.debates).go();
+      await db.delete(db.chunks).go();
+      await db.delete(db.attempts).go();
+      await db.delete(db.captures).go();
+      await db.delete(db.failures).go();
     });
 
     if (lang != null) await saveUiLanguage(lang);
     if (settings != null) await saveSettings(settings);
+  }
+
+  // -------------------------------------------------------------- debate gym
+
+  Future<List<Chunk>> chunks() async =>
+      (await db.select(db.chunks).get()).map((r) => r.toDomain()).toList();
+
+  Future<List<DebateTree>> debates({bool includeDisabled = false}) async {
+    final rows = await db.select(db.debates).get();
+    return [
+      for (final r in rows)
+        if (includeDisabled || !r.disabled) r.toDomain()
+    ];
+  }
+
+  Future<List<Attempt>> attempts({bool pendingOnly = false}) async {
+    final rows = await (db.select(db.attempts)..orderBy([(t) => OrderingTerm.asc(t.at)])).get();
+    return [
+      for (final r in rows)
+        if (!pendingOnly || r.critique == null) r.toDomain()
+    ];
+  }
+
+  Future<List<Capture>> captures({bool pendingOnly = false}) async {
+    final rows =
+        await (db.select(db.captures)..orderBy([(t) => OrderingTerm.asc(t.createdAt)])).get();
+    return [
+      for (final r in rows)
+        if (!pendingOnly || r.consumedAt == null) r.toDomain()
+    ];
+  }
+
+  Future<List<Failure>> failures({bool pendingOnly = false}) async {
+    final rows = await (db.select(db.failures)..orderBy([(t) => OrderingTerm.asc(t.at)])).get();
+    return [
+      for (final r in rows)
+        if (!pendingOnly || r.consumedAt == null) r.toDomain()
+    ];
+  }
+
+  /// A line written down in twenty seconds: what is coming, or what could not
+  /// be said. It becomes an event in the next pack prompt.
+  Future<Capture> addCapture({required String note, String? date, String who = ''}) async {
+    final text = clean(note);
+    if (text.isEmpty) throw ArgumentError('a capture needs some words');
+    final c = Capture(
+      id: uid('cap'),
+      noteNative: text,
+      date: date != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date) ? date : null,
+      who: clean(who),
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    await db.into(db.captures).insert(captureToRow(c));
+    return c;
+  }
+
+  Future<void> deleteCapture(String id) =>
+      (db.delete(db.captures)..where((t) => t.id.equals(id))).go();
+
+  /// One reply the learner gave. Stored so the next pack can carry it out for
+  /// critique. [closest] is the model rebuttal it was judged nearest to.
+  Future<Attempt> recordAttempt({
+    required DebateTree tree,
+    required DebateNode node,
+    required String youSaid,
+    required List<Move> moves,
+    Rebuttal? closest,
+  }) async {
+    final a = Attempt(
+      id: uid('att'),
+      debateId: tree.id,
+      nodeId: node.id,
+      youSaid: clean(youSaid),
+      moves: moves,
+      closest: closest?.id,
+      closestStrength: closest?.strength,
+      day: today(),
+      at: DateTime.now().millisecondsSinceEpoch,
+    );
+    await db.into(db.attempts).insert(attemptToRow(a));
+    return a;
+  }
+
+  /// Something that went wrong, written by the app. The AI reads these to aim
+  /// the next pack's reinforcement.
+  Future<Failure> recordFailure({
+    required DebateTree tree,
+    required DebateNode node,
+    required String kind,
+    String note = '',
+  }) async {
+    final f = Failure(
+      id: uid('fail'),
+      debateId: tree.id,
+      nodeId: node.id,
+      kind: kind,
+      noteNative: clean(note),
+      at: DateTime.now().millisecondsSinceEpoch,
+    );
+    await db.into(db.failures).insert(failureToRow(f));
+    return f;
+  }
+
+  Future<void> setDebateDisabled(String id, bool disabled) => (db.update(db.debates)
+        ..where((t) => t.id.equals(id)))
+      .write(DebatesCompanion(disabled: Value(disabled)));
+
+  /// Imports one reply of a pack: chunks (usually only the first time), any
+  /// debates, and critiques for attempts still waiting on one.
+  ///
+  /// Captures and failures are marked as carried out here, at the moment the
+  /// material actually comes back — not when the prompt is copied, because a
+  /// prompt copied and never pasted would otherwise lose them.
+  Future<PackOutcome> importPack(String raw, {required String uiLanguage}) async {
+    final ex = imp.extractJson(raw);
+    if (!ex.ok) return PackOutcome.failure([ex.failure == 'empty' ? 'empty' : 'parse']);
+
+    final v = imp.validate(ex.data!);
+    if (!v.ok) return PackOutcome.failure(v.errors);
+    if (v.type != 'pack') return const PackOutcome.failure(['not a pack reply']);
+
+    final norm = imp.normalisePack(ex.data!);
+    if (norm.chunks.isEmpty && norm.debates.isEmpty && norm.critiques.isEmpty) {
+      return PackOutcome(
+        ok: false,
+        errors: const ['nothing usable in the pack'],
+        rejected: norm.rejected,
+        partial: ex.repaired,
+      );
+    }
+
+    final pending = {for (final a in await attempts(pendingOnly: true)) a.id: a};
+    var matched = 0, unmatched = 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    await db.transaction(() async {
+      for (final c in norm.chunks) {
+        await db.into(db.chunks).insertOnConflictUpdate(chunkToRow(c));
+      }
+      for (final t in norm.debates) {
+        // A tree pasted twice lands on itself and comes back enabled: pasting
+        // it again is the clearest way anyone could say they want it back.
+        await db.into(db.debates).insertOnConflictUpdate(debateToRow(t));
+      }
+      for (final c in norm.critiques) {
+        final a = pending[c.attemptId];
+        if (a == null) {
+          unmatched++;
+          continue;
+        }
+        await db.update(db.attempts).replace(attemptToRow(a.withCritique(c)));
+        matched++;
+      }
+      if (norm.debates.isNotEmpty) {
+        await (db.update(db.captures)..where((t) => t.consumedAt.isNull()))
+            .write(CapturesCompanion(consumedAt: Value(now)));
+        await (db.update(db.failures)..where((t) => t.consumedAt.isNull()))
+            .write(FailuresCompanion(consumedAt: Value(now)));
+      }
+      await db.into(db.batches).insertOnConflictUpdate(BatchesCompanion.insert(
+            id: newBatchId(),
+            kind: 'pack',
+            at: now,
+            language: Value(uiLanguage),
+            promptVersion: const Value(pr.PromptVersions.pack),
+            counts: Value(jsonEncode({
+              'chunks': norm.chunks.length,
+              'debates': norm.debates.length,
+              'critiques': matched,
+              'rejected': norm.rejected.length,
+            })),
+          ));
+    });
+
+    return PackOutcome(
+      ok: true,
+      chunks: norm.chunks.length,
+      debates: norm.debates.length,
+      critiques: matched,
+      unmatchedCritiques: unmatched,
+      rejected: norm.rejected,
+      partial: ex.repaired,
+    );
+  }
+
+  /// The attempts the AI is owed a critique on, in the shape the prompts take.
+  Future<List<({String id, String topic, String line, String youSaid, List<String> moves})>>
+      _attemptsForPrompt() async {
+    final trees = {for (final t in await debates(includeDisabled: true)) t.id: t};
+    return [
+      for (final a in await attempts(pendingOnly: true))
+        (
+          id: a.id,
+          topic: trees[a.debateId]?.topic ?? a.debateId,
+          line: trees[a.debateId]?.node(a.nodeId)?.line ?? '',
+          youSaid: a.youSaid,
+          moves: [for (final m in a.moves) m.name],
+        )
+    ];
+  }
+
+  /// The weekly prompt, assembled from everything waiting on this phone.
+  Future<String> packPromptText({required String uiLanguage, int debates = 3}) async {
+    final profile = await loadProfile();
+    final trees = {for (final t in await this.debates(includeDisabled: true)) t.id: t};
+    final areas = [for (final r in await realms()) if (r.unlocked) r.label];
+    return pr.packPrompt(
+      uiLanguage: uiLanguage,
+      level: profile?.englishLevel ?? 'B1',
+      roles: profile?.roles ?? const [],
+      priorities: profile?.learningPriorities ?? const [],
+      areas: areas,
+      existingTopics: [for (final t in trees.values) t.topic],
+      events: [
+        for (final c in await captures(pendingOnly: true))
+          (date: c.date, note: c.noteNative, who: c.who)
+      ],
+      failures: [
+        for (final f in await failures(pendingOnly: true))
+          (
+            topic: trees[f.debateId]?.topic ?? f.debateId,
+            node: f.nodeId,
+            kind: f.kind,
+            note: f.noteNative,
+          )
+      ],
+      attempts: await _attemptsForPrompt(),
+      needChunks: (await chunks()).isEmpty,
+      debates: debates,
+    );
+  }
+
+  /// Critiques only, for the learner who cannot wait for the next pack.
+  Future<String> critiquePromptText({required String uiLanguage}) async {
+    final profile = await loadProfile();
+    return pr.critiquePrompt(
+      uiLanguage: uiLanguage,
+      level: profile?.englishLevel ?? 'B1',
+      attempts: await _attemptsForPrompt(),
+    );
   }
 
   // ------------------------------------------------------------ export/import
@@ -1221,6 +1520,11 @@ class Repository {
           'histories',
           'batches',
           'meta',
+          'chunks',
+          'debates',
+          'attempts',
+          'captures',
+          'failures',
         ])
           t: await dump(t),
       },

@@ -17,6 +17,7 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import '../core/util.dart';
+import '../domain/debate.dart' as d;
 import '../domain/models.dart' as m;
 
 part 'database.g.dart';
@@ -196,6 +197,86 @@ class Batches extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ------------------------------------------------------- schema 4: debates
+// The debate gym. A tree is stored whole as JSON in its row: it is read and
+// walked as one unit and never queried node by node.
+
+@DataClassName('ChunkRow')
+class Chunks extends Table {
+  TextColumn get id => text()();
+  TextColumn get move => text()();
+  TextColumn get body => text().named('text')();
+  TextColumn get native => text().withDefault(const Constant(''))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('DebateRow')
+class Debates extends Table {
+  TextColumn get id => text()();
+  TextColumn get topic => text()();
+  TextColumn get topicNative => text().withDefault(const Constant(''))();
+  TextColumn get event => text().nullable()();
+  TextColumn get persona => text().withDefault(const Constant(''))();
+  TextColumn get personaNative => text().withDefault(const Constant(''))();
+  TextColumn get position => text().withDefault(const Constant(''))();
+  TextColumn get positionNative => text().withDefault(const Constant(''))();
+  TextColumn get realmId => text().nullable()();
+  /// The node list as JSON, in tree order; the first node is the root.
+  TextColumn get nodes => text()();
+  IntColumn get createdAt => integer()();
+  BoolColumn get disabled => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('AttemptRow')
+class Attempts extends Table {
+  TextColumn get id => text()();
+  TextColumn get debateId => text()();
+  TextColumn get nodeId => text()();
+  TextColumn get youSaid => text()();
+  TextColumn get moves => text().withDefault(const Constant('[]')).map(const StringListConverter())();
+  TextColumn get closest => text().nullable()();
+  TextColumn get closestStrength => text().nullable()();
+  TextColumn get day => text()();
+  IntColumn get at => integer()();
+  /// The critique as JSON once it has come back, null until then.
+  TextColumn get critique => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('CaptureRow')
+class Captures extends Table {
+  TextColumn get id => text()();
+  TextColumn get noteNative => text()();
+  TextColumn get date => text().nullable()();
+  TextColumn get who => text().withDefault(const Constant(''))();
+  IntColumn get createdAt => integer()();
+  IntColumn get consumedAt => integer().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('FailureRow')
+class Failures extends Table {
+  TextColumn get id => text()();
+  TextColumn get debateId => text()();
+  TextColumn get nodeId => text()();
+  TextColumn get kind => text()();
+  TextColumn get noteNative => text().withDefault(const Constant(''))();
+  IntColumn get at => integer()();
+  IntColumn get consumedAt => integer().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// Single-row-per-key store for settings, profile and progress.
 @DataClassName('MetaRow')
 class Meta extends Table {
@@ -218,13 +299,18 @@ class Meta extends Table {
   Histories,
   Batches,
   Meta,
+  Chunks,
+  Debates,
+  Attempts,
+  Captures,
+  Failures,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
       : super(executor ?? driftDatabase(name: 'kotolang'));
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -268,6 +354,14 @@ class AppDatabase extends _$AppDatabase {
               'UPDATE realms SET unlocked = 1 WHERE has_material = 1 OR selected = 1',
             );
           }
+          // 3 -> 4 is the debate gym: five new tables and nothing else. No
+          // existing table changes shape, so a library built under schema 3
+          // opens untouched — the old material simply gains empty neighbours.
+          if (from < 4) {
+            for (final t in <TableInfo>[chunks, debates, attempts, captures, failures]) {
+              await mig.createTable(t);
+            }
+          }
           await _createIndexes();
         },
         beforeOpen: (details) async {
@@ -288,6 +382,13 @@ class AppDatabase extends _$AppDatabase {
       'CREATE INDEX IF NOT EXISTS idx_items_key ON items (norm_key_value)',
       'CREATE INDEX IF NOT EXISTS idx_srs_due ON srs_states (due)',
       'CREATE INDEX IF NOT EXISTS idx_history_day ON histories (day)',
+      // The pack prompt gathers what is still waiting: attempts with no
+      // critique yet, captures and failures not yet carried out.
+      'CREATE INDEX IF NOT EXISTS idx_attempts_debate ON attempts (debate_id)',
+      'CREATE INDEX IF NOT EXISTS idx_attempts_day ON attempts (day)',
+      'CREATE INDEX IF NOT EXISTS idx_captures_consumed ON captures (consumed_at)',
+      'CREATE INDEX IF NOT EXISTS idx_failures_consumed ON failures (consumed_at)',
+      'CREATE INDEX IF NOT EXISTS idx_debates_event ON debates (event)',
     ];
     for (final s in statements) {
       await customStatement(s);
@@ -531,6 +632,146 @@ HistoriesCompanion historyToRow(m.HistoryEntry h) => HistoriesCompanion.insert(
       type: h.type.name,
       correct: h.correct,
       wasDue: h.wasDue,
+    );
+
+// --------------------------------------------------------- debate mapping
+
+extension ChunkRowX on ChunkRow {
+  d.Chunk toDomain() => d.Chunk(
+        id: id,
+        move: d.Move.parse(move) ?? d.Move.reason,
+        text: body,
+        native: native,
+      );
+}
+
+ChunksCompanion chunkToRow(d.Chunk c) => ChunksCompanion.insert(
+      id: c.id,
+      move: c.move.name,
+      body: c.text,
+      native: Value(c.native),
+    );
+
+extension DebateRowX on DebateRow {
+  d.DebateTree toDomain() {
+    final decoded = jsonDecode(nodes);
+    return d.DebateTree(
+      id: id,
+      topic: topic,
+      topicNative: topicNative,
+      event: event,
+      persona: persona,
+      personaNative: personaNative,
+      position: position,
+      positionNative: positionNative,
+      realmId: realmId,
+      nodes: [
+        if (decoded is List)
+          for (final n in decoded)
+            if (n is Map) d.DebateNode.fromJson(Map<String, dynamic>.from(n))
+      ],
+      createdAt: createdAt,
+      disabled: disabled,
+    );
+  }
+}
+
+DebatesCompanion debateToRow(d.DebateTree t) => DebatesCompanion.insert(
+      id: t.id,
+      topic: t.topic,
+      topicNative: Value(t.topicNative),
+      event: Value(t.event),
+      persona: Value(t.persona),
+      personaNative: Value(t.personaNative),
+      position: Value(t.position),
+      positionNative: Value(t.positionNative),
+      realmId: Value(t.realmId),
+      nodes: jsonEncode([for (final n in t.nodes) n.toJson()]),
+      createdAt: t.createdAt,
+      disabled: Value(t.disabled),
+    );
+
+extension AttemptRowX on AttemptRow {
+  d.Attempt toDomain() {
+    d.Critique? crit;
+    if (critique != null) {
+      final decoded = jsonDecode(critique!);
+      if (decoded is Map) {
+        crit = d.Critique.fromJson(Map<String, dynamic>.from(decoded));
+      }
+    }
+    return d.Attempt(
+      id: id,
+      debateId: debateId,
+      nodeId: nodeId,
+      youSaid: youSaid,
+      moves: [
+        for (final m in moves)
+          if (d.Move.parse(m) != null) d.Move.parse(m)!
+      ],
+      closest: closest,
+      closestStrength:
+          closestStrength == null ? null : d.Strength.parse(closestStrength!),
+      day: day,
+      at: at,
+      critique: crit,
+    );
+  }
+}
+
+AttemptsCompanion attemptToRow(d.Attempt a) => AttemptsCompanion.insert(
+      id: a.id,
+      debateId: a.debateId,
+      nodeId: a.nodeId,
+      youSaid: a.youSaid,
+      moves: Value([for (final m in a.moves) m.name]),
+      closest: Value(a.closest),
+      closestStrength: Value(a.closestStrength?.name),
+      day: a.day,
+      at: a.at,
+      critique: Value(a.critique == null ? null : jsonEncode(a.critique!.toJson())),
+    );
+
+extension CaptureRowX on CaptureRow {
+  d.Capture toDomain() => d.Capture(
+        id: id,
+        noteNative: noteNative,
+        date: date,
+        who: who,
+        createdAt: createdAt,
+        consumedAt: consumedAt,
+      );
+}
+
+CapturesCompanion captureToRow(d.Capture c) => CapturesCompanion.insert(
+      id: c.id,
+      noteNative: c.noteNative,
+      date: Value(c.date),
+      who: Value(c.who),
+      createdAt: c.createdAt,
+      consumedAt: Value(c.consumedAt),
+    );
+
+extension FailureRowX on FailureRow {
+  d.Failure toDomain() => d.Failure(
+        id: id,
+        debateId: debateId,
+        nodeId: nodeId,
+        kind: kind,
+        noteNative: noteNative,
+        at: at,
+        consumedAt: consumedAt,
+      );
+}
+
+FailuresCompanion failureToRow(d.Failure f) => FailuresCompanion.insert(
+      id: f.id,
+      debateId: f.debateId,
+      nodeId: f.nodeId,
+      kind: f.kind,
+      noteNative: Value(f.noteNative),
+      at: f.at,
+      consumedAt: Value(f.consumedAt),
     );
 
 /// Convenience for import batches and reset flows.

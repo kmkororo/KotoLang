@@ -11,15 +11,23 @@
 /// gets Spanish glosses rather than Japanese ones.
 library;
 
+import 'dart:convert';
+
 import '../core/l10n/languages.dart';
 
 const schemaVersion = '1.0';
+
+/// The debate pack is a different shape from the material formats, so it has
+/// its own version; the importer accepts both for ever.
+const packSchemaVersion = '2.0';
 
 class PromptVersions {
   static const profile = 'PROFILE_PROMPT_V1';
   static const material = 'MATERIAL_PROMPT_V1';
   static const audit = 'AUDIT_PROMPT_V1';
   static const addRealm = 'ADD_REALM_PROMPT_V1';
+  static const pack = 'PACK_PROMPT_V1';
+  static const critique = 'CRITIQUE_PROMPT_V1';
 }
 
 String _commonRules(String native) => '''
@@ -464,4 +472,269 @@ OUTPUT SHAPE
 
 THE NEW AREA
 ${newRealm.isEmpty ? '(write the area you want to add here, e.g. Travel)' : newRealm}''';
+}
+
+// --------------------------------------------------------------- 5. the pack
+
+/// The moves an argument is made of, as the prompt names them. Kept in step
+/// with `Move` in debate.dart by the prompt test.
+const argumentMoves = [
+  'concede',
+  'however',
+  'reason',
+  'evidence',
+  'example',
+  'question',
+  'reframe',
+  'propose',
+  'clarify',
+  'close',
+];
+
+/// Rules for the pack. Differs from `_commonRules` in one important way: the
+/// reply is *meant* to stop after one debate and wait. A whole week's trees in
+/// one message is what a free chat app truncates, and a truncated tree is
+/// useless; one complete tree per message is short enough to survive.
+String _packRules(String native) => '''
+RULES
+- Put the entire reply inside ONE fenced code block marked ```json, and write
+  nothing at all outside it. No preamble, no explanation, no closing remarks.
+  The user is on a phone and copies the block with its copy button.
+- The block must contain exactly one JSON object, and it must be valid JSON.
+- ONE DEBATE PER REPLY. Write one complete debate, close the JSON properly,
+  and stop. When the user says "continue" (or "続けて"), reply with the next
+  debate as a fresh, complete JSON object in the same shape. Never split one
+  debate across two replies, and never start a second debate in the same
+  reply.
+- Never invent facts about the user's real situation beyond what is written
+  below. Where you must fill a gap, keep it generic and plausible.
+- Every *_native field must be written in $native, naturally, not as a
+  literal gloss. Every field without that suffix is English.
+- schema_version must be exactly "$packSchemaVersion", type must be "pack".''';
+
+/// One weekly request: the trees to argue against, the critiques owed, and —
+/// the first time — the chunk library. Everything the learner captured or
+/// failed at is written in so the AI can aim.
+String packPrompt({
+  required String uiLanguage,
+  String level = 'B1',
+  List<String> roles = const [],
+  List<String> priorities = const [],
+  List<String> areas = const [],
+  List<String> existingTopics = const [],
+  required List<({String? date, String note, String who})> events,
+  required List<({String topic, String node, String kind, String note})> failures,
+  required List<({String id, String topic, String line, String youSaid, List<String> moves})>
+      attempts,
+  bool needChunks = false,
+  int debates = 3,
+}) {
+  final native = languageFor(uiLanguage).englishName;
+  String list(Iterable<String> xs, String empty) =>
+      xs.isEmpty ? empty : xs.map((x) => '- $x').join('\n');
+
+  final eventText = list(
+    events.map((e) =>
+        '${e.date ?? '(no date)'}: ${e.note}${e.who.isNotEmpty ? ' — with: ${e.who}' : ''}'),
+    '(none this week — build the debates from the areas and failures instead)',
+  );
+  final failureText = list(
+    failures.map((f) => '${f.topic} / ${f.node}: ${f.kind}${f.note.isNotEmpty ? ' — ${f.note}' : ''}'),
+    '(none recorded)',
+  );
+  final attemptText = attempts.isEmpty
+      ? '(none — leave "critiques" as an empty array)'
+      : attempts
+          .map((a) => '''
+  { "attempt": "${a.id}",
+    "topic": "${a.topic}",
+    "they_said": "${a.line}",
+    "you_said": "${a.youSaid}",
+    "moves_used": ${jsonEncode(a.moves)} }''')
+          .join(',\n');
+
+  return '''
+You are a sparring partner and coach for one person learning to argue in
+English. The user practises on a train, silently, against opponents you write
+in advance. They cannot ask you anything mid-argument, so everything the
+exercise needs has to be in this reply.
+
+THE LEARNER
+English level (CEFR): $level
+Roles: ${roles.isEmpty ? '(unknown)' : roles.join(', ')}
+Where they use English: ${priorities.isEmpty ? '(unknown)' : priorities.join(', ')}
+Areas they study: ${areas.isEmpty ? '(none yet)' : areas.join(', ')}
+
+WHAT IS COMING UP — build debates for these first, in date order
+$eventText
+
+WHERE THEY STRUGGLED LAST TIME — aim the remaining debates at these
+$failureText
+
+DEBATES ALREADY ON THE PHONE — do not repeat these topics
+${list(existingTopics, '(none)')}
+
+WHAT TO PRODUCE, IN ORDER
+${needChunks ? '''
+0. chunks — ONLY in this first reply. About 100 short pieces of argument that
+   work for any topic, each tagged with one move from the list below and
+   written with {x} / {y} slots where the topic goes. Roughly 10 per move.
+   "I take your point on {x}, but" · "The numbers from {x} say otherwise:" ·
+   "What if we {x} first and revisit {y} in a month?" Include the $native
+   reading of each. Later replies must not include chunks.
+''' : ''}
+1. debates — ONE per reply, $debates in total over the conversation. The
+   first must be the nearest upcoming event above. Say "continue" is expected.
+2. critiques — in the FIRST reply only, one per attempt listed at the bottom.
+
+THE MOVES (use exactly these labels, nothing else)
+${argumentMoves.join(' · ')}
+
+HOW TO WRITE A DEBATE
+- The opponent is a person, with the persona given: a numbers-first manager
+  argues with numbers, an anxious colleague argues with consequences. Keep the
+  same voice down the whole tree.
+- Depth is exactly 3: the opponent speaks, the user replies, the opponent
+  answers that reply, the user replies, the opponent answers once more, and
+  the user's third reply ends it. So: node ids n1 → n2a/n2b/n2c → n3aa... and
+  the rebuttals of the third-level nodes all have "next": null plus an
+  "outcome".
+- Each node needs exactly 3 rebuttals: one "strong", one "weak", one
+  "concede". A weak reply is correct English that makes the wrong move —
+  restating the wish, getting louder, changing the subject. Its "next" node
+  has the opponent pressing harder. The strong reply's "next" has the
+  opponent giving ground or asking a real question.
+- Every rebuttal lists its "moves", 2 to 4 from the list, in the order they
+  occur in "model". A strong reply is never a single move. The "slots" say
+  what fills {x}-style gaps for this reply.
+- Lines are spoken, 8 to 22 words. Model rebuttals are spoken, 10 to 30 words.
+  Aim the English at CEFR $level.
+
+grasp — THE PART THAT TRAINS LISTENING FOR ARGUMENT
+For every opponent line, three questions in $native, each with 3 options
+of which exactly one is right and the other two are near-misses:
+- claim: what they are actually asserting
+- reason: the ground they gave for it
+- weak_point: where the argument gives way
+
+weak_point must be something the user can push on, written as a fault in the
+reasoning, not a verdict:
+  Good  "says there is no headcount without having checked what the work is"
+  Good  "treats one late supplier as if every supplier is late"
+  Good  "assumes the date and the scope must move together"
+  Bad   "is wrong"        Bad   "is exaggerating"        Bad   "is being emotional"
+The strong rebuttal must actually push on that weak point.
+
+${_packRules(native)}
+
+OUTPUT SHAPE (one debate; "chunks" only in the first reply, "critiques" only in the first reply)
+{
+  "schema_version": "$packSchemaVersion",
+  "type": "pack",
+  "native_language": "$native",
+  "chunks": [
+    { "id": "c-concede-01", "move": "concede",
+      "text": "I take your point on {x}, but", "native": "..." }
+  ],
+  "debates": [
+    {
+      "topic": "Pulling the migration date forward",
+      "topic_native": "...",
+      "event": "2026-09-11",
+      "opponent": { "persona": "sceptical, numbers-first manager", "persona_native": "..." },
+      "your_position": "We should move the date up by two weeks.",
+      "your_position_native": "...",
+      "nodes": [
+        {
+          "id": "n1",
+          "line": "We simply don't have the headcount to move the date.",
+          "line_native": "...",
+          "grasp": {
+            "claim":      { "answer": "...", "options": ["...", "...", "..."] },
+            "reason":     { "answer": "...", "options": ["...", "...", "..."] },
+            "weak_point": { "answer": "...", "options": ["...", "...", "..."] }
+          },
+          "rebuttals": [
+            { "id": "r1a", "strength": "strong",
+              "model": "I take your point on headcount, but two of the three blockers are already cleared, so what's left is a fortnight, not a quarter.",
+              "moves": ["concede", "however", "evidence"],
+              "slots": { "x": "headcount" },
+              "next": "n2a" },
+            { "id": "r1b", "strength": "weak",
+              "model": "But we really do need to move faster on this.",
+              "moves": ["however"],
+              "slots": {},
+              "next": "n2b" },
+            { "id": "r1c", "strength": "concede",
+              "model": "Fair enough — let's keep the date as it is.",
+              "moves": ["concede", "close"],
+              "slots": {},
+              "next": null, "outcome": "conceded" }
+          ]
+        }
+      ]
+    }
+  ],
+  "critiques": [
+    { "attempt": "the id given below",
+      "verdict_native": "two or three sentences in $native: what worked, what did not",
+      "better": ["a stronger version in English", "another, in a different register"],
+      "watch_native": "one habit to watch, in $native" }
+  ]
+}
+
+"outcome" is one of: won, held, pressed, conceded.
+
+ATTEMPTS TO CRITIQUE (first reply only)
+[
+$attemptText
+]''';
+}
+
+/// Critiques alone, for the learner who cannot wait for the next pack.
+String critiquePrompt({
+  required String uiLanguage,
+  String level = 'B1',
+  required List<({String id, String topic, String line, String youSaid, List<String> moves})>
+      attempts,
+}) {
+  final native = languageFor(uiLanguage).englishName;
+  final attemptText = attempts
+      .map((a) => '''
+  { "attempt": "${a.id}",
+    "topic": "${a.topic}",
+    "they_said": "${a.line}",
+    "you_said": "${a.youSaid}",
+    "moves_used": ${jsonEncode(a.moves)} }''')
+      .join(',\n');
+
+  return '''
+You are coaching one person who is learning to argue in English (CEFR $level).
+Below are replies they gave to an opponent's line. Critique each one.
+
+FOR EACH ATTEMPT
+- verdict_native: two or three sentences in $native. Say what the reply did
+  well and where it fell short — in the *move* it made, not only the grammar.
+  Did it concede before pushing back? Did it give a reason, or only restate
+  the wish? Did it answer what the opponent actually said?
+- better: two stronger versions in English, 10 to 30 words each, in two
+  different registers (one collegial, one firmer). Natural spoken English.
+- watch_native: one habit to watch for next time, in $native, one line.
+
+${_packRules(native)}
+
+OUTPUT SHAPE
+{
+  "schema_version": "$packSchemaVersion",
+  "type": "pack",
+  "native_language": "$native",
+  "critiques": [
+    { "attempt": "...", "verdict_native": "...", "better": ["...", "..."], "watch_native": "..." }
+  ]
+}
+
+ATTEMPTS
+[
+$attemptText
+]''';
 }
