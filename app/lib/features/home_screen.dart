@@ -13,6 +13,7 @@ import '../app.dart';
 import '../core/util.dart';
 import '../domain/models.dart';
 import '../domain/progress_service.dart';
+import 'debate_screen.dart';
 import 'listen_screen.dart';
 import 'onboarding_screens.dart';
 import 'quiz_screen.dart';
@@ -255,6 +256,18 @@ class HomeScreen extends ConsumerWidget {
               onPressed: () => _start(context, ref, count: 1),
               child: Text(s.t('justOne')),
             ),
+            // Arguing back. Shown only once a pack has brought an opponent:
+            // a door to an empty room is worse than no door.
+            if ((ref.watch(debatesProvider).value ?? const []).isNotEmpty) ...[
+              const SizedBox(height: 10),
+              FilledButton.tonal(
+                onPressed: () => startDebate(context, ref, onDone: () {
+                  ref.invalidate(homeStatsProvider);
+                  ref.invalidate(treeDataProvider);
+                }),
+                child: Text(s.t('debateButton')),
+              ),
+            ],
             // Listening with nothing to answer. Not a session and not scored:
             // it is here for the minutes when a question is too much but the
             // sentences are not.

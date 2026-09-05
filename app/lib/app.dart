@@ -16,6 +16,7 @@ import 'core/speech.dart';
 import 'data/database.dart';
 import 'data/repository.dart';
 import 'domain/importer.dart' as imp;
+import 'domain/debate.dart';
 import 'domain/models.dart';
 import 'domain/progress_service.dart';
 import 'features/home_screen.dart';
@@ -114,6 +115,11 @@ final homeCountsProvider = FutureProvider.autoDispose<HomeCounts>((ref) async {
 
 final realmsProvider = FutureProvider.autoDispose<List<Realm>>(
     (ref) => ref.watch(repositoryProvider).realms());
+
+/// The opponents waiting on this phone. Home shows the way in only when there
+/// is at least one, and the debate screen refreshes it when a pack lands.
+final debatesProvider = FutureProvider.autoDispose<List<DebateTree>>(
+    (ref) => ref.watch(repositoryProvider).debates());
 
 /// Strings for the current language.
 final stringsProvider = Provider<S>((ref) {

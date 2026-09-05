@@ -445,6 +445,40 @@ const maxComboBonus = 5;
 /// not something to discover at the moment there is nothing left to answer.
 const lowMaterialMark = 6;
 
+// ------------------------------------------------------------------ debates
+//
+// One exchange is one of the opponent's lines answered: three things caught,
+// a reply built, a branch taken. Paid in the same currency as everything else
+// and on the same principle — nothing is ever taken away for a bad reply.
+
+/// All three things caught: claim, reason and the weak point. The core of the
+/// listening, weighted like the gist question it replaces.
+const graspSeeds = 3;
+
+/// The reply came closest to the strong model. The hardest thing here.
+const strongRebuttalSeeds = 6;
+
+/// The reply carried every move the strong model carries. Form before
+/// content: the skeleton is the transferable part.
+const structureSeeds = 2;
+
+/// How the whole exchange ended, in place of the session-length bonus.
+int outcomeSeeds(String outcome) => switch (outcome) {
+      'won' => 15,
+      'held' => 10,
+      _ => 0,
+    };
+
+/// Seeds for one exchange, before the outcome.
+int exchangeSeeds({
+  required bool graspedAll,
+  required bool closestIsStrong,
+  required bool structureComplete,
+}) =>
+    (graspedAll ? graspSeeds : 0) +
+    (closestIsStrong ? strongRebuttalSeeds : 0) +
+    (structureComplete ? structureSeeds : 0);
+
 // ----------------------------------------------------------- breakthrough
 //
 // The item that kept going wrong and finally stopped. That moment is the

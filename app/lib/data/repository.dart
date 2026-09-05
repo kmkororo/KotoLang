@@ -1360,6 +1360,56 @@ class Repository {
         ..where((t) => t.id.equals(id)))
       .write(DebatesCompanion(disabled: Value(disabled)));
 
+  /// One exchange settled: the reply stored for critique, the day counted as
+  /// studied, the Seeds paid. Failures the exchange showed are written down
+  /// here too, so the next pack can aim at them.
+  ///
+  /// Nothing is judged. [closest] is the model reply the learner's came
+  /// nearest to, worked out on the phone; how much that is worth is decided
+  /// in `progress_service.dart`, and what it *means* waits for the critique.
+  Future<({Attempt attempt, Progress progress, int seeds})> recordExchange({
+    required DebateTree tree,
+    required DebateNode node,
+    required String youSaid,
+    required List<Move> moves,
+    required Rebuttal closest,
+    required bool graspedAll,
+    required List<Move> missingMoves,
+    required List<String> graspMisses,
+    String? outcome,
+  }) async {
+    final attempt = await recordAttempt(
+      tree: tree,
+      node: node,
+      youSaid: youSaid,
+      moves: moves,
+      closest: closest,
+    );
+    for (final kind in graspMisses) {
+      await recordFailure(tree: tree, node: node, kind: kind);
+    }
+    for (final m in missingMoves) {
+      await recordFailure(tree: tree, node: node, kind: 'missing_move:${m.name}');
+    }
+    if (outcome == 'pressed') {
+      await recordFailure(tree: tree, node: node, kind: 'pressed');
+    }
+
+    final progress = await loadProgress();
+    final streak = registerStudyDay(progress, today());
+    final gained = exchangeSeeds(
+          graspedAll: graspedAll,
+          closestIsStrong: closest.strength == Strength.strong,
+          structureComplete: missingMoves.isEmpty,
+        ) +
+        (outcome == null ? 0 : outcomeSeeds(outcome));
+    final milestone =
+        streak.result.advanced && streak.result.to % streakBonusEvery == 0 ? streakBonus : 0;
+    final next = streak.progress.copyWith(seeds: streak.progress.seeds + gained + milestone);
+    await saveProgress(next);
+    return (attempt: attempt, progress: next, seeds: gained + milestone);
+  }
+
   /// Imports one reply of a pack: chunks (usually only the first time), any
   /// debates, and critiques for attempts still waiting on one.
   ///

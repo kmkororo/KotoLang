@@ -890,6 +890,28 @@ class _MaterialScreenState extends ConsumerState<MaterialScreen> {
     final repo = ref.read(repositoryProvider);
     final lang = ref.read(languageProvider) ?? fallbackLanguage;
 
+    // A debate pack pasted into the material box goes where it belongs. It
+    // costs no Seeds — the learner already paid for it with a trip to their
+    // AI — and it has no realm to be filed under.
+    if (_paste.preview.type == 'pack') {
+      setState(() {
+        _busy = true;
+        _error = null;
+      });
+      final pack = await repo.importPack(_paste.text, uiLanguage: lang);
+      if (!mounted) return;
+      setState(() => _busy = false);
+      if (!pack.ok) {
+        setState(() => _error = s.t('importFailedHint'));
+        return;
+      }
+      _paste.clear();
+      ref.invalidate(debatesProvider);
+      showToast(context, s.t('packImported', {'n': pack.debates}));
+      Navigator.popUntil(context, (r) => r.isFirst);
+      return;
+    }
+
     // Charged on what is actually being imported, judged before the trip is
     // finished rather than after: being told the price once the reply is
     // already pasted is the worst moment to hear it.
