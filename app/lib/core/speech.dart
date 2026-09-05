@@ -125,14 +125,39 @@ class SpeechService {
     final v = _voices.where((x) => x.name == name).firstOrNull;
     if (v == null) return;
     _chosen = v;
+    _applied = v;
     await _applyVoice(v);
   }
 
+  /// The voice currently applied on the engine, which may be a scene's rather
+  /// than the chosen one. Tracked so the chosen voice is put back before the
+  /// next ordinary utterance without an extra platform call every time.
+  Voice? _applied;
+
+  /// A voice for one scene, picked deterministically from the English voices
+  /// on the device so the same scene always sounds like the same person and
+  /// two scenes sound like two. With one voice, or none, this is the chosen
+  /// voice — the caller need not care.
+  Voice? voiceFor(int seed) {
+    if (_voices.isEmpty) return _chosen;
+    final english = _voices.where((v) => v.locale.toLowerCase().startsWith('en')).toList();
+    final pool = english.isEmpty ? _voices : english;
+    if (pool.length == 1) return pool.single;
+    return pool[seed.abs() % pool.length];
+  }
+
   /// [rate] is the app's own 0.6–1.2 scale, mapped onto the platform range.
-  Future<void> speak(String text, {double rate = 1.0}) async {
+  /// [voice] speaks this line in another of the device's voices; the chosen
+  /// voice is restored for the next line spoken without one.
+  Future<void> speak(String text, {double rate = 1.0, Voice? voice}) async {
     if (!available || text.trim().isEmpty) return;
     try {
       await _tts.stop();
+      final want = voice ?? _chosen;
+      if (want != null && want.name != _applied?.name) {
+        await _applyVoice(want);
+        _applied = want;
+      }
       await _tts.setSpeechRate((rate * 0.5).clamp(0.1, 1.0));
       await _tts.speak(text);
     } catch (e) {
