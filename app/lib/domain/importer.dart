@@ -16,7 +16,7 @@ import 'models.dart';
 
 /// 1.0 is profile / material / audit; 2.0 added the debate pack. Both are
 /// accepted for ever — a learner's old material must keep importing.
-const supportedSchemas = ['1.0', '2.0', '3.0'];
+const supportedSchemas = ['1.0', '2.0', '3.0', '3.1'];
 const _levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
 // ---------------------------------------------------------------- 1. extract

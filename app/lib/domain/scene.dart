@@ -20,21 +20,71 @@ enum SceneSource {
       '$s'.trim().toLowerCase() == 'builtin' ? SceneSource.builtin : SceneSource.ai;
 }
 
-/// "What did they say?" — three summaries in the learner's language.
+/// "What did they say?" — three English summaries of the line, each with its
+/// translation for the moment after the answer.
 class Gist {
   final List<String> options;
+
+  /// Translations of [options], same order; empty when the interface language
+  /// is English or an older scene carried none.
+  final List<String> natives;
   final int answer;
-  const Gist({required this.options, required this.answer});
+  const Gist({required this.options, this.natives = const [], required this.answer});
 
   String get correct => options[answer];
+  String nativeOf(int i) => i < natives.length ? natives[i] : '';
 
-  Map<String, dynamic> toJson() => {'options': options, 'answer': answer};
+  Map<String, dynamic> toJson() => {
+        'options': [
+          for (var i = 0; i < options.length; i++) {'text': options[i], 'native': nativeOf(i)}
+        ],
+        'answer': answer,
+      };
 
-  factory Gist.fromJson(Map<String, dynamic> j) => Gist(
-        options: ((j['options'] as List?) ?? const []).map((e) => '$e').toList(),
-        answer: (j['answer'] as num?)?.toInt() ?? 0,
-      );
+  /// Reads both shapes: plain strings (the 3.0 packs) and {text, native}.
+  factory Gist.fromJson(Map<String, dynamic> j) {
+    final raw = (j['options'] as List?) ?? const [];
+    final texts = <String>[];
+    final natives = <String>[];
+    for (final o in raw) {
+      if (o is Map) {
+        texts.add('${o['text'] ?? ''}');
+        natives.add('${o['native'] ?? ''}');
+      } else {
+        texts.add('$o');
+      }
+    }
+    return Gist(
+      options: texts,
+      natives: natives.length == texts.length ? natives : const [],
+      answer: (j['answer'] as num?)?.toInt() ?? 0,
+    );
+  }
 }
+
+/// The order the three choices of one question are shown in: a small
+/// deterministic hash of where the question sits, so the right answer is
+/// spread across the positions and nobody — not the author, not the AI — has
+/// to think about where it lands. `order[k]` is the authored index shown at
+/// position k.
+List<int> optionOrder(String sceneId, int exchange, String question) {
+  const orders = [
+    [0, 1, 2],
+    [0, 2, 1],
+    [1, 0, 2],
+    [1, 2, 0],
+    [2, 0, 1],
+    [2, 1, 0],
+  ];
+  var h = 0;
+  for (final c in '$sceneId/$exchange/$question'.codeUnits) {
+    h = (h * 31 + c) & 0x7fffffff;
+  }
+  return orders[h % orders.length];
+}
+
+List<T> arrangeBy<T>(List<int> order, List<T> authored) =>
+    authored.length == order.length ? [for (final k in order) authored[k]] : authored;
 
 /// One possible reply: the English, its translation, and why it is or is not
 /// the one.
@@ -178,8 +228,11 @@ class Scene {
       );
 }
 
-/// Content-derived id, so the same scene pasted twice lands on itself.
-String sceneId(String topic) => slugId('scn', normKey(topic));
+/// Content-derived id, so the same scene pasted twice lands on itself — and
+/// two different scenes that happen to share a topic name do not: the first
+/// line tells them apart.
+String sceneId(String topic, [String firstLine = '']) => slugId(
+    'scn', firstLine.isEmpty ? normKey(topic) : '${normKey(topic)}|${normKey(firstLine)}');
 
 /// One exchange answered. The unit every number in the app is read from.
 class SceneResult {

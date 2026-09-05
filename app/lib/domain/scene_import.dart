@@ -60,6 +60,11 @@ NormalisedScenes normaliseScenes(Map<String, dynamic> data) {
     );
   }
 
+  // The id is settled before the options are laid out, because their order
+  // is derived from it.
+  final first = rawExchanges.first;
+  final id = sceneId(topic, first is Map ? clean(first['line']) : '');
+
   final exchanges = <Exchange>[];
   for (var i = 0; i < rawExchanges.length; i++) {
     final e = rawExchanges[i];
@@ -76,19 +81,30 @@ NormalisedScenes normaliseScenes(Map<String, dynamic> data) {
     if (reply == null) {
       return (scene: null, topic: topic, reason: 'exchange ${i + 1}: the reply question is not three choices with one answer');
     }
+    // The AI is not asked where to put the right answer; the app spreads
+    // the positions itself, the same way for the built-in scenes.
+    final g = optionOrder(id, i, 'gist');
+    final r = optionOrder(id, i, 'reply');
     exchanges.add(Exchange(
       line: line,
       lineNative: clean(m['line_native']),
-      gist: gist,
-      reply: reply,
+      gist: Gist(
+        options: arrangeBy(g, gist.options),
+        natives: arrangeBy(g, gist.natives),
+        answer: g.indexOf(gist.answer),
+      ),
+      reply: Reply(options: arrangeBy(r, reply.options), answer: r.indexOf(reply.answer)),
     ));
   }
 
+  // A topic the AI forgot to translate, or cut short, falls back to the
+  // English so the list never shows a stub.
+  final topicNative = clean(j['topic_native']);
   return (
     scene: Scene(
-      id: sceneId(topic),
+      id: id,
       topic: topic,
-      topicNative: clean(j['topic_native']),
+      topicNative: topicNative.length < 2 ? topic : topicNative,
       settingNative: clean(j['setting_native']),
       exchanges: exchanges,
       source: SceneSource.parse(j['source']),
@@ -101,13 +117,32 @@ NormalisedScenes normaliseScenes(Map<String, dynamic> data) {
 }
 
 /// Exactly three non-empty, distinct options and an answer that points at one
-/// of them. Anything else is not a question the app can ask.
+/// of them. Anything else is not a question the app can ask. Options may be
+/// plain strings (the 3.0 packs) or {text, native} objects (3.1).
 Gist? _normGist(Object? raw) {
   if (raw is! Map) return null;
-  final options = _options(raw['options']);
-  final answer = _answer(raw['answer'], options?.length);
-  if (options == null || answer == null) return null;
-  return Gist(options: options, answer: answer);
+  final rawOptions = raw['options'];
+  if (rawOptions is! List || rawOptions.length != choicesPerQuestion) return null;
+  final texts = <String>[];
+  final natives = <String>[];
+  for (final o in rawOptions) {
+    if (o is Map) {
+      texts.add(clean(o['text']));
+      natives.add(clean(o['native']));
+    } else {
+      texts.add(clean(o));
+      natives.add('');
+    }
+  }
+  if (texts.any((t) => t.isEmpty)) return null;
+  if (texts.map(normKey).toSet().length != choicesPerQuestion) return null;
+  final answer = _answer(raw['answer'], texts.length);
+  if (answer == null) return null;
+  return Gist(
+    options: texts,
+    natives: natives.every((n) => n.isEmpty) ? const [] : natives,
+    answer: answer,
+  );
 }
 
 Reply? _normReply(Object? raw) {
@@ -125,14 +160,6 @@ Reply? _normReply(Object? raw) {
   final answer = _answer(raw['answer'], options.length);
   if (answer == null) return null;
   return Reply(options: options, answer: answer);
-}
-
-List<String>? _options(Object? raw) {
-  if (raw is! List || raw.length != choicesPerQuestion) return null;
-  final out = [for (final o in raw) clean(o)];
-  if (out.any((o) => o.isEmpty)) return null;
-  if (out.map(normKey).toSet().length != choicesPerQuestion) return null;
-  return out;
 }
 
 /// The answer as a 0-based index, as the prompt asks for it. A letter is

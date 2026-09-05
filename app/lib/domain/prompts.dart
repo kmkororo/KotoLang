@@ -23,7 +23,7 @@ const schemaVersion = '1.0';
 const packSchemaVersion = '2.0';
 
 /// Scenes — listen, choose, grow. The importer accepts every version for ever.
-const scenesSchemaVersion = '3.0';
+const scenesSchemaVersion = '3.1';
 
 class PromptVersions {
   static const profile = 'PROFILE_PROMPT_V1';
@@ -32,7 +32,7 @@ class PromptVersions {
   static const addRealm = 'ADD_REALM_PROMPT_V1';
   static const pack = 'PACK_PROMPT_V1';
   static const critique = 'CRITIQUE_PROMPT_V1';
-  static const scenes = 'SCENES_PROMPT_V1';
+  static const scenes = 'SCENES_PROMPT_V2';
 }
 
 String _commonRules(String native) => '''
@@ -797,11 +797,8 @@ String scenesPrompt({
       ? '(no results yet — this is their first set)'
       : 'Over the last 7 days, across ${recent.exchanges} exchanges: "what did they say?" ${recent.gistPct}% right, "how do you reply?" ${recent.replyPct}% right.';
 
-  final questions = scenes * exchangesPerScene * 2;
-  final perPosition = (questions / 4).floor();
-
   final learner = StringBuffer()
-    ..writeln('- Native language: $native. Every field ending in _native is written in $native.')
+    ..writeln('- Native language: $native. Every field named "native" is written in $native.')
     ..writeln('- English level: $level.');
   if (ageBand.isNotEmpty) {
     learner.writeln('- Age group: $ageBand. Choose settings and a register that fit this age.');
@@ -824,8 +821,8 @@ String scenesPrompt({
   return '''
 You are writing listening practice for one person learning English. They will
 hear a line (spoken by their phone), then answer two three-way questions about
-it. They cannot ask you anything while practising, so everything has to be in
-this reply.
+it, both in English. They cannot ask you anything while practising, so
+everything has to be in this reply.
 
 Reply with ONE JSON code block in the exact shape at the end. No greeting, no
 explanation before or after it.
@@ -836,54 +833,77 @@ $learner
 RECENT RESULTS (aim the scenes at these)
 $recentText
 $tendencyText
-TOPICS THEY ALREADY HAVE (do not repeat any of these)
+TOPICS THEY ALREADY HAVE (do not repeat these, and do not write a near-twin of
+any of them — "Code review timing" after "Code review submission" is a repeat)
 ${list(existingTopics, '(none yet)')}
 
 WHAT TO WRITE
-$scenes scenes. A scene is $exchangesPerScene exchanges: the other person says a line,
-the learner replies, the other person says one more line, the learner replies.
-It runs straight; there are no branches. The second line follows on from the
+$scenes scenes. A scene is $exchangesPerScene exchanges: the other person says a line, the
+learner replies, the other person says one more line, the learner replies. It
+runs straight; there are no branches. The second line follows on from the
 learner having given the RIGHT reply to the first.
 
-Each exchange has two questions:
-1. gist — "What did they say?": three summaries in $native. Exactly one is right.
+Each exchange has two questions, both answered in English:
+1. gist — "What did they say?": three short English summaries of the line,
+   in different words from the line itself. Exactly one is right.
 2. reply — "How do you reply?": three English replies. Exactly one is right.
 
 RULES — every one of these matters
-1. Every question has exactly one right answer. The other two are answers a
-   person who MISHEARD the line would give.
-2. gist: the two wrong summaries get one key fact wrong — when, who, how
-   much, whether something happens or not (e.g. "stay tonight" becomes "come
-   in early tomorrow" or "go home now").
-3. reply: the right reply answers what was actually said. The two wrong replies
-   are natural English but respond to a misheard version of the line. Never
-   grade on politeness, tone or negotiating skill — a wrong answer must be
-   wrong on the FACTS of what was said, so that no two answers could both be
-   right.
-4. Wrong replies restate the misheard fact, so the mistake shows in the words:
-   good — "Tomorrow evening, right? OK." / bad — "I'll send it tomorrow
-   evening, is that OK?" (a correct listener might also say that). Never use
-   a proposal, preference, negotiation or question that a correct listener
-   might also make.
-5. Wrong replies must still be things people actually say. Do not write a
-   reply that merely negates the request ("OK, I won't check them today",
-   "I don't need a ticket"). Mishear a time, a day, a place, an object or a
-   person instead.
-6. Lines: 1 or 2 sentences, school-level vocabulary, no jargon.
-7. No names, job titles or organisations inside the lines ("as your manager"
+1. Every question has exactly one right answer. The other two are what a
+   person who MISHEARD the line would say.
+2. A wrong answer mishears a word or phrase that is actually IN the line — a
+   time, a day, a number, a place, an object, a person, or whether something
+   happens. It never brings in a fact the line does not contain. ("Bring
+   another monitor from storage" may become "bring a projector"; it may not
+   become "order two laptops".)
+3. A wrong reply STATES the misheard fact as if it were true. It is never a
+   preference, an alternative, a request or a check that a correct listener
+   might also make. Banned shapes: "Can I pay by card instead?", "I would
+   prefer beef", "Should I leave the key on the desk after?". Allowed shape:
+   "Ten dollars, right? Here you go." Never grade on politeness, tone or
+   negotiating skill.
+4. Wrong replies must still be things people say — never a bare negation
+   ("OK, I won't do that").
+5. The two wrong gists and the two wrong replies of one exchange mishear
+   DIFFERENT details. Procedure: write the gist question first; note which two
+   details its wrong answers got wrong; then, for the reply question, choose
+   two OTHER details of the line to mishear. If the gists misheard the day and
+   the time, the replies mishear the place and the object.
+6. The three replies of one question must not share a shape. Three sentences
+   that differ by one word ("Sure, I'll check the last page" / "Sure, I'll
+   check the first page") are not allowed. Give each reply a different first
+   word and a different structure — for example one plain statement, one short
+   check-back question, one acknowledgement plus the next action.
+7. A gist is a paraphrase, not a copy: never reuse four or more consecutive
+   words of the line. Say who, what and when in other words.
+8. Lines: 1 or 2 sentences, school-level vocabulary. No jargon, no product or
+   brand names, no technical abbreviations: "the chat tool", not "Slack"; "the
+   cable", not "HDMI"; "send the code", not "push".
+9. No names, job titles or organisations inside the lines ("as your manager"
    is also banned). The one line of setting goes in setting_native only.
-8. Each option is one sentence: English up to 15 words, $native up to 40
-   characters.
-9. Spread the right answer's position (0, 1, 2) across questions. Over the
-   $questions questions, use each position at least $perPosition times.
-10. Every English string gets a $native translation (native). Each of the
-    three replies gets a one-sentence "why" in $native: why it is right, or
-    what it misheard.
-11. Fit the scenes to the learner's age, roles and areas above. Do not reuse
-    the topics they already have.
+10. If a word could mean two things (free = available / no cost; check = look
+    at / bill), write the line so the context settles it, and make sure the
+    $native translation follows the meaning you intended.
+11. Lengths: a line up to 25 words; a gist option up to 12 words; a reply up
+    to 15 words; every $native string up to 40 characters.
+12. Every English option gets a $native translation in "native". Every reply
+    also gets a one-sentence "why" in $native: why it is right, or what it
+    misheard. A reply without "why" is invalid.
+13. Fit the scenes to the learner's age, roles and areas above. At most 2 of
+    the $scenes scenes may be about documents, files or results; the others
+    involve people — a visitor, a call, a change of plan, lunch, equipment,
+    being late. No two scenes share the same errand or object.
 
-OUTPUT SHAPE (keep the key names exactly; write $native in the *_native
-fields; "answer" is the 0-based index of the right option)
+BEFORE YOU ANSWER, CHECK EVERY QUESTION AGAINST THIS LIST
+- exactly one right answer, and the two wrong ones mishear a word that is in the line
+- the two wrong replies state a misheard fact; none is a preference, alternative or check
+- the reply distractors mishear different details from the gist distractors
+- the three replies start with different words and have different shapes
+- no gist copies four words in a row from the line
+- every reply has a "why"
+
+OUTPUT SHAPE (keep the key names exactly; "answer" is the 0-based index of the
+right option — its position does not matter, the app arranges the choices)
 ```json
 {
   "schema_version": "$scenesSchemaVersion",
@@ -899,25 +919,29 @@ fields; "answer" is the 0-based index of the right option)
           "line": "Sorry to ask, but could you stay an extra hour tonight? The client moved the deadline to tomorrow morning.",
           "line_native": "(translation in $native)",
           "gist": {
-            "options": ["(wrong: come in early tomorrow)", "(right: stay one hour tonight, deadline moved to tomorrow morning)", "(wrong: go home early tonight)"],
+            "options": [
+              { "text": "They want you to come in an hour early tomorrow.", "native": "(translation)" },
+              { "text": "They want you to stay an hour tonight; the deadline is tomorrow morning.", "native": "(translation)" },
+              { "text": "They say you can go home early tonight.", "native": "(translation)" }
+            ],
             "answer": 1
           },
           "reply": {
             "options": [
               { "text": "One hour is fine. What should I start on?", "native": "(translation)", "why": "(why it is right)" },
-              { "text": "Sure, I'll come in early tomorrow. What time?", "native": "(translation)", "why": "(misheard: tonight as tomorrow morning)" },
-              { "text": "Great, thanks! See you tomorrow then.", "native": "(translation)", "why": "(misheard: stay as go home)" }
+              { "text": "The whole evening? That's a long time.", "native": "(translation)", "why": "(misheard: an hour as the whole evening)" },
+              { "text": "Only the slides, right? I'll leave the report.", "native": "(translation)", "why": "(misheard: what the work is)" }
             ],
             "answer": 0
           }
         },
-        { "line": "...", "line_native": "...", "gist": { "options": ["...", "...", "..."], "answer": 2 }, "reply": { "options": [ { "text": "...", "native": "...", "why": "..." }, { "text": "...", "native": "...", "why": "..." }, { "text": "...", "native": "...", "why": "..." } ], "answer": 1 } }
+        { "line": "...", "line_native": "...", "gist": { "options": [ { "text": "...", "native": "..." }, { "text": "...", "native": "..." }, { "text": "...", "native": "..." } ], "answer": 2 }, "reply": { "options": [ { "text": "...", "native": "...", "why": "..." }, { "text": "...", "native": "...", "why": "..." }, { "text": "...", "native": "...", "why": "..." } ], "answer": 1 } }
       ]
     }
   ]
 }
 ```
 The example above only shows the shape. Do not write that topic; write $scenes new
-scenes in the same shape, with real $native text in every *_native, native and
-why field.''';
+scenes in the same shape, with real $native text in every native and why field.
+''';
 }

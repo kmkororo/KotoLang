@@ -95,14 +95,33 @@ void main() {
       final n = normaliseScenes(jsonDecode(pack([
         scene('Letters', exchanges: [exchange('a', gistAnswer: 'B', replyAnswer: 'A'), exchange('b')]),
       ])));
-      expect(n.scenes.single.exchanges.first.gist.answer, 1);
-      expect(n.scenes.single.exchanges.first.reply.answer, 0);
+      // The positions are the app's to decide; the right text is what holds.
+      expect(n.scenes.single.exchanges.first.gist.correct, 'a 今夜1時間残ってほしい');
+      expect(n.scenes.single.exchanges.first.reply.correct.text, exchange('a')['reply']['options'][0]['text']);
     });
 
-    test('ids come from the topic, so the same scene pasted twice is one scene', () {
-      final n = normaliseScenes(jsonDecode(pack([scene('Stay late'), scene('stay  LATE')])));
+    test('ids come from the topic and first line: the same scene pasted twice is one', () {
+      final n = normaliseScenes(jsonDecode(pack([scene('Stay late'), scene('Stay late')])));
       expect(n.scenes, hasLength(1));
-      expect(n.scenes.single.id, sceneId('Stay late'));
+      expect(n.scenes.single.id, sceneId('Stay late', n.scenes.single.exchanges.first.line));
+      // Same topic name, different words: two scenes, not one overwriting the other.
+      final twin = scene('Stay late', exchanges: [exchange('other'), exchange('more')]);
+      final two = normaliseScenes(jsonDecode(pack([scene('Stay late'), twin])));
+      expect(two.scenes, hasLength(2));
+    });
+
+    test('translated gists are kept beside the English, in the same order', () {
+      final e = exchange('g');
+      (e['gist'] as Map)['options'] = [
+        {'text': 'Come early tomorrow', 'native': '明日早く'},
+        {'text': 'Stay an hour tonight', 'native': '今夜1時間'},
+        {'text': 'Go home now', 'native': '今帰る'},
+      ];
+      final n = normaliseScenes(jsonDecode(pack([scene('G', exchanges: [e, exchange('h')])])));
+      final g = n.scenes.single.exchanges.first.gist;
+      expect(g.correct, 'Stay an hour tonight');
+      expect(g.nativeOf(g.answer), '今夜1時間');
+      expect(g.natives, hasLength(3));
     });
   });
 
@@ -122,9 +141,9 @@ void main() {
       expect(t, contains('- Stay late'));
       expect(t, contains('82% right'));
       expect(t, contains('misheard: "could you stay'));
-      expect(t, contains('"schema_version": "3.0"'));
+      expect(t, contains('"schema_version": "3.1"'));
       expect(t, contains('exactly one right answer'));
-      expect(t, contains('Never use\n   a proposal'));
+      expect(t, contains('never a bare negation'));
       expect(t, contains('EASY.'));
     });
 
@@ -195,7 +214,7 @@ void main() {
 
     test('a miss books a review for tomorrow; two right reviews clear it', () async {
       await repo.importScenes(pack([scene('Stay late')]), uiLanguage: 'ja');
-      final id = sceneId('Stay late');
+      final id = (await repo.scenes()).single.id;
       final t = today();
 
       await repo.recordSceneExchange(sceneId: id, exchange: 0, gistOk: true, replyOk: false);
@@ -234,7 +253,7 @@ void main() {
 
     test('the prompt carries the topics already here and the recent misses', () async {
       await repo.importScenes(pack([scene('Stay late')]), uiLanguage: 'ja');
-      final id = sceneId('Stay late');
+      final id = (await repo.scenes()).single.id;
       await repo.recordSceneExchange(sceneId: id, exchange: 1, gistOk: false, replyOk: true);
       final text = await repo.scenesPromptText(uiLanguage: 'ja', extraTopics: ['Tipping']);
       expect(text, contains('- Stay late'));

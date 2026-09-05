@@ -12,6 +12,7 @@
 /// language.
 library;
 
+import '../domain/scene.dart';
 import 'scenes/base.dart';
 import 'scenes/de.dart';
 import 'scenes/en.dart';
@@ -57,53 +58,42 @@ List<Map<String, dynamic>> scenesFor(String lang) {
   ];
 }
 
-const _orders = [
-  [0, 1, 2],
-  [0, 2, 1],
-  [1, 0, 2],
-  [1, 2, 0],
-  [2, 0, 1],
-  [2, 1, 0],
-];
-
-/// The order the three choices are shown in for one question: a small
-/// deterministic hash of where the question sits. The author's first item
-/// (the right one) lands at `order.indexOf(0)`.
-List<int> orderFor(String sceneId, int exchange, String question) {
-  var h = 0;
-  for (final c in '$sceneId/$exchange/$question'.codeUnits) {
-    h = (h * 31 + c) & 0x7fffffff;
-  }
-  return _orders[h % _orders.length];
-}
-
-List<T> _arrange<T>(List<int> order, List<T> authored) =>
-    [for (final k in order) authored[k]];
-
 Map<String, dynamic> _merge(Map<String, dynamic> b, Map<String, dynamic> o) {
   final id = b['id'] as String;
   final bex = b['ex'] as List;
   final oex = (o['ex'] as List?) ?? const [];
+  // The English of the gist question lives in the English overlay; every
+  // other overlay carries the translation of the same three summaries.
+  final eex = (en[id]?['ex'] as List?) ?? const [];
+  final translated = !identical(o, en[id]);
   final exchanges = <Map<String, dynamic>>[];
   for (var i = 0; i < bex.length; i++) {
     final be = bex[i] as Map;
     final oe = i < oex.length ? oex[i] as Map : const {};
+    final ee = i < eex.length ? eex[i] as Map : const {};
     final replies = (be['reply'] as List).cast<String>();
     final natives = ((oe['native'] as List?) ?? const []).cast<String>();
     final whys = ((oe['why'] as List?) ?? const []).cast<String>();
-    final gists = ((oe['gist'] as List?) ?? const []).cast<String>();
+    final gists = ((ee['gist'] as List?) ?? const []).cast<String>();
+    final gistNatives = translated ? ((oe['gist'] as List?) ?? const []).cast<String>() : const <String>[];
 
-    final gOrder = orderFor(id, i, 'gist');
-    final rOrder = orderFor(id, i, 'reply');
+    final gOrder = optionOrder(id, i, 'gist');
+    final rOrder = optionOrder(id, i, 'reply');
     exchanges.add({
       'line': be['line'],
       'line_native': oe['line'] ?? '',
       'gist': {
-        'options': gists.length == 3 ? _arrange(gOrder, gists) : gists,
+        'options': [
+          for (var k = 0; k < gOrder.length; k++)
+            {
+              'text': gists.length == 3 ? gists[gOrder[k]] : '',
+              'native': gistNatives.length == 3 ? gistNatives[gOrder[k]] : '',
+            }
+        ],
         'answer': gOrder.indexOf(0),
       },
       'reply': {
-        'options': _arrange(rOrder, [
+        'options': arrangeBy(rOrder, [
           for (var k = 0; k < replies.length; k++)
             {
               'text': replies[k],

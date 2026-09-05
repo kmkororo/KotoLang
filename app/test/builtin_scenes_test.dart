@@ -32,6 +32,11 @@ void main() {
         expect(s.settingNative, isNotEmpty, reason: '$code ${s.id}');
         for (final x in s.exchanges) {
           expect(x.lineNative.isNotEmpty || code == 'en', isTrue, reason: '$code ${s.id}');
+          // The gist is asked in English everywhere; the translation rides
+          // beside it except when the interface is English.
+          expect(x.gist.options.every((o) => o.isNotEmpty), isTrue, reason: '$code ${s.id}');
+          expect(x.gist.natives.length, code == 'en' ? 0 : 3, reason: '$code ${s.id}');
+          if (code != 'en') expect(x.gist.natives.every((n) => n.isNotEmpty), isTrue);
           for (final o in x.reply.options) {
             expect(o.why, isNotEmpty, reason: '$code ${s.id}: ${o.text}');
             expect(o.native.isNotEmpty || code == 'en', isTrue,
