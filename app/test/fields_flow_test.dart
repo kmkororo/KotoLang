@@ -157,8 +157,13 @@ void main() {
     await choose(tester, sc.exchanges[0].gist.correct);
     await tester.tap(find.text(s.t('speakerYou')));
     await tester.pumpAndSettle();
-    // "You heard: …" sits above the reply question.
-    expect(find.text(s.t('heardBand', {'text': sc.exchanges[0].gist.correct})), findsOneWidget);
+    // What was heard is folded to a mark, so the reply is not read off it;
+    // a tap opens it.
+    expect(find.text(s.t('heardOk')), findsOneWidget);
+    expect(find.text(sc.exchanges[0].gist.correct), findsNothing);
+    await tester.tap(find.text(s.t('heardOk')));
+    await tester.pumpAndSettle();
+    expect(find.text(sc.exchanges[0].gist.correct), findsOneWidget);
     await choose(tester, sc.exchanges[0].reply.correct.text);
     await tester.tap(find.text(s.t('speakerYou')));
     await tester.pumpAndSettle();

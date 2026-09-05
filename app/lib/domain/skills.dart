@@ -45,6 +45,9 @@ class SkillStats {
   /// heatmap.
   final Map<String, int> perDay;
 
+  /// The runs of right answers, now and at their longest.
+  final Runs runs;
+
   const SkillStats({
     required this.exchanges,
     required this.scenes,
@@ -52,6 +55,7 @@ class SkillStats {
     required this.all,
     required this.week,
     required this.perDay,
+    this.runs = Runs.none,
   });
 
   static const empty = SkillStats(
@@ -77,6 +81,32 @@ SkillPair _pair(Iterable<SceneResult> rs) {
   return SkillPair(gist: Rate(gist, n), reply: Rate(reply, n), byEar: Rate(ear, n));
 }
 
+/// Runs of right answers, read straight off the results: the run the learner
+/// is on now and the longest ever. `combo` counts every answer (gist and
+/// reply alike); `byEar` counts gists caught without looking at the words.
+class Runs {
+  final int combo;
+  final int bestCombo;
+  final int byEar;
+  final int bestByEar;
+  const Runs({this.combo = 0, this.bestCombo = 0, this.byEar = 0, this.bestByEar = 0});
+  static const none = Runs();
+}
+
+Runs runsOf(List<SceneResult> results) {
+  final ordered = [...results]..sort((a, b) => a.at.compareTo(b.at));
+  var combo = 0, bestCombo = 0, ear = 0, bestEar = 0;
+  for (final r in ordered) {
+    for (final ok in [r.gistOk, r.replyOk]) {
+      combo = ok ? combo + 1 : 0;
+      if (combo > bestCombo) bestCombo = combo;
+    }
+    ear = r.gistOk && !r.peeked ? ear + 1 : 0;
+    if (ear > bestEar) bestEar = ear;
+  }
+  return Runs(combo: combo, bestCombo: bestCombo, byEar: ear, bestByEar: bestEar);
+}
+
 SkillStats skillStats(List<SceneResult> results, {required String today}) {
   if (results.isEmpty) return SkillStats.empty;
   final weekStart = addDays(today, -6);
@@ -91,6 +121,7 @@ SkillStats skillStats(List<SceneResult> results, {required String today}) {
     all: _pair(results),
     week: _pair(results.where((r) => r.day.compareTo(weekStart) >= 0)),
     perDay: perDay,
+    runs: runsOf(results),
   );
 }
 

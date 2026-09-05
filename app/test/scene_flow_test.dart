@@ -101,11 +101,15 @@ void main() {
     // Right gist.
     await choose(tester, sc.exchanges[0].gist.correct);
     expect(find.text('${s.t('sceneCorrect')} · +$gistSeeds'), findsOneWidget);
+    // The translation waits behind a button.
+    expect(find.text(sc.exchanges[0].lineNative), findsNothing);
+    await tester.tap(find.text(s.t('sceneShowTranslation')));
+    await tester.pumpAndSettle();
     expect(find.text(sc.exchanges[0].lineNative), findsOneWidget);
     expect(find.text(s.t('sceneTapNext')), findsOneWidget);
 
     // Tap anywhere: on to the reply.
-    await tester.tapAt(const Offset(400, 1500));
+    await tester.tap(find.text(s.t('speakerYou')));
     await tester.pumpAndSettle();
     expect(find.text(s.t('sceneQ2')), findsOneWidget);
 
@@ -113,12 +117,15 @@ void main() {
     final wrong = sc.exchanges[0].reply.options[(sc.exchanges[0].reply.answer + 1) % 3];
     await choose(tester, wrong.text);
     expect(find.text(s.t('sceneWrong')), findsOneWidget);
+    // The panel explains the chosen reply; tapping another shows its reason.
     for (final o in sc.exchanges[0].reply.options) {
-      expect(find.textContaining(o.why), findsWidgets);
+      await tester.tap(find.text(o.text));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(o.why), findsOneWidget, reason: o.text);
     }
 
     // Written down at once, and the miss has booked its review.
-    await tester.tapAt(const Offset(400, 1500));
+    await tester.tap(find.text(s.t('speakerYou')));
     await tester.pumpAndSettle();
     final results = await repo.sceneResults();
     expect(results, hasLength(1));
@@ -129,10 +136,10 @@ void main() {
     // Second exchange, both right.
     expect(find.text(sc.exchanges[1].line), findsOneWidget);
     await choose(tester, sc.exchanges[1].gist.correct);
-    await tester.tapAt(const Offset(400, 1500));
+    await tester.tap(find.text(s.t('speakerYou')));
     await tester.pumpAndSettle();
     await choose(tester, sc.exchanges[1].reply.correct.text);
-    await tester.tapAt(const Offset(400, 1500));
+    await tester.tap(find.text(s.t('speakerYou')));
     await tester.pumpAndSettle();
 
     // The result: 3 of 4, the Seeds, the twig — and flowers, since this is
@@ -163,10 +170,10 @@ void main() {
     expect(find.text(s.t('sceneReviewTag')), findsOneWidget);
     expect(find.text(owed.exchanges[1].line), findsOneWidget);
     await choose(tester, owed.exchanges[1].gist.correct);
-    await tester.tapAt(const Offset(400, 1500));
+    await tester.tap(find.text(s.t('speakerYou')));
     await tester.pumpAndSettle();
     await choose(tester, owed.exchanges[1].reply.correct.text);
-    await tester.tapAt(const Offset(400, 1500));
+    await tester.tap(find.text(s.t('speakerYou')));
     await tester.pumpAndSettle();
 
     // Then today's scene, no tag.
@@ -184,7 +191,7 @@ void main() {
     expect(find.text(s.t('tutListen')), findsOneWidget);
     await choose(tester, sc.exchanges[0].gist.correct);
     expect(find.text(s.t('tutNext')), findsOneWidget);
-    await tester.tapAt(const Offset(400, 1500));
+    await tester.tap(find.text(s.t('speakerYou')));
     await tester.pumpAndSettle();
     expect(find.text(s.t('tutReply')), findsOneWidget);
   });
@@ -206,10 +213,10 @@ void main() {
     expect(find.text(sc.exchanges[0].line), findsOneWidget);
 
     await choose(tester, sc.exchanges[0].gist.correct);
-    await tester.tapAt(const Offset(400, 1500));
+    await tester.tap(find.text(s.t('speakerYou')));
     await tester.pumpAndSettle();
     await choose(tester, sc.exchanges[0].reply.correct.text);
-    await tester.tapAt(const Offset(400, 1500));
+    await tester.tap(find.text(s.t('speakerYou')));
     await tester.pumpAndSettle();
     final r = (await repo.sceneResults()).single;
     expect(r.peeked, isTrue);

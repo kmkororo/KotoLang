@@ -202,6 +202,9 @@ class S {
     'speakerOther', 'speakerYou', 'heardBand', 'afterYourReply', 'sceneDecide', 'sceneTapHint',
     'profileTitle', 'profileAiSection', 'profileAiBody', 'profileRemake', 'profileLevel',
     'profileRoles', 'profilePriorities',
+    'sceneShowTranslation', 'sceneHideTranslation', 'heardOk', 'heardMiss', 'comboLabel',
+    'byEarRunLabel', 'tapOtherWhy', 'scenePerfect', 'bestByEarLabel',
+    'byEarRunNow',
   ];
 }
 
@@ -778,6 +781,16 @@ const _catalogueCore = <String, Map<String, String>>{
     'profileLevel': 'English level',
     'profileRoles': 'Roles',
     'profilePriorities': 'What you want English for',
+    'sceneShowTranslation': 'Show translation',
+    'sceneHideTranslation': 'Hide translation',
+    'heardOk': 'Heard it',
+    'heardMiss': 'Missed it',
+    'comboLabel': '{n} in a row',
+    'byEarRunLabel': 'By ear, {n} in a row',
+    'tapOtherWhy': 'Tap another answer to see why',
+    'scenePerfect': 'All four right — a fruit for the tree',
+    'bestByEarLabel': 'Longest run by ear',
+    'byEarRunNow': 'By ear now',
   },
 
   // =========================================================== Japanese
@@ -1311,5 +1324,15 @@ const _catalogueCore = <String, Map<String, String>>{
     'profileLevel': '英語レベル',
     'profileRoles': '役割',
     'profilePriorities': '英語を使いたいこと',
+    'sceneShowTranslation': '訳を見る',
+    'sceneHideTranslation': '訳を隠す',
+    'heardOk': '聞き取れた',
+    'heardMiss': '聞き逃した',
+    'comboLabel': '{n}連続',
+    'byEarRunLabel': '音だけで{n}連続',
+    'tapOtherWhy': 'ほかの答えをタップすると理由が出ます',
+    'scenePerfect': '4つとも正解 — 木に実がつきました',
+    'bestByEarLabel': '音だけの最長連続',
+    'byEarRunNow': '音だけ、今',
   },
 };
