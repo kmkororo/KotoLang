@@ -17,6 +17,7 @@ import 'core/util.dart';
 import 'data/database.dart';
 import 'data/repository.dart';
 import 'data/builtin_scenes.dart';
+import 'domain/field.dart';
 import 'domain/importer.dart' as imp;
 import 'domain/models.dart';
 import 'domain/progress_service.dart';
@@ -123,6 +124,14 @@ final realmsProvider = FutureProvider.autoDispose<List<Realm>>(
 /// Every scene the learner has: their own, from the database, and the
 /// built-in samples for the current language, ordered for their interests.
 /// One list, so home, the record and the launcher all see the same thing.
+
+/// The fields the learner can pick from: the four built-ins, named in the
+/// interface language, then the areas of their own.
+final fieldsProvider = FutureProvider.autoDispose<List<Field>>((ref) async {
+  final s = ref.watch(stringsProvider);
+  final realms = await ref.watch(realmsProvider.future);
+  return fieldsFrom(realms, (id) => s.t('interest_$id'));
+});
 final allScenesProvider = FutureProvider.autoDispose<List<Scene>>((ref) async {
   final own = await ref.watch(repositoryProvider).scenes();
   final lang = ref.watch(languageProvider) ?? fallbackLanguage;

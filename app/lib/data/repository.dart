@@ -11,6 +11,7 @@ import '../core/l10n/languages.dart';
 import '../core/util.dart';
 import '../domain/importer.dart' as imp;
 import '../domain/debate.dart';
+import '../domain/field.dart';
 import '../domain/models.dart';
 import '../domain/prompts.dart' as pr;
 import '../domain/scene.dart';
@@ -1611,7 +1612,10 @@ class Repository {
   /// lands on itself); the ones that could not be made sound are named with
   /// the reason, because the learner pasted them and "3 of 5" with no
   /// explanation would leave them wondering what they did wrong.
-  Future<SceneOutcome> importScenes(String raw, {required String uiLanguage}) async {
+  /// [field] is the field the learner asked for these scenes; every scene in
+  /// the reply lands there.
+  Future<SceneOutcome> importScenes(String raw,
+      {required String uiLanguage, String? field}) async {
     final ex = imp.extractJson(raw);
     if (!ex.ok) return SceneOutcome.failure([ex.failure == 'empty' ? 'empty' : 'parse']);
 
@@ -1632,7 +1636,8 @@ class Repository {
     final now = DateTime.now().millisecondsSinceEpoch;
     await db.transaction(() async {
       for (final s in norm.scenes) {
-        await db.into(db.scenes).insertOnConflictUpdate(sceneToRow(s));
+        await db.into(db.scenes).insertOnConflictUpdate(
+            sceneToRow(field == null ? s : s.copyWith(realmId: field)));
       }
       await db.into(db.batches).insertOnConflictUpdate(BatchesCompanion.insert(
             id: newBatchId(),
@@ -1753,11 +1758,53 @@ class Repository {
   /// [lookup] resolves a scene id to its scene for the built-ins, which are
   /// not in the database; the mistakes are described by the line that was
   /// misheard, so the AI can aim at that kind of line.
+  // ------------------------------------------------------------------ fields
+
+  /// How a field is described to the AI, in English: the built-in four by
+  /// their fixed description, a field the learner added by its name and the
+  /// contexts the AI once attached to it.
+  Future<String> fieldDescription(String fieldId) async {
+    if (builtinFieldIds.contains(fieldId)) return interestDescription(fieldId);
+    final realm = (await realms()).where((r) => r.id == fieldId).firstOrNull;
+    if (realm == null) return fieldId;
+    final contexts = realm.contexts.where((c) => c.trim().isNotEmpty).take(3).toList();
+    return contexts.isEmpty ? realm.name : '${realm.name} (${contexts.join(', ')})';
+  }
+
+  /// Adds a field of the learner's own, paid for with Seeds at the same price
+  /// as unlocking an area. Returns the field's realm, or null when the balance
+  /// is short and nothing was spent. A name that matches an existing area
+  /// unlocks that area instead of making a twin.
+  Future<Realm?> addField(String label) async {
+    final name = clean(label);
+    if (name.isEmpty) return null;
+    final key = normKey(name);
+    final existing = (await realms()).where((r) => r.normKeyValue == key).firstOrNull;
+    if (existing != null && existing.unlocked) return existing;
+
+    final progress = await loadProgress();
+    if (progress.seeds < realmUnlockCost) return null;
+    final realm = existing?.copyWith(unlocked: true) ??
+        Realm(
+          id: slugId('realm', key),
+          name: name,
+          nameNative: name,
+          normKeyValue: key,
+          unlocked: true,
+        );
+    await db.transaction(() async {
+      await db.into(db.realms).insertOnConflictUpdate(realmToRow(realm));
+      await saveProgress(progress.copyWith(seeds: progress.seeds - realmUnlockCost));
+    });
+    return realm;
+  }
+
   Future<String> scenesPromptText({
     required String uiLanguage,
     List<String> extraTopics = const [],
     Map<String, Scene> lookup = const {},
     int scenes = 5,
+    String? field,
   }) async {
     final profile = await loadProfile();
     final settings = await loadSettings();
@@ -1790,6 +1837,7 @@ class Repository {
         normKey,
       ),
       areas: areas,
+      field: field == null ? '' : await fieldDescription(field),
       existingTopics: uniqueBy([for (final s in own) s.topic, ...extraTopics], normKey),
       difficulty: switch (difficultyFor(stats)) {
         'harder' => pr.SceneDifficulty.harder,

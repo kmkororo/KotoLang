@@ -121,6 +121,7 @@ Map<String, dynamic> _merge(Map<String, dynamic> b, Map<String, dynamic> o) {
     'topic_native': o['topic'] ?? '',
     'setting_native': o['setting'] ?? '',
     'source': 'builtin',
+    'realm_id': kindOf(id),
     'exchanges': exchanges,
   };
 }

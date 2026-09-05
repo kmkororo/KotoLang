@@ -775,6 +775,7 @@ String scenesPrompt({
   List<String> areas = const [],
   List<String> existingTopics = const [],
   SceneDifficulty difficulty = SceneDifficulty.easy,
+  String field = '',
   ({int gistPct, int replyPct, int exchanges})? recent,
   List<String> tendencies = const [],
   int scenes = 5,
@@ -810,6 +811,10 @@ String scenesPrompt({
     learner.writeln('- What they want English for: ${priorities.join(', ')}.');
   }
   if (areas.isNotEmpty) learner.writeln('- Areas they practise: ${areas.join(', ')}.');
+  if (field.isNotEmpty) {
+    learner.writeln(
+        '- This set is about: $field. Every one of the $scenes scenes happens there; the settings differ, the field does not.');
+  }
   learner.write('- Difficulty for this set: $difficultyText');
 
   final tendencyText = tendencies.isEmpty
