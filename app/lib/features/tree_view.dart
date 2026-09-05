@@ -24,26 +24,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
 import '../core/util.dart';
+import '../domain/scene.dart' show exchangesPerScene;
 import '../domain/tree.dart';
 
 /// The fixed objects the tree carries. Loaded once and held: they are a
 /// handful of small files and the tree redraws on every answer.
 class TreeArt {
-  final ui.Image ground;
   final ui.Image bud;
   final ui.Image fruit;
   final ui.Image sprout;
-  final ui.Image bug;
-  final Map<String, ui.Image> ornaments;
-
-  const TreeArt({
-    required this.ground,
-    required this.bud,
-    required this.fruit,
-    required this.sprout,
-    required this.bug,
-    required this.ornaments,
-  });
+  const TreeArt({required this.bud, required this.fruit, required this.sprout});
 }
 
 Future<ui.Image> _load(String name) async {
@@ -53,37 +43,24 @@ Future<ui.Image> _load(String name) async {
 }
 
 final treeArtProvider = FutureProvider<TreeArt>((ref) async => TreeArt(
-      ground: await _load('ground'),
       bud: await _load('bud'),
       fruit: await _load('fruit'),
       sprout: await _load('sprout'),
-      bug: await _load('bug'),
-      ornaments: {
-        for (final n in ['ribbon', 'star', 'lantern', 'bell'])
-          n: await _load('ornament_$n')
-      },
     ));
 
 /// Everything the tree needs, gathered in one read.
 class TreeData {
   final TreeShape shape;
-  final List<String> ornaments;
-
-  /// Nothing answered today and a streak on the line: a bug appears until one
-  /// question is done.
-  final bool pest;
-
-  const TreeData(
-      {required this.shape, required this.ornaments, required this.pest});
+  const TreeData({required this.shape});
 }
 
 final treeDataProvider = FutureProvider.autoDispose<TreeData>((ref) async {
   final repo = ref.watch(repositoryProvider);
-  final progress = ref.watch(progressProvider);
   final t = today();
   final history = await repo.history();
   final results = await ref.watch(sceneResultsProvider.future);
   final scenes = await ref.watch(allScenesProvider.future);
+  final fields = await ref.watch(fieldsProvider.future);
   final shape = treeFrom(
     history: history,
     realms: await repo.realms(),
@@ -92,14 +69,18 @@ final treeDataProvider = FutureProvider.autoDispose<TreeData>((ref) async {
     today: t,
     results: results,
     scenes: {for (final sc in scenes) sc.id: sc},
+    fieldLabels: {for (final f in fields) f.id: f.label},
   );
-  // The bug is retired: a day not yet studied shows as pale leaves on the
-  // boughs that are owed a review, not as a pest on the tree.
-  return TreeData(shape: shape, ornaments: progress.ornaments, pest: false);
+  return TreeData(shape: shape);
 });
 
 class TreePanel extends ConsumerStatefulWidget {
-  const TreePanel({super.key});
+  /// Show one bough alone, by its id — the field screen's view.
+  final String? focus;
+
+  /// No legend and no share button: the small tree on a field screen.
+  final bool compact;
+  const TreePanel({super.key, this.focus, this.compact = false});
 
   @override
   ConsumerState<TreePanel> createState() => _TreePanelState();
@@ -114,6 +95,9 @@ class _TreePanelState extends ConsumerState<TreePanel>
   /// stopped would burn battery behind a locked phone and hang every
   /// `pumpAndSettle` in the suite.
   final _breeze = _Breeze();
+
+  /// The bough picked on the legend, shown alone until picked again.
+  String? _focus;
 
   /// The picture of the tree, as it stands, for the share sheet. Nothing but
   /// the image and one line of text leaves the phone, and only where the
@@ -222,12 +206,13 @@ class _TreePanelState extends ConsumerState<TreePanel>
             girth: trunkGirth(shape.answers),
             dark: theme.brightness == Brightness.dark,
             breeze: _breeze,
+            focus: widget.focus ?? _focus,
           ),
         ),
       ),
     );
 
-    return Stack(
+    final stack = Stack(
       children: [
         // What gets shared is exactly what is on screen: the tree and the
         // line under it, on the page colour so the picture is not see-through.
@@ -238,7 +223,7 @@ class _TreePanelState extends ConsumerState<TreePanel>
             child: Padding(padding: const EdgeInsets.only(bottom: 4), child: canvas),
           ),
         ),
-        if (!shape.isSeed)
+        if (!shape.isSeed && !widget.compact)
           Positioned(
             top: 0,
             right: 0,
@@ -249,6 +234,33 @@ class _TreePanelState extends ConsumerState<TreePanel>
             ),
           ),
       ],
+    );
+    if (widget.compact) return stack;
+    return Column(mainAxisSize: MainAxisSize.min, children: [stack, _legend(shape)]);
+  }
+
+  /// The boughs by name: the samples with a book, the learner's own with a
+  /// flower. A tap shows that bough alone; another tap brings the tree back.
+  Widget _legend(TreeShape shape) {
+    if (shape.branches.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 6,
+        runSpacing: 4,
+        children: [
+          for (final b in shape.branches)
+            ChoiceChip(
+              avatar: Icon(b.own ? Icons.local_florist : Icons.menu_book_outlined, size: 14),
+              label: Text(b.label, style: const TextStyle(fontSize: 12)),
+              selected: _focus == b.realmId,
+              visualDensity: VisualDensity.compact,
+              onSelected: (_) =>
+                  setState(() => _focus = _focus == b.realmId ? null : b.realmId),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -262,7 +274,7 @@ double _wobble(int seed) {
 }
 
 /// A limb, kept so its leaves can be hung once all the wood is down.
-typedef _Limb = ({Offset from, Offset ctrl, Offset to, int seed, bool tip});
+typedef _Limb = ({Offset from, Offset ctrl, Offset to, int seed, bool tip, bool own});
 
 class _TreePainter extends CustomPainter {
   final TreeData data;
@@ -281,12 +293,16 @@ class _TreePainter extends CustomPainter {
   /// Bark the colour of real bark disappears against a near-black screen.
   final bool dark;
 
+  /// One bough to draw alone, or null for the whole tree.
+  final String? focus;
+
   _TreePainter({
     required this.data,
     required this.art,
     required this.grown,
     required this.girth,
     required this.breeze,
+    this.focus,
     required this.dark,
   }) : super(repaint: breeze);
 
@@ -335,6 +351,30 @@ class _TreePainter extends CustomPainter {
       canvas.drawCircle(at + Offset(cos(a), sin(a)) * r, r * 0.62, petal);
     }
     canvas.drawCircle(at, r * 0.42, centre);
+  }
+
+  /// The mound the tree stands in, drawn rather than pasted: a low ellipse of
+  /// earth with a darker rim, in the app's own cartoon line. No grass — the
+  /// leaves are the only green, and they belong to the tree.
+  void _mound(Canvas canvas, Offset centre, double h) {
+    final w = h * 3.4;
+    final rect = Rect.fromCenter(center: centre, width: w, height: h);
+    final rim = Paint()..color = dark ? const Color(0xFF3A2A1E) : const Color(0xFF4A3323);
+    final earth = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: dark
+            ? const [Color(0xFF8A5A36), Color(0xFF6E4629)]
+            : const [Color(0xFFB07A48), Color(0xFF8F5E36)],
+      ).createShader(rect);
+    canvas.drawOval(rect, rim);
+    canvas.drawOval(rect.deflate(h * 0.07), earth);
+    // A lighter band across the top, the way the old picture had it.
+    final band = Paint()..color = (dark ? const Color(0xFF9E6C43) : const Color(0xFFC08D5C)).withValues(alpha: 0.8);
+    canvas.drawOval(
+        Rect.fromCenter(center: centre.translate(-w * 0.06, -h * 0.12), width: w * 0.62, height: h * 0.30),
+        band);
   }
 
   void _image(Canvas canvas, ui.Image img, Offset at, double height,
@@ -573,27 +613,22 @@ class _TreePainter extends CustomPainter {
       // The trunk leans and straightens rather than standing to attention.
       ..trunkCtrl = Offset(cx + w0 * 0.55, base.dy - trunkH * 0.45);
 
-    final branches = shape.branches;
+    // With a bough in focus the others are left out: the field screen shows
+    // one field alone, and a tap on the legend does the same on home.
+    final branches = focus == null
+        ? shape.branches
+        : [for (final b in shape.branches) if (b.realmId == focus) b];
     if (branches.isEmpty) return plan;
 
     final busiest =
         branches.map((b) => b.answers).fold<int>(0, (a, b) => a > b ? a : b);
 
     Offset onTrunk(double t) => _at(base, plan.trunkCtrl, top, t);
-    double heightOf(int i) => branches.length == 1
-        ? 0.62
-        : 0.34 + 0.46 * (i / (branches.length - 1));
-    // Boughs lean a touch to one side overall: a tree grows towards the light,
-    // and perfect symmetry is the other thing that gives a drawing away.
-    double angleOf(int i, double t) =>
-        -pi / 2 +
-        0.08 +
-        (i.isEven ? -1.0 : 1.0) * (1.02 - 0.44 * t + _wobble(i * 17) * 0.10);
     double lengthOf(Branch b) =>
         reach * (0.58 + 0.42 * branchGrowth(b.answers, busiest));
 
     void limb(Offset from, double angle, double len, double wa, double wb,
-        int depth, int seed, double leafSize, bool dry) {
+        int depth, int seed, double leafSize, bool dry, bool own) {
       if (len < 4) return;
       final dir = Offset(cos(angle), sin(angle));
       final to = from + dir * len;
@@ -601,7 +636,7 @@ class _TreePainter extends CustomPainter {
       final ctrl = from +
           dir * (len * 0.55) +
           Offset(_wobble(seed * 7) * len * 0.08, -len * 0.30);
-      final l = (from: from, ctrl: ctrl, to: to, seed: seed, tip: depth == 0);
+      final l = (from: from, ctrl: ctrl, to: to, seed: seed, tip: depth == 0, own: own);
       plan.wood.add((l, wa, wb));
       // Where a limb leaves its parent it swells. Without the collar the join
       // looks like one stick laid across another.
@@ -633,21 +668,32 @@ class _TreePainter extends CustomPainter {
           seed * 3 + k + 1,
           leafSize * 0.92,
           dry,
+          own,
         );
       }
     }
 
-    for (var i = 0; i < branches.length; i++) {
-      final b = branches[i];
-      final t = heightOf(i);
-      final angle = angleOf(i, t);
+    // Two sides of one tree. The samples grow low on the trunk, short and
+    // near-level, and stop at leaves; the learner's own scenes grow above
+    // them and make the crown, where the flowers and fruit are.
+    final low = [for (final b in branches) if (!b.own) b];
+    final high = [for (final b in branches) if (b.own) b];
+
+    void bough(Branch b, int i, int n, {required bool own}) {
+      final spread = n == 1 ? 0.5 : i / (n - 1);
+      final t = own ? (n == 1 ? 0.72 : 0.50 + 0.45 * spread) : (n == 1 ? 0.30 : 0.20 + 0.18 * spread);
+      final side = i.isEven ? -1.0 : 1.0;
+      final angle = -pi / 2 +
+          0.08 +
+          side * (own ? (1.02 - 0.44 * t + _wobble(i * 17) * 0.10) : (1.28 + _wobble(i * 19) * 0.06));
       final from = onTrunk(t);
-      final width = (w0 * (1 - 0.55 * t)) * 0.66;
-      final len = lengthOf(b);
+      final width = (w0 * (1 - 0.55 * t)) * (own ? 0.66 : 0.48);
+      final len = lengthOf(b) * (own ? 1.0 : 0.55);
+      final seedBase = (own ? 1000 : 0) + i * 100;
 
       final live = Twig.values.where((x) => (b.twigs[x] ?? 0) > 0).toList();
       if (live.isEmpty) {
-        // Nothing practised here yet: a bare twig with a bud on the end.
+        // Nothing caught here yet: a bare twig with a bud on the end.
         final dir = Offset(cos(angle), sin(angle));
         final to = from + dir * (len * 0.8);
         plan.wood.add((
@@ -655,16 +701,20 @@ class _TreePainter extends CustomPainter {
             from: from,
             ctrl: from + dir * (len * 0.4) + const Offset(0, -6),
             to: to,
-            seed: i,
-            tip: true
+            seed: seedBase,
+            tip: true,
+            own: own
           ),
           width * 0.7,
           width * 0.3
         ));
         plan.buds.add((to, angle + pi / 2));
-        continue;
+        return;
       }
 
+      // Every three scenes the bough forks once more, up to three times: the
+      // change is visible within a week rather than a season.
+      final depth = min(3, b.answers ~/ (3 * exchangesPerScene));
       final leafSize = 10.5 + min(b.growing, 10) * 0.5;
       for (var j = 0; j < live.length; j++) {
         final off = live.length == 1 ? 0.0 : (j / (live.length - 1)) - 0.5;
@@ -674,26 +724,26 @@ class _TreePainter extends CustomPainter {
           len * (0.72 + 0.28 * branchGrowth(b.twigs[live[j]]!, busiest)),
           width,
           width * 0.42,
-          // A seedling is one unbranched stem with leaves on it; forking comes
-          // much later. These used to be six and twenty-four answers, which is
-          // an evening — the tree had a full branching structure before the
-          // learner had finished their first sitting.
-          b.answers > 130
-              ? 2
-              : b.answers > 40
-                  ? 1
-                  : 0,
-          i * 100 + j * 7 + 3,
+          depth,
+          seedBase + j * 7 + 3,
           leafSize,
           b.thirsty,
+          own,
         );
       }
+    }
+
+    for (var i = 0; i < low.length; i++) {
+      bough(low[i], i, low.length, own: false);
+    }
+    for (var i = 0; i < high.length; i++) {
+      bough(high[i], i, high.length, own: true);
     }
 
     // The leader: the trunk carries on above the boughs and ends in leaves.
     final totalGrowing = branches.fold<int>(0, (a, b) => a + b.growing);
     limb(top, -pi / 2 + 0.06, reach * 0.5, w0 * 0.5, w0 * 0.18, 1, 5,
-        10.5 + min(totalGrowing, 10) * 0.5, branches.every((b) => b.thirsty));
+        10.5 + min(totalGrowing, 10) * 0.5, branches.every((b) => b.thirsty), high.isNotEmpty);
 
     // What all of that needs, leaf tips included, against what there is.
     var minX = plan.base.dx, maxX = plan.base.dx;
@@ -726,7 +776,7 @@ class _TreePainter extends CustomPainter {
   void _draw(Canvas canvas, _Plan plan) {
     final shape = data.shape;
 
-    _image(canvas, art.ground, Offset(plan.cx, plan.groundY), _groundH);
+    _mound(canvas, Offset(plan.cx, plan.groundY), _groundH);
 
     // Nothing answered yet: the seed art on its own, sitting in the soil.
     if (shape.isSeed) {
@@ -788,11 +838,12 @@ class _TreePainter extends CustomPainter {
 
     // Fruit: one per expression learned outright, spread across the twig ends
     // rather than piled on the first branch.
-    final learned =
-        shape.branches.fold<int>(0, (a, b) => a + b.learned);
-    final ends = [for (final (l, s, _) in plan.leafy) if (l.tip) (l, s)];
-    if (learned > 0 && ends.isNotEmpty) {
-      final show = min(learned, min(ends.length, 9));
+    // Fruit: one per scene of the learner's own answered entirely right, on
+    // the twig ends of their own boughs.
+    final fruit = shape.fruit;
+    final ends = [for (final (l, s, _) in plan.leafy) if (l.tip && l.own) (l, s)];
+    if (fruit > 0 && ends.isNotEmpty) {
+      final show = min(fruit, min(ends.length, 9));
       for (var k = 0; k < show; k++) {
         final (l, leafSize) = ends[(k * 7 + 1) % ends.length];
         _image(canvas, art.fruit, l.to + Offset(0, leafSize * 0.6), 15);
@@ -813,19 +864,6 @@ class _TreePainter extends CustomPainter {
       }
     }
 
-    // Decorations hang from the twig ends, in the order they were bought, and
-    // spread across the crown rather than bunched on one bough. Hung off the
-    // bough geometry instead they ended up in the dirt on a small tree, which
-    // is not where anybody puts a ribbon.
-    if (ends.isNotEmpty) {
-      for (var i = 0; i < data.ornaments.length; i++) {
-        final img = art.ornaments[data.ornaments[i]];
-        if (img == null) continue;
-        final (l, leafSize) = ends[(i * 5 + 2) % ends.length];
-        _image(canvas, img, l.to + Offset(0, leafSize * 0.9 + 6), 24);
-      }
-    }
-
 
     // The near lip of the mound, painted over the roots. This is the only
     // depth in the picture and the one place it is needed: the roots have to
@@ -833,13 +871,8 @@ class _TreePainter extends CustomPainter {
     canvas.save();
     canvas.clipRect(Rect.fromLTRB(plan.cx - 400, plan.soil + 2,
         plan.cx + 400, plan.groundY + _groundH));
-    _image(canvas, art.ground, Offset(plan.cx, plan.groundY), _groundH);
+    _mound(canvas, Offset(plan.cx, plan.groundY), _groundH);
     canvas.restore();
-
-    if (data.pest) {
-      _image(canvas, art.bug,
-          Offset(plan.cx + plan.w0 * 1.7, plan.top.dy + 20), 22);
-    }
   }
 
   @override
@@ -847,6 +880,7 @@ class _TreePainter extends CustomPainter {
       old.grown != grown ||
       old.girth != girth ||
       old.data != data ||
+      old.focus != focus ||
       old.dark != dark;
 }
 

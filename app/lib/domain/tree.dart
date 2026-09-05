@@ -10,6 +10,7 @@ library;
 
 import 'dart:math';
 
+import 'field.dart';
 import 'models.dart';
 import 'scene.dart';
 import 'srs.dart' as srs;
@@ -29,17 +30,22 @@ Twig twigFor(QuestionType t) => switch (t) {
         Twig.reply,
     };
 
-/// The boughs scenes land on when their scene names no area of study: the
-/// learner's own scenes on one, the samples on another.
-const ownBranchId = 'own';
-const sampleBranchId = 'sample';
+/// A bough is one field of the learner's life, on one of two sides: the
+/// samples that came with the app grow low on the trunk and short; the
+/// learner's own scenes grow above them and make the crown.
+String ownBranch(String fieldId) => 'own:$fieldId';
+String sampleBranch(String fieldId) => 'sample:$fieldId';
 
-/// One area of study, drawn as one bough.
+/// One field, drawn as one bough.
 class Branch {
+  /// `own:<field>` or `sample:<field>`; legacy areas of study keep `own:<realm>`.
   final String realmId;
   final String label;
 
-  /// Exchanges and answers in this area. Sets the bough's length and thickness.
+  /// The learner's own scenes, as opposed to the samples.
+  final bool own;
+
+  /// Exchanges and answers here. Sets the bough's length and thickness.
   final int answers;
 
   /// What the work here amounted to, which is where the bough forks.
@@ -54,6 +60,10 @@ class Branch {
   /// the samples grow leaves and no more.
   final int flowers;
 
+  /// Scenes of the learner's own whose every answer is right, as of the
+  /// latest run. One fruit each.
+  final int fruit;
+
   /// Reviews are waiting here and nothing has been answered here today. The
   /// leaves go pale until one question in this area is done.
   final bool thirsty;
@@ -61,13 +71,28 @@ class Branch {
   const Branch({
     required this.realmId,
     required this.label,
+    this.own = true,
     required this.answers,
     required this.twigs,
-    required this.growing,
-    required this.learned,
+    this.growing = 0,
+    this.learned = 0,
     this.flowers = 0,
-    required this.thirsty,
+    this.fruit = 0,
+    this.thirsty = false,
   });
+}
+
+/// The named stages of the tree, by scenes finished: a seed, a sprout, a
+/// seedling, a young tree, a tree, a great tree.
+const treeStages = 6;
+
+int treeStage(int scenes) {
+  if (scenes <= 0) return 0;
+  if (scenes <= 3) return 1;
+  if (scenes <= 10) return 2;
+  if (scenes <= 30) return 3;
+  if (scenes <= 80) return 4;
+  return 5;
 }
 
 class TreeShape {
@@ -75,47 +100,42 @@ class TreeShape {
   /// girth of the trunk.
   final int answers;
 
-  /// Ordered by area id so a bough never moves between visits.
+  /// Scenes finished, which name the stage.
+  final int scenes;
+
+  /// Samples first, then the learner's own; within each, by id, so a bough
+  /// never moves between visits.
   final List<Branch> branches;
 
   /// Nothing done yet: the pot is shown instead of a tree.
   bool get isSeed => answers == 0;
 
   int get flowers => branches.fold(0, (a, b) => a + b.flowers);
+  int get fruit => branches.fold(0, (a, b) => a + b.fruit);
+  int get stage => treeStage(scenes);
 
-  const TreeShape({required this.answers, required this.branches});
+  const TreeShape({required this.answers, this.scenes = 0, required this.branches});
 }
 
-/// How far the tree has come, from 0 (nothing done) to 1 (as big as it
-/// draws).
-///
-/// Logarithmic against a thousand, then raised to a power to flatten the
-/// start. The plain log curve gave a third of the full height away inside
-/// ten, so a learner who had seen two cotyledons on Monday had a tree by
-/// Tuesday and then watched it barely move for a year. The seedling stage
-/// has to last long enough to be a stage.
 double trunkGrowth(int answers) {
   if (answers <= 0) return 0;
   final log10k = (log(answers + 1) / log(1001)).clamp(0.0, 1.0);
   return pow(log10k, 2.1).toDouble();
 }
 
-/// Girth keeps creeping up past the point where height stops, so that someone
-/// two years in still sees the tree answer to their work.
 double trunkGirth(int answers) {
   if (answers <= 1000) return trunkGrowth(answers);
   return (1 + log(answers / 1000) / log(50)).clamp(1.0, 2.0);
 }
 
-/// Same curve, applied to one bough against the busiest bough. Relative rather
-/// than absolute: the point of the picture is which areas have been fed and
-/// which have been left, and that only shows as a comparison.
 double branchGrowth(int answers, int busiest) {
   if (answers <= 0) return 0;
   final top = max(busiest, 1);
   return (0.45 + 0.55 * (log(answers + 1) / log(top + 1))).clamp(0.0, 1.0);
 }
 
+/// Reads the tree off the record. [fieldLabels] names the fields in the
+/// interface language; a field without a name shows its id.
 TreeShape treeFrom({
   required List<HistoryEntry> history,
   required List<Realm> realms,
@@ -124,31 +144,43 @@ TreeShape treeFrom({
   required String today,
   List<SceneResult> results = const [],
   Map<String, Scene> scenes = const {},
+  Map<String, String> fieldLabels = const {},
 }) {
-  final answersByRealm = <String, int>{};
-  final twigsByRealm = <String, Map<Twig, int>>{};
-  final flowersByRealm = <String, int>{};
-  void add(String realmId, Twig? twig, {bool counts = true}) {
-    if (counts) answersByRealm[realmId] = (answersByRealm[realmId] ?? 0) + 1;
+  final answersByBranch = <String, int>{};
+  final twigsByBranch = <String, Map<Twig, int>>{};
+  final flowersByBranch = <String, int>{};
+  final fruitByBranch = <String, int>{};
+  final labels = <String, String>{};
+  final ownOf = <String, bool>{};
+
+  void add(String id, Twig? twig, {bool counts = true}) {
+    if (counts) answersByBranch[id] = (answersByBranch[id] ?? 0) + 1;
     if (twig == null) return;
-    final t = twigsByRealm.putIfAbsent(realmId, () => {for (final x in Twig.values) x: 0});
+    final t = twigsByBranch.putIfAbsent(id, () => {for (final x in Twig.values) x: 0});
     t[twig] = t[twig]! + 1;
   }
 
+  // The old question sessions, by their area of study: the learner's own.
+  final realmLabel = {for (final r in realms) r.id: r.label};
   for (final h in history) {
-    add(h.realmId, twigFor(h.type));
+    final id = ownBranch(h.realmId);
+    labels[id] = realmLabel[h.realmId] ?? h.realmId;
+    ownOf[id] = true;
+    add(id, twigFor(h.type));
   }
 
   // An exchange is one unit of growth. It forks into a grasp twig when the
   // line was caught and a reply twig when the reply answered it; a review is
   // practice on an exchange already counted, so it adds no growth. Flowers
   // are replies on the learner's own scenes.
-  final knownRealms = {for (final r in realms) r.id};
   String branchOf(SceneResult r) {
     final sc = scenes[r.sceneId];
-    final realm = sc?.realmId;
-    if (realm != null && knownRealms.contains(realm)) return realm;
-    return (sc?.isBuiltin ?? false) ? sampleBranchId : ownBranchId;
+    final field = sc == null ? defaultFieldId : fieldOf(sc);
+    final own = !(sc?.isBuiltin ?? false);
+    final id = own ? ownBranch(field) : sampleBranch(field);
+    labels[id] = fieldLabels[field] ?? realmLabel[field] ?? field;
+    ownOf[id] = own;
+    return id;
   }
 
   for (final r in results) {
@@ -158,9 +190,25 @@ TreeShape treeFrom({
     if (r.gistOk) add(id, Twig.grasp, counts: false);
     if (r.replyOk) {
       add(id, Twig.reply, counts: false);
-      if (!(scenes[r.sceneId]?.isBuiltin ?? true)) {
-        flowersByRealm[id] = (flowersByRealm[id] ?? 0) + 1;
-      }
+      if (ownOf[id]!) flowersByBranch[id] = (flowersByBranch[id] ?? 0) + 1;
+    }
+  }
+
+  // A fruit for every scene of the learner's own whose latest run was all
+  // right — both exchanges, both questions.
+  final latest = <String, Map<int, SceneResult>>{};
+  for (final r in results) {
+    if (r.review) continue;
+    final per = latest.putIfAbsent(r.sceneId, () => {});
+    if ((per[r.exchange]?.at ?? -1) < r.at) per[r.exchange] = r;
+  }
+  for (final e in latest.entries) {
+    final sc = scenes[e.key];
+    if (sc == null || sc.isBuiltin) continue;
+    if (e.value.length < sc.exchanges.length) continue;
+    if (e.value.values.every((r) => r.gistOk && r.replyOk)) {
+      final id = ownBranch(fieldOf(sc));
+      fruitByBranch[id] = (fruitByBranch[id] ?? 0) + 1;
     }
   }
 
@@ -175,12 +223,13 @@ TreeShape treeFrom({
     final done = srs.isMastered(st);
     final due = srs.isDue(st, today);
     for (final r in i.realmIds) {
+      final id = ownBranch(r);
       if (done) {
-        learned[r] = (learned[r] ?? 0) + 1;
+        learned[id] = (learned[id] ?? 0) + 1;
       } else {
-        growing[r] = (growing[r] ?? 0) + 1;
+        growing[id] = (growing[id] ?? 0) + 1;
       }
-      if (due) overdue[r] = true;
+      if (due) overdue[id] = true;
     }
   }
 
@@ -189,28 +238,33 @@ TreeShape treeFrom({
   // that is always on is not a signal. What shows is neglect: reviews waiting
   // and nothing done here today. One exchange or answer puts the colour back.
   final touchedToday = {
-    for (final h in history.where((h) => h.day == today)) h.realmId,
+    for (final h in history.where((h) => h.day == today)) ownBranch(h.realmId),
     for (final r in results.where((r) => r.day == today)) branchOf(r),
   };
 
-  Branch branch(String id, String label) => Branch(
+  final branches = [
+    for (final id in answersByBranch.keys)
+      Branch(
         realmId: id,
-        label: label,
-        answers: answersByRealm[id] ?? 0,
-        twigs: twigsByRealm[id] ?? {for (final t in Twig.values) t: 0},
+        label: labels[id] ?? id,
+        own: ownOf[id] ?? true,
+        answers: answersByBranch[id] ?? 0,
+        twigs: twigsByBranch[id] ?? {for (final t in Twig.values) t: 0},
         growing: growing[id] ?? 0,
         learned: learned[id] ?? 0,
-        flowers: flowersByRealm[id] ?? 0,
+        flowers: flowersByBranch[id] ?? 0,
+        fruit: fruitByBranch[id] ?? 0,
         thirsty: (overdue[id] ?? false) && !touchedToday.contains(id),
-      );
-  final branches = [
-    for (final r in realms.where((x) => x.unlocked)) branch(r.id, r.label),
-    // Scenes that name no area. Labelled with a mark rather than a word so
-    // they need no language.
-    if ((answersByRealm[ownBranchId] ?? 0) > 0) branch(ownBranchId, '✦'),
-    if ((answersByRealm[sampleBranchId] ?? 0) > 0) branch(sampleBranchId, '·'),
-  ]..sort((a, b) => a.realmId.compareTo(b.realmId));
+      ),
+  ]..sort((a, b) {
+      if (a.own != b.own) return a.own ? 1 : -1;
+      return a.realmId.compareTo(b.realmId);
+    });
 
   final exchanges = results.where((r) => !r.review).length;
-  return TreeShape(answers: history.length + exchanges, branches: branches);
+  return TreeShape(
+    answers: history.length + exchanges,
+    scenes: exchanges ~/ exchangesPerScene,
+    branches: branches,
+  );
 }

@@ -206,6 +206,7 @@ class S {
     'byEarRunLabel', 'tapOtherWhy', 'scenePerfect', 'bestByEarLabel',
     'byEarRunNow', 'hapticsSection', 'voicePerSceneLabel', 'voicePerSceneHint', 'privacyLine',
     'scenePasteButton', 'fieldPickLabel', 'samplesFieldsTitle', 'ownFieldsTitle', 'fieldOwnEmptyHint',
+    'treeStage0', 'treeStage1', 'treeStage2', 'treeStage3', 'treeStage4', 'treeStage5', 'treeStageUp',
   ];
 }
 
@@ -801,6 +802,13 @@ const _catalogueCore = <String, Map<String, String>>{
     'samplesFieldsTitle': 'Samples',
     'ownFieldsTitle': 'Your own scenes',
     'fieldOwnEmptyHint': 'Fields grow here as your AI writes scenes for them.',
+    'treeStage0': 'Seed',
+    'treeStage1': 'Sprout',
+    'treeStage2': 'Seedling',
+    'treeStage3': 'Young tree',
+    'treeStage4': 'Tree',
+    'treeStage5': 'Great tree',
+    'treeStageUp': 'Your tree is now a {name}',
   },
 
   // =========================================================== Japanese
@@ -1353,5 +1361,12 @@ const _catalogueCore = <String, Map<String, String>>{
     'samplesFieldsTitle': '見本',
     'ownFieldsTitle': '自分専用の場面',
     'fieldOwnEmptyHint': 'AI が場面を作った分野が、ここに増えていきます。',
+    'treeStage0': '種',
+    'treeStage1': '芽',
+    'treeStage2': '苗',
+    'treeStage3': '若木',
+    'treeStage4': '木',
+    'treeStage5': '大木',
+    'treeStageUp': '{name}になりました',
   },
 };

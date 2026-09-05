@@ -13,8 +13,10 @@ import '../app.dart';
 import '../domain/field.dart';
 import '../domain/progress_service.dart';
 import '../domain/scene.dart';
+import '../domain/tree.dart';
 import 'scene_pack_screen.dart';
 import 'scene_screen.dart';
+import 'tree_view.dart';
 
 class FieldScreen extends ConsumerWidget {
   final Field field;
@@ -59,6 +61,11 @@ class FieldScreen extends ConsumerWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 children: [
+                  // This field's bough alone, the way it stands on the tree.
+                  if (scenes.isNotEmpty) ...[
+                    TreePanel(focus: own ? ownBranch(field.id) : sampleBranch(field.id), compact: true),
+                    const SizedBox(height: 8),
+                  ],
                   if (scenes.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),

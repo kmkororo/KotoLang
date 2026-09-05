@@ -27,11 +27,12 @@ import 'package:kotolang/features/tree_view.dart';
 
 /// One area with a plausible spread of formats behind it.
 Branch _branch(String id, String label, int answers,
-    {int learned = 0, bool thirsty = false, bool bare = false}) {
+    {int learned = 0, bool thirsty = false, bool bare = false, bool own = true}) {
   final listening = (answers * 0.5).round();
   return Branch(
-    realmId: id,
+    realmId: (own ? ownBranch : sampleBranch)(id),
     label: label,
+    own: own,
     answers: answers,
     twigs: bare
         ? {for (final t in Twig.values) t: 0}
@@ -40,28 +41,24 @@ Branch _branch(String id, String label, int answers,
             Twig.reply: answers - listening,
           },
     growing: (answers / 6).ceil(),
-    learned: learned,
+    fruit: learned,
+    flowers: own ? (answers * 0.4).round() : 0,
     thirsty: thirsty,
   );
 }
 
 /// The stages, as somebody actually passes through them.
-typedef _Phase = ({
-  String name,
-  TreeShape shape,
-  List<String> ornaments,
-  bool pest,
-});
+typedef _Phase = ({String name, TreeShape shape});
 
 _Phase _phase(String name, TreeShape shape,
         {List<String> ornaments = const [], bool pest = false}) =>
-    (name: name, shape: shape, ornaments: ornaments, pest: pest);
+    (name: name, shape: shape);
 
 final _phases = <_Phase>[
   _phase('00_seed', const TreeShape(answers: 0, branches: [])),
   _phase('01_one', TreeShape(answers: 1, branches: [_branch('a', '仕事', 1)])),
-  _phase('02_five', TreeShape(answers: 5, branches: [_branch('a', '仕事', 5)])),
-  _phase('03_ten', TreeShape(answers: 10, branches: [_branch('a', '仕事', 10)])),
+  _phase('02_five', TreeShape(answers: 5, branches: [_branch('a', '仕事', 5, own: false)])),
+  _phase('03_ten', TreeShape(answers: 10, branches: [_branch('a', '仕事', 6, own: false), _branch('a', '仕事', 4)])),
   _phase(
     '04_twenty_five',
     TreeShape(
@@ -163,15 +160,9 @@ Future<TreeArt> _loadArt() async {
   }
 
   return TreeArt(
-    ground: await one('ground'),
     bud: await one('bud'),
     fruit: await one('fruit'),
     sprout: await one('sprout'),
-    bug: await one('bug'),
-    ornaments: {
-      for (final n in ['ribbon', 'star', 'lantern', 'bell'])
-        n: await one('ornament_$n')
-    },
   );
 }
 
@@ -215,11 +206,7 @@ void main() {
               // Held still: the picture has to be the same every run, and a
               // repeating breeze would never let `pumpAndSettle` return.
               treeMotionProvider.overrideWithValue(false),
-              treeDataProvider.overrideWith((ref) async => TreeData(
-                    shape: phase.shape,
-                    ornaments: phase.ornaments,
-                    pest: phase.pest,
-                  )),
+              treeDataProvider.overrideWith((ref) async => TreeData(shape: phase.shape)),
             ],
             child: MaterialApp(
               theme: ThemeData(

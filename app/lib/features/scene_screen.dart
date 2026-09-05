@@ -25,6 +25,7 @@ import '../core/l10n/strings.dart';
 import '../core/speech.dart';
 import '../domain/progress_service.dart';
 import '../domain/scene.dart';
+import '../domain/tree.dart' show treeStage;
 
 /// One exchange to answer, with the scene it belongs to.
 class SceneCard {
@@ -106,6 +107,9 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   int _combo = 0;
   int _bestComboHere = 0;
 
+  /// Scenes finished before this one, to notice the tree changing stage.
+  int _scenesBefore = 0;
+
   // The leaf that flies from the right answer to the figure of "you".
   late final AnimationController _leaf;
   Offset? _leafFrom;
@@ -126,7 +130,9 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
       ...widget.reviews,
       for (var i = 0; i < widget.scene.exchanges.length; i++) SceneCard(widget.scene, i),
     ];
-    _combo = ref.read(skillStatsProvider).value?.runs.combo ?? 0;
+    final stats = ref.read(skillStatsProvider).value;
+    _combo = stats?.runs.combo ?? 0;
+    _scenesBefore = stats?.scenes ?? 0;
     // Without a voice the words have to be on screen from the start; that is
     // not a peek, there was nothing else to hear.
     _revealed = !_speech.available;
@@ -829,6 +835,15 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium,
         ),
+        if (treeStage(_scenesBefore + 1) > treeStage(_scenesBefore)) ...[
+          const SizedBox(height: 10),
+          Text(
+            s.t('treeStageUp', {'name': s.t('treeStage${treeStage(_scenesBefore + 1)}')}),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium
+                ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700),
+          ),
+        ],
         if (perfect && bloom) ...[
           const SizedBox(height: 6),
           Text(s.t('scenePerfect'),
