@@ -14,7 +14,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app.dart';
 import '../domain/field.dart';
 import '../domain/models.dart';
-import '../domain/progress_service.dart';
 import '../domain/scene.dart';
 import '../domain/skills.dart';
 import '../domain/tree.dart';
@@ -58,6 +57,7 @@ class HomeScreen extends ConsumerWidget {
     final results = ref.watch(sceneResultsProvider).value ?? const <SceneResult>[];
     final stats = ref.watch(skillStatsProvider).value ?? SkillStats.empty;
     final fields = ref.watch(fieldsProvider).value ?? const <Field>[];
+    final samplesOpen = ref.watch(samplesOpenProvider);
 
     final ownScenes = [for (final x in scenes) if (!x.isBuiltin) x];
     final hasOwn = ownScenes.isNotEmpty;
@@ -188,18 +188,33 @@ class HomeScreen extends ConsumerWidget {
             ),
             OutlinedButton.icon(
               icon: const Icon(Icons.add, size: 18),
-              onPressed: () => showAddFieldDialog(context, ref),
-              label: Text('${s.t('fieldAdd')} · $realmUnlockCost Seeds'),
+              onPressed: () => showOpenFieldSheet(context, ref),
+              label: Text(s.t('fieldAdd')),
             ),
           ],
         ),
 
-        // -------- the samples, by field --------
+        // -------- the samples, by field: folded away by default --------
         const SizedBox(height: 20),
-        _GroupTitle(
-            icon: Icons.menu_book_outlined, title: s.t('samplesFieldsTitle'), color: scheme.onSurfaceVariant),
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => ref.read(samplesOpenProvider.notifier).state = !samplesOpen,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _GroupTitle(
+                      icon: Icons.menu_book_outlined, title: s.t('samplesFieldsTitle'), color: scheme.onSurfaceVariant),
+                ),
+                Icon(samplesOpen ? Icons.expand_less : Icons.expand_more, color: scheme.onSurfaceVariant),
+              ],
+            ),
+          ),
+        ),
         const SizedBox(height: 8),
-        for (final f in sampleFields) ...[
+        if (samplesOpen)
+          for (final f in sampleFields) ...[
           _FieldTile(
             field: f,
             scenes: splitField(scenes, f.id).samples,
@@ -397,3 +412,7 @@ class _Pill extends StatelessWidget {
         child: Text('$icon $text', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
       );
 }
+
+/// Whether the samples are unfolded on home. Folded by default: they are the
+/// starter set, and the learner's own scenes are the point.
+final samplesOpenProvider = StateProvider<bool>((ref) => false);

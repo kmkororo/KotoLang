@@ -129,80 +129,71 @@ class FieldScreen extends ConsumerWidget {
   }
 }
 
-/// Asks for the name of a new field and adds it, for Seeds. The dialog owns
-/// its text field; a controller disposed by the screen while the dialog is
-/// still animating out is how this used to crash.
-Future<void> showAddFieldDialog(BuildContext context, WidgetRef ref) async {
+/// Opens one of the areas the AI read off the profile, for Seeds: confirm,
+/// pay, and it is a field scenes can be made for. Returns true when opened.
+Future<bool> openLockedField(BuildContext context, WidgetRef ref, Field f) async {
   final s = ref.read(stringsProvider);
-  final name = await showDialog<String>(
-    context: context,
-    builder: (_) => _AddFieldDialog(
-      title: s.t('fieldAdd'),
-      body: s.t('fieldAddBody', {'n': realmUnlockCost}),
-      hint: s.t('fieldAddHint'),
-      confirm: s.t('confirmLabel'),
-      cancel: s.t('cancel'),
-    ),
-  );
-  if (name == null || name.trim().isEmpty || !context.mounted) return;
   final repo = ref.read(repositoryProvider);
-  final realm = await repo.addField(name);
-  if (!context.mounted) return;
-  if (realm == null) {
-    final progress = ref.read(progressProvider);
+  final progress = ref.read(progressProvider);
+  if (progress.seeds < realmUnlockCost) {
     showToast(context, s.t('unlockRealmNeedMore', {'n': realmUnlockCost - progress.seeds}));
-    return;
+    return false;
   }
+  final ok = await confirm(
+    context,
+    title: s.t('unlockRealmConfirmTitle', {'realm': f.label}),
+    body: s.t('unlockRealmConfirmBody', {'n': realmUnlockCost}),
+    confirmLabel: s.t('unlockButton'),
+    cancelLabel: s.t('cancel'),
+    destructive: false,
+  );
+  if (!ok || !context.mounted) return false;
+  final spent = await repo.unlockRealm(f.id);
+  if (!context.mounted || !spent) return false;
   ref.read(progressProvider.notifier).state = await repo.loadProgress();
   ref.invalidate(realmsProvider);
   ref.invalidate(fieldsProvider);
-  if (context.mounted) showToast(context, s.t('fieldAdded', {'name': realm.label}));
+  ref.invalidate(lockedFieldsProvider);
+  if (context.mounted) showToast(context, s.t('fieldAdded', {'name': f.label}));
+  return true;
 }
 
-class _AddFieldDialog extends StatefulWidget {
-  final String title, body, hint, confirm, cancel;
-  const _AddFieldDialog({
-    required this.title,
-    required this.body,
-    required this.hint,
-    required this.confirm,
-    required this.cancel,
-  });
-
-  @override
-  State<_AddFieldDialog> createState() => _AddFieldDialogState();
-}
-
-class _AddFieldDialogState extends State<_AddFieldDialog> {
-  final _ctl = TextEditingController();
-
-  @override
-  void dispose() {
-    _ctl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Text(widget.title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(widget.body, style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _ctl,
-              autofocus: true,
-              decoration: InputDecoration(hintText: widget.hint),
-              textInputAction: TextInputAction.done,
-              onSubmitted: (v) => Navigator.pop(context, v),
+/// The areas from the profile that are still closed, as a sheet to pick
+/// from. There is nothing to type: a field the AI never heard of would have
+/// no scenes written for it.
+Future<void> showOpenFieldSheet(BuildContext context, WidgetRef ref) async {
+  final s = ref.read(stringsProvider);
+  final locked = await ref.read(lockedFieldsProvider.future);
+  if (!context.mounted) return;
+  final picked = await showModalBottomSheet<Field>(
+    context: context,
+    showDragHandle: true,
+    builder: (ctx) => SafeArea(
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        children: [
+          Text(s.t('fieldAdd'), style: Theme.of(ctx).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(s.t('fieldAddBody', {'n': realmUnlockCost}), style: Theme.of(ctx).textTheme.bodySmall),
+          const SizedBox(height: 8),
+          if (locked.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(s.t('fieldNoneLocked'),
+                  style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(widget.cancel)),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, _ctl.text), child: Text(widget.confirm)),
+          for (final f in locked)
+            ListTile(
+              leading: const Icon(Icons.lock_outline),
+              title: Text(f.label),
+              trailing: Text('$realmUnlockCost Seeds'),
+              onTap: () => Navigator.pop(ctx, f),
+            ),
         ],
-      );
+      ),
+    ),
+  );
+  if (picked == null || !context.mounted) return;
+  await openLockedField(context, ref, picked);
 }

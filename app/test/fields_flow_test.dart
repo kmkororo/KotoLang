@@ -16,6 +16,7 @@ import 'package:kotolang/features/scene_pack_screen.dart';
 import 'package:kotolang/features/scene_screen.dart';
 
 import 'app_flow_test.dart' show pumpApp, seedLearner;
+import 'repository_test.dart' show profileJson;
 import 'scene_flow_test.dart' show pumpScene, choose;
 
 void main() {
@@ -39,6 +40,10 @@ void main() {
     expect(find.text(s.t('ownFieldsTitle')), findsOneWidget);
     await tester.scrollUntilVisible(find.text(s.t('samplesFieldsTitle')), 200,
         scrollable: find.byType(Scrollable).first);
+    // The samples are folded away until asked for.
+    expect(find.text(s.t('interest_travel')), findsNothing);
+    await tester.tap(find.text(s.t('samplesFieldsTitle')));
+    await tester.pumpAndSettle();
     for (final id in builtinFieldIds) {
       await tester.scrollUntilVisible(find.text(s.t('interest_$id')).last, 200,
           scrollable: find.byType(Scrollable).first);
@@ -73,6 +78,10 @@ void main() {
     final s = S('en');
 
     // A sample field opens on the samples alone, with no way to make scenes.
+    await tester.scrollUntilVisible(find.text(s.t('samplesFieldsTitle')), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text(s.t('samplesFieldsTitle')));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text(s.t('interest_travel')), 200,
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text(s.t('interest_travel')));
@@ -91,40 +100,51 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ScenePackScreen), findsOneWidget);
     final picker = tester.widget<DropdownButtonFormField<String>>(find.byKey(const ValueKey('fieldPicker')));
-    expect(picker.initialValue, 'work');
+    // Only the learner's own fields are offered, never the samples' four.
+    expect(picker.initialValue, isNotNull);
+    expect(picker.initialValue, isNot(isIn(builtinFieldIds)));
     expect(find.text(s.t('privacyLine')), findsOneWidget);
   });
 
-  testWidgets('adding a field asks for a name, charges Seeds and lists it', (tester) async {
+  testWidgets('opening an area from the profile costs Seeds and needs the balance',
+      (tester) async {
     tall(tester);
     final (db, repo) = await pumpApp(tester, seed: (r) async {
-      await seedLearner(r);
+      await r.saveUiLanguage('en');
+      await r.saveSettings(
+          const AppSettings(ageBand: '30s', interests: ['work'], tutorialDone: true));
+      // Five areas: the first three open for free, two wait, priced.
+      await r.importProfile(profileJson(['Nursing', 'Cycling', 'Gardening', 'Chess', 'Sailing']),
+          uiLanguage: 'en');
       await r.saveProgress((await r.loadProgress()).copyWith(seeds: realmUnlockCost + 5));
     });
     addTearDown(db.close);
     final s = S('en');
+    final lockedBefore = (await repo.realms()).where((r) => !r.unlocked).toList();
+    expect(lockedBefore, hasLength(2));
 
-    await tester.scrollUntilVisible(find.textContaining(s.t('fieldAdd')), 200,
+    await tester.scrollUntilVisible(find.text(s.t('fieldAdd')), 200,
         scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.textContaining(s.t('fieldAdd')));
+    await tester.tap(find.text(s.t('fieldAdd')));
     await tester.pumpAndSettle();
-    expect(find.text(s.t('fieldAddBody', {'n': realmUnlockCost})), findsOneWidget);
-    await tester.enterText(find.byType(TextField), 'Fishing');
-    await tester.tap(find.text(s.t('confirmLabel')));
+    // The sheet lists the two closed areas, priced.
+    for (final r in lockedBefore) {
+      expect(find.text(r.label), findsOneWidget);
+    }
+    await tester.tap(find.text(lockedBefore.first.label));
     await tester.pumpAndSettle();
-
+    await tester.tap(find.text(s.t('unlockButton')));
+    await tester.pumpAndSettle();
     expect((await repo.loadProgress()).seeds, 5);
-    // It is a field now; it appears on home once scenes are made for it.
-    expect((await repo.realms()).any((r) => r.label == 'Fishing' && r.unlocked), isTrue);
-    expect(find.text('Fishing'), findsNothing);
+    expect((await repo.realms()).where((r) => !r.unlocked), hasLength(1));
 
-    // Short of Seeds now: the next one is refused and nothing changes.
-    await tester.tap(find.textContaining(s.t('fieldAdd')));
+    // Short of Seeds now: the last one is refused and nothing changes.
+    await tester.tap(find.text(s.t('fieldAdd')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Cooking');
-    await tester.tap(find.text(s.t('confirmLabel')));
+    await tester.tap(find.text(lockedBefore.last.label));
     await tester.pumpAndSettle();
-    expect((await repo.realms()).any((r) => r.label == 'Cooking'), isFalse);
+    expect(find.text(s.t('unlockButton')), findsNothing);
+    expect((await repo.realms()).where((r) => !r.unlocked), hasLength(1));
     expect((await repo.loadProgress()).seeds, 5);
   });
 

@@ -17,7 +17,7 @@ import '../domain/field.dart';
 import '../domain/models.dart';
 import '../domain/progress_service.dart';
 import 'ai_links.dart';
-import 'field_screen.dart' show showAddFieldDialog;
+import 'field_screen.dart' show openLockedField;
 import 'onboarding_screens.dart' show copyToClipboard;
 import 'paste_box.dart';
 import 'profile_screen.dart';
@@ -145,34 +145,6 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
     Navigator.popUntil(context, (r) => r.isFirst);
   }
 
-
-  /// A priced area picked in the dropdown: confirm, pay, and it becomes the
-  /// field the scenes are for.
-  Future<void> _openField(Field f) async {
-    final s = ref.read(stringsProvider);
-    final repo = ref.read(repositoryProvider);
-    final progress = ref.read(progressProvider);
-    if (progress.seeds < realmUnlockCost) {
-      showToast(context, s.t('unlockRealmNeedMore', {'n': realmUnlockCost - progress.seeds}));
-      return;
-    }
-    final ok = await confirm(
-      context,
-      title: s.t('unlockRealmConfirmTitle', {'realm': f.label}),
-      body: s.t('unlockRealmConfirmBody', {'n': realmUnlockCost}),
-      confirmLabel: s.t('unlockButton'),
-      cancelLabel: s.t('cancel'),
-      destructive: false,
-    );
-    if (!ok || !mounted) return;
-    final spent = await repo.unlockRealm(f.id);
-    if (!mounted || !spent) return;
-    ref.read(progressProvider.notifier).state = await repo.loadProgress();
-    ref.invalidate(realmsProvider);
-    ref.invalidate(fieldsProvider);
-    ref.invalidate(lockedFieldsProvider);
-    setState(() => _field = f.id);
-  }
   Future<void> _makeProfile() async {
     await Navigator.push(
         context, MaterialPageRoute(builder: (_) => const ProfileScreen(popOnDone: true)));
@@ -186,14 +158,17 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final muted = theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
-    final fields = ref.watch(fieldsProvider).value ?? const <Field>[];
+    // Scenes are written for the learner's own fields — the areas read off
+    // their profile and the ones they added — never for the samples' four.
+    final fields = [
+      for (final f in ref.watch(fieldsProvider).value ?? const <Field>[]) if (!f.builtin) f
+    ];
     final locked = ref.watch(lockedFieldsProvider).value ?? const <Field>[];
-    final interests = ref.watch(settingsProvider).interests;
-    // A field is always chosen: the one asked for, else the first the
-    // learner said they care about, else the first there is.
-    final field = _field ??
-        fields.map((f) => f.id).where(interests.contains).firstOrNull ??
-        (fields.isEmpty ? null : fields.first.id);
+    final known = {for (final f in fields) f.id, for (final f in locked) f.id};
+    if (_field != null && !known.contains(_field)) _field = null;
+    // A field is always chosen when there is one: the one asked for, else
+    // the first open one.
+    final field = _field ?? (fields.isEmpty ? null : fields.first.id);
     // Remembered, so the prompt and the import use what the dropdown shows.
     _field ??= field;
     final hasProfile = _profile != null;
@@ -263,19 +238,13 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
                       if (v == null) return;
                       final l = locked.where((f) => f.id == v).firstOrNull;
                       if (l != null) {
-                        _openField(l);
+                        openLockedField(context, ref, l).then((opened) {
+                          if (opened && mounted) setState(() => _field = l.id);
+                        });
                         return;
                       }
                       setState(() => _field = v);
                     },
-                  ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      icon: const Icon(Icons.add, size: 16),
-                      onPressed: () => showAddFieldDialog(context, ref),
-                      label: Text(s.t('fieldAdd')),
-                    ),
                   ),
                   const SizedBox(height: 12),
 

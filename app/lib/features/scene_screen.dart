@@ -321,6 +321,11 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
+    // Inside the scene everything is English — the questions, the labels, the
+    // verdict — so the head never switches language mid-exchange. The guide
+    // and the result, which are about the scene rather than in it, keep the
+    // interface language.
+    final e = S('en');
     final theme = Theme.of(context);
 
     return PopScope(
@@ -341,10 +346,10 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
                       onTap: _answered && !_saving ? _advance : null,
                       child: Column(
                         children: [
-                          _topBar(s, theme),
+                          _topBar(e, theme),
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                            child: _stage(s, theme),
+                            child: _stage(e, theme),
                           ),
                           Expanded(
                             child: SingleChildScrollView(
@@ -355,22 +360,22 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   if (widget.tutorial) _guide(s, theme),
-                                  if (_card.review) _reviewTag(s, theme),
-                                  _lineBubble(s, theme),
+                                  if (_card.review) _reviewTag(e, theme),
+                                  _lineBubble(e, theme),
                                   const SizedBox(height: 12),
                                   AnimatedSwitcher(
                                     duration: const Duration(milliseconds: 220),
                                     child: Column(
                                       key: ValueKey('$_index/${_phase == _Phase.listen || _phase == _Phase.gistAnswer ? 'g' : 'r'}'),
                                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: _question(s, theme),
+                                      children: _question(e, theme),
                                     ),
                                   ),
                                 ],
                               ),
                             ),
                           ),
-                          _bottom(s, theme),
+                          _bottom(e, theme),
                         ],
                       ),
                     ),
@@ -719,7 +724,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
               text: _x.gist.options[i],
               // The right answer shows its translation once answered; the rest
               // stay short so the three rows still fit above the panel.
-              sub: answered && i == _x.gist.answer ? _x.gist.nativeOf(i) : '',
+              sub: answered ? _x.gist.nativeOf(i) : '',
               state: _stateOf(i, answered: answered, answer: _x.gist.answer, pick: _gistPick),
               onTap: answered ? null : (c) => _select(i, c),
             ),
@@ -734,7 +739,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
             _Option(
               key: ValueKey('r$_index-$i'),
               text: _x.reply.options[i].text,
-              sub: answered && i == _x.reply.answer ? _x.reply.options[i].native : '',
+              sub: answered ? _x.reply.options[i].native : '',
               state: _stateOf(i, answered: answered, answer: _x.reply.answer, pick: _replyPick),
               // Tapping another reply after the answer shows its reason.
               onTap: answered ? (_) => setState(() => _whyOf = i) : (c) => _select(i, c),

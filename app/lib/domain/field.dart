@@ -7,7 +7,6 @@
 /// the learner's own, which is the split the tree cares about too.
 library;
 
-import '../core/util.dart';
 import 'models.dart';
 import 'scene.dart';
 
@@ -35,23 +34,13 @@ String fieldOf(Scene scene) => scene.realmId ?? defaultFieldId;
 /// Every field the learner can use: the four built-ins, labelled by
 /// [labelOf], followed by their own unlocked areas. Locked areas the AI once
 /// suggested stay out until they are unlocked.
-List<Field> fieldsFrom(List<Realm> realms, String Function(String id) labelOf) {
-  // An area the AI once suggested under the same name as a built-in field
-  // ("Work", "旅行") is that field, not a second one beside it.
-  final taken = {
-    for (final id in builtinFieldIds) ...{normKey(id), normKey(labelOf(id))},
-    normKey('everyday'),
-  };
-  return [
-    for (final id in builtinFieldIds) Field(id: id, label: labelOf(id), builtin: true),
-    for (final r in realms)
-      if (r.unlocked &&
-          !builtinFieldIds.contains(r.id) &&
-          !taken.contains(normKey(r.name)) &&
-          !taken.contains(normKey(r.label)))
-        Field(id: r.id, label: r.label),
-  ];
-}
+List<Field> fieldsFrom(List<Realm> realms, String Function(String id) labelOf) => [
+      for (final id in builtinFieldIds) Field(id: id, label: labelOf(id), builtin: true),
+      // The learner's own areas may share a name with a built-in field ("Work"):
+      // the built-in is the samples', theirs is theirs, and both stand.
+      for (final r in realms)
+        if (r.unlocked && !builtinFieldIds.contains(r.id)) Field(id: r.id, label: r.label),
+    ];
 
 /// The scenes of one field, split the way the field screen shows them.
 ({List<Scene> samples, List<Scene> own}) splitField(List<Scene> scenes, String fieldId) {
@@ -64,17 +53,7 @@ List<Field> fieldsFrom(List<Realm> realms, String Function(String id) labelOf) {
 
 /// The areas the AI suggested that are not open yet: shown priced in the
 /// field list, so making scenes for one is a matter of opening it.
-List<Field> lockedFieldsFrom(List<Realm> realms, String Function(String id) labelOf) {
-  final taken = {
-    for (final id in builtinFieldIds) ...{normKey(id), normKey(labelOf(id))},
-    normKey('everyday'),
-  };
-  return [
-    for (final r in realms)
-      if (!r.unlocked &&
-          !builtinFieldIds.contains(r.id) &&
-          !taken.contains(normKey(r.name)) &&
-          !taken.contains(normKey(r.label)))
-        Field(id: r.id, label: r.label),
-  ];
-}
+List<Field> lockedFieldsFrom(List<Realm> realms, String Function(String id) labelOf) => [
+      for (final r in realms)
+        if (!r.unlocked && !builtinFieldIds.contains(r.id)) Field(id: r.id, label: r.label),
+    ];

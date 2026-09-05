@@ -207,6 +207,7 @@ class S {
     'byEarRunNow', 'hapticsSection', 'voicePerSceneLabel', 'voicePerSceneHint', 'privacyLine',
     'scenePasteButton', 'fieldPickLabel', 'samplesFieldsTitle', 'ownFieldsTitle', 'fieldOwnEmptyHint',
     'treeStage0', 'treeStage1', 'treeStage2', 'treeStage3', 'treeStage4', 'treeStage5', 'treeStageUp',
+    'fieldNoneLocked',
   ];
 }
 
@@ -719,7 +720,7 @@ const _catalogueCore = <String, Map<String, String>>{
     'todayScene': "Today's scene",
     'todaySceneSample': "Today's scene (sample)",
     'firstSceneMake': 'Make your first scenes',
-    'nextScenesMake': 'Make the next scenes',
+    'nextScenesMake': 'Add new scenes',
     'makeOwnScenes': 'Make scenes of your own',
     'laterSamples': 'Later — keep going with the samples',
     'axisLine': 'Understood {g}% · Replied {r}%',
@@ -765,8 +766,8 @@ const _catalogueCore = <String, Map<String, String>>{
     'fieldStartSamples': 'Start with the samples',
     'fieldStartOwn': 'Start with your own',
     'fieldOwnNone': 'No scenes of your own in this field yet.',
-    'fieldAdd': 'Add a field',
-    'fieldAddBody': 'For {n} Seeds, add a field of your own — say, parenting, fishing, job interviews.',
+    'fieldAdd': 'Open a field',
+    'fieldAddBody': 'Open one of the areas read from your profile for {n} Seeds.',
     'fieldAddHint': 'Name of the field',
     'fieldAdded': 'Added "{name}"',
     'scenePackField': 'Which field are the scenes for?',
@@ -809,6 +810,7 @@ const _catalogueCore = <String, Map<String, String>>{
     'treeStage4': 'Tree',
     'treeStage5': 'Great tree',
     'treeStageUp': 'Your tree is now a {name}',
+    'fieldNoneLocked': 'Every area from your profile is open. Remake the profile to find more.',
   },
 
   // =========================================================== Japanese
@@ -1278,7 +1280,7 @@ const _catalogueCore = <String, Map<String, String>>{
     'todayScene': '今日の場面',
     'todaySceneSample': '今日の場面（見本）',
     'firstSceneMake': '最初の場面を作る',
-    'nextScenesMake': '次の場面を作る',
+    'nextScenesMake': '新しい場面を追加する',
     'makeOwnScenes': '自分専用の場面を作る',
     'laterSamples': 'あとで（見本で続ける）',
     'axisLine': '理解 {g}% · 返答 {r}%',
@@ -1324,8 +1326,8 @@ const _catalogueCore = <String, Map<String, String>>{
     'fieldStartSamples': '見本から始める',
     'fieldStartOwn': '自分専用から始める',
     'fieldOwnNone': 'この分野の自分専用の場面はまだありません。',
-    'fieldAdd': '分野を追加',
-    'fieldAddBody': '{n} Seeds で、自分の分野を1つ追加できます（例: 子育て、釣り、面接）。',
+    'fieldAdd': '分野を開く',
+    'fieldAddBody': 'プロフィールから読み取った分野を、{n} Seeds で1つ開けます。',
     'fieldAddHint': '分野の名前',
     'fieldAdded': '「{name}」を追加しました',
     'scenePackField': 'どの分野の場面を作りますか？',
@@ -1368,5 +1370,6 @@ const _catalogueCore = <String, Map<String, String>>{
     'treeStage4': '木',
     'treeStage5': '大木',
     'treeStageUp': '{name}になりました',
+    'fieldNoneLocked': 'プロフィールの分野はすべて開いています。新しい分野は、プロフィールを作り直すと増えます。',
   },
 };
