@@ -7,6 +7,7 @@
 /// the learner's own, which is the split the tree cares about too.
 library;
 
+import '../core/util.dart';
 import 'models.dart';
 import 'scene.dart';
 
@@ -34,12 +35,23 @@ String fieldOf(Scene scene) => scene.realmId ?? defaultFieldId;
 /// Every field the learner can use: the four built-ins, labelled by
 /// [labelOf], followed by their own unlocked areas. Locked areas the AI once
 /// suggested stay out until they are unlocked.
-List<Field> fieldsFrom(List<Realm> realms, String Function(String id) labelOf) => [
-      for (final id in builtinFieldIds) Field(id: id, label: labelOf(id), builtin: true),
-      for (final r in realms)
-        if (r.unlocked && !builtinFieldIds.contains(r.id))
-          Field(id: r.id, label: r.label),
-    ];
+List<Field> fieldsFrom(List<Realm> realms, String Function(String id) labelOf) {
+  // An area the AI once suggested under the same name as a built-in field
+  // ("Work", "旅行") is that field, not a second one beside it.
+  final taken = {
+    for (final id in builtinFieldIds) ...{normKey(id), normKey(labelOf(id))},
+    normKey('everyday'),
+  };
+  return [
+    for (final id in builtinFieldIds) Field(id: id, label: labelOf(id), builtin: true),
+    for (final r in realms)
+      if (r.unlocked &&
+          !builtinFieldIds.contains(r.id) &&
+          !taken.contains(normKey(r.name)) &&
+          !taken.contains(normKey(r.label)))
+        Field(id: r.id, label: r.label),
+  ];
+}
 
 /// The scenes of one field, split the way the field screen shows them.
 ({List<Scene> samples, List<Scene> own}) splitField(List<Scene> scenes, String fieldId) {
