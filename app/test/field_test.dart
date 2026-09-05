@@ -16,6 +16,7 @@ import 'package:kotolang/domain/progress_service.dart';
 
 import 'repository_test.dart' show profileJson;
 import 'scene_test.dart' show pack, scene;
+import 'tree_test.dart' show realm;
 
 void main() {
   late AppDatabase db;
@@ -53,14 +54,30 @@ void main() {
   test('the fields are the four built-ins and then the unlocked areas', () async {
     await repo.importProfile(profileJson(['Nursing', 'Cycling']), uiLanguage: 'en');
     final realms = await repo.realms();
-    // Nothing unlocked yet: only the built-ins.
-    expect(fieldsFrom(realms, (id) => id).map((f) => f.id), builtinFieldIds);
-
-    await repo.markRealmsUnlocked([realms.first.id]);
-    final fields = fieldsFrom(await repo.realms(), (id) => id.toUpperCase());
+    // Both areas came off the profile and are open: the built-ins, then them.
+    final fields = fieldsFrom(realms, (id) => id.toUpperCase());
     expect(fields.map((f) => f.label).take(4), ['WORK', 'TRAVEL', 'SCHOOL', 'DAILY']);
-    expect(fields.last.id, realms.first.id);
+    expect(fields.skip(4).map((f) => f.label).toSet(), {'Nursing', 'Cycling'});
     expect(fields.last.builtin, isFalse);
+    // A locked area stays out of the open list.
+    await db.into(db.realms).insertOnConflictUpdate(realmToRow(
+        realm('Sailing').copyWith(unlocked: false)));
+    expect(fieldsFrom(await repo.realms(), (id) => id).map((f) => f.id), isNot(contains('Sailing')));
+  });
+
+  test('the profile opens its first three areas as fields; the rest wait, priced', () async {
+    await repo.importProfile(profileJson(['Nursing', 'Cycling', 'Gardening', 'Chess', 'Sailing']),
+        uiLanguage: 'en');
+    final realms = await repo.realms();
+    expect(realms.where((r) => r.unlocked), hasLength(freeRealmSlots));
+    final open = fieldsFrom(realms, (id) => id);
+    expect(open.where((f) => !f.builtin), hasLength(freeRealmSlots));
+    final locked = lockedFieldsFrom(realms, (id) => id);
+    expect(locked, hasLength(5 - freeRealmSlots));
+    // A second import does not hand out more free slots.
+    await repo.importProfile(profileJson(['Nursing', 'Cycling', 'Gardening', 'Chess', 'Sailing', 'Rowing']),
+        uiLanguage: 'en');
+    expect((await repo.realms()).where((r) => r.unlocked), hasLength(freeRealmSlots));
   });
 
   test('adding a field costs Seeds and needs the balance', () async {

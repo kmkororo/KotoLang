@@ -369,6 +369,17 @@ class Repository {
     });
     await _saveProfile(norm.profile);
 
+    // The areas the AI read off the profile are the learner's fields. The
+    // first few open for nothing; the rest wait, priced, in the field list.
+    final all = await realms();
+    final open = all.where((r) => r.unlocked).length;
+    if (open < freeRealmSlots) {
+      final free = [
+        for (final r in all.where((r) => !r.unlocked).take(freeRealmSlots - open)) r.id
+      ];
+      await markRealmsUnlocked(free);
+    }
+
     return ImportOutcome(ok: true, realms: toWrite.length, partial: ex.repaired);
   }
 

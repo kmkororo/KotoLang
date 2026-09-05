@@ -133,6 +133,13 @@ final fieldsProvider = FutureProvider.autoDispose<List<Field>>((ref) async {
   final realms = await ref.watch(realmsProvider.future);
   return fieldsFrom(realms, (id) => s.t('interest_$id'));
 });
+
+/// The areas the AI suggested that are still closed, priced for opening.
+final lockedFieldsProvider = FutureProvider.autoDispose<List<Field>>((ref) async {
+  final s = ref.watch(stringsProvider);
+  final realms = await ref.watch(realmsProvider.future);
+  return lockedFieldsFrom(realms, (id) => s.t('interest_$id'));
+});
 final allScenesProvider = FutureProvider.autoDispose<List<Scene>>((ref) async {
   final own = await ref.watch(repositoryProvider).scenes();
   final lang = ref.watch(languageProvider) ?? fallbackLanguage;
@@ -282,6 +289,9 @@ class _KotoLangAppState extends ConsumerState<KotoLangApp>
       theme: _theme(Brightness.light),
       darkTheme: _theme(Brightness.dark),
       // The stored preference, which until now was written and never read.
+      // No stretch at the ends of a list. The stretching indicator has left
+      // lists stuck at the bottom on some phones; a plain stop never does.
+      scrollBehavior: const _PlainScrollBehavior(),
       themeMode: switch (ref.watch(settingsProvider).theme) {
         'light' => ThemeMode.light,
         'dark' => ThemeMode.dark,
@@ -476,3 +486,15 @@ Future<void> updateSettings(WidgetRef ref, AppSettings next) async {
 
 /// Companion helper re-exported so feature files need not import Drift.
 Value<T> dbValue<T>(T v) => Value<T>(v);
+
+/// Scrolling that simply stops at the ends, on every platform.
+class _PlainScrollBehavior extends MaterialScrollBehavior {
+  const _PlainScrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) =>
+      child;
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) => const ClampingScrollPhysics();
+}

@@ -61,3 +61,20 @@ List<Field> fieldsFrom(List<Realm> realms, String Function(String id) labelOf) {
     own: [for (final s in inField) if (!s.isBuiltin) s],
   );
 }
+
+/// The areas the AI suggested that are not open yet: shown priced in the
+/// field list, so making scenes for one is a matter of opening it.
+List<Field> lockedFieldsFrom(List<Realm> realms, String Function(String id) labelOf) {
+  final taken = {
+    for (final id in builtinFieldIds) ...{normKey(id), normKey(labelOf(id))},
+    normKey('everyday'),
+  };
+  return [
+    for (final r in realms)
+      if (!r.unlocked &&
+          !builtinFieldIds.contains(r.id) &&
+          !taken.contains(normKey(r.name)) &&
+          !taken.contains(normKey(r.label)))
+        Field(id: r.id, label: r.label),
+  ];
+}

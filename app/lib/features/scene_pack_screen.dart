@@ -15,6 +15,7 @@ import '../core/l10n/languages.dart';
 import '../data/builtin_scenes.dart';
 import '../domain/field.dart';
 import '../domain/models.dart';
+import '../domain/progress_service.dart';
 import 'ai_links.dart';
 import 'field_screen.dart' show showAddFieldDialog;
 import 'onboarding_screens.dart' show copyToClipboard;
@@ -144,6 +145,34 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
     Navigator.popUntil(context, (r) => r.isFirst);
   }
 
+
+  /// A priced area picked in the dropdown: confirm, pay, and it becomes the
+  /// field the scenes are for.
+  Future<void> _openField(Field f) async {
+    final s = ref.read(stringsProvider);
+    final repo = ref.read(repositoryProvider);
+    final progress = ref.read(progressProvider);
+    if (progress.seeds < realmUnlockCost) {
+      showToast(context, s.t('unlockRealmNeedMore', {'n': realmUnlockCost - progress.seeds}));
+      return;
+    }
+    final ok = await confirm(
+      context,
+      title: s.t('unlockRealmConfirmTitle', {'realm': f.label}),
+      body: s.t('unlockRealmConfirmBody', {'n': realmUnlockCost}),
+      confirmLabel: s.t('unlockButton'),
+      cancelLabel: s.t('cancel'),
+      destructive: false,
+    );
+    if (!ok || !mounted) return;
+    final spent = await repo.unlockRealm(f.id);
+    if (!mounted || !spent) return;
+    ref.read(progressProvider.notifier).state = await repo.loadProgress();
+    ref.invalidate(realmsProvider);
+    ref.invalidate(fieldsProvider);
+    ref.invalidate(lockedFieldsProvider);
+    setState(() => _field = f.id);
+  }
   Future<void> _makeProfile() async {
     await Navigator.push(
         context, MaterialPageRoute(builder: (_) => const ProfileScreen(popOnDone: true)));
@@ -158,6 +187,7 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
     final scheme = theme.colorScheme;
     final muted = theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
     final fields = ref.watch(fieldsProvider).value ?? const <Field>[];
+    final locked = ref.watch(lockedFieldsProvider).value ?? const <Field>[];
     final interests = ref.watch(settingsProvider).interests;
     // A field is always chosen: the one asked for, else the first the
     // learner said they care about, else the first there is.
@@ -216,8 +246,28 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
                     items: [
                       for (final f in fields)
                         DropdownMenuItem(value: f.id, child: Text(f.label, overflow: TextOverflow.ellipsis)),
+                      // The areas read off the profile that are not open yet,
+                      // priced; picking one opens it.
+                      for (final f in locked)
+                        DropdownMenuItem(
+                          value: f.id,
+                          child: Row(children: [
+                            Icon(Icons.lock_outline, size: 16, color: scheme.onSurfaceVariant),
+                            const SizedBox(width: 6),
+                            Expanded(child: Text(f.label, overflow: TextOverflow.ellipsis)),
+                            Text('$realmUnlockCost Seeds', style: theme.textTheme.bodySmall),
+                          ]),
+                        ),
                     ],
-                    onChanged: (v) => setState(() => _field = v),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      final l = locked.where((f) => f.id == v).firstOrNull;
+                      if (l != null) {
+                        _openField(l);
+                        return;
+                      }
+                      setState(() => _field = v);
+                    },
                   ),
                   Align(
                     alignment: Alignment.centerRight,
