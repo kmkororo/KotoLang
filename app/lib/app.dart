@@ -498,3 +498,9 @@ class _PlainScrollBehavior extends MaterialScrollBehavior {
   @override
   ScrollPhysics getScrollPhysics(BuildContext context) => const ClampingScrollPhysics();
 }
+
+/// Fields still openable for nothing.
+final freeFieldSlotsProvider = FutureProvider.autoDispose<int>((ref) async {
+  ref.watch(realmsProvider);
+  return ref.watch(repositoryProvider).freeFieldSlotsLeft();
+});

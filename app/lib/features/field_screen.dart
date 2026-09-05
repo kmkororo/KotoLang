@@ -129,32 +129,45 @@ class FieldScreen extends ConsumerWidget {
   }
 }
 
-/// Opens one of the areas the AI read off the profile, for Seeds: confirm,
-/// pay, and it is a field scenes can be made for. Returns true when opened.
-Future<bool> openLockedField(BuildContext context, WidgetRef ref, Field f) async {
+/// Opens one of the areas the AI read off the profile: free while the first
+/// slots last, for Seeds after that. When [toScenes] is set, the scenes
+/// screen follows with the field already chosen — an open field with no
+/// scenes is nothing yet. Returns true when opened.
+Future<bool> openLockedField(BuildContext context, WidgetRef ref, Field f,
+    {bool toScenes = false}) async {
   final s = ref.read(stringsProvider);
   final repo = ref.read(repositoryProvider);
-  final progress = ref.read(progressProvider);
-  if (progress.seeds < realmUnlockCost) {
-    showToast(context, s.t('unlockRealmNeedMore', {'n': realmUnlockCost - progress.seeds}));
-    return false;
+  final free = await repo.freeFieldSlotsLeft() > 0;
+  if (!context.mounted) return false;
+  if (!free) {
+    final progress = ref.read(progressProvider);
+    if (progress.seeds < realmUnlockCost) {
+      showToast(context, s.t('unlockRealmNeedMore', {'n': realmUnlockCost - progress.seeds}));
+      return false;
+    }
+    final ok = await confirm(
+      context,
+      title: s.t('unlockRealmConfirmTitle', {'realm': f.label}),
+      body: s.t('unlockRealmConfirmBody', {'n': realmUnlockCost}),
+      confirmLabel: s.t('unlockButton'),
+      cancelLabel: s.t('cancel'),
+      destructive: false,
+    );
+    if (!ok || !context.mounted) return false;
   }
-  final ok = await confirm(
-    context,
-    title: s.t('unlockRealmConfirmTitle', {'realm': f.label}),
-    body: s.t('unlockRealmConfirmBody', {'n': realmUnlockCost}),
-    confirmLabel: s.t('unlockButton'),
-    cancelLabel: s.t('cancel'),
-    destructive: false,
-  );
-  if (!ok || !context.mounted) return false;
-  final spent = await repo.unlockRealm(f.id);
-  if (!context.mounted || !spent) return false;
+  final opened = await repo.openField(f.id);
+  if (!context.mounted || !opened) return false;
   ref.read(progressProvider.notifier).state = await repo.loadProgress();
   ref.invalidate(realmsProvider);
   ref.invalidate(fieldsProvider);
   ref.invalidate(lockedFieldsProvider);
-  if (context.mounted) showToast(context, s.t('fieldAdded', {'name': f.label}));
+  ref.invalidate(freeFieldSlotsProvider);
+  if (!context.mounted) return true;
+  showToast(context, s.t('fieldAdded', {'name': f.label}));
+  if (toScenes) {
+    await Navigator.push(
+        context, MaterialPageRoute(builder: (_) => ScenePackScreen(initialField: f.id)));
+  }
   return true;
 }
 
@@ -164,6 +177,7 @@ Future<bool> openLockedField(BuildContext context, WidgetRef ref, Field f) async
 Future<void> showOpenFieldSheet(BuildContext context, WidgetRef ref) async {
   final s = ref.read(stringsProvider);
   final locked = await ref.read(lockedFieldsProvider.future);
+  final free = await ref.read(freeFieldSlotsProvider.future);
   if (!context.mounted) return;
   final picked = await showModalBottomSheet<Field>(
     context: context,
@@ -175,19 +189,25 @@ Future<void> showOpenFieldSheet(BuildContext context, WidgetRef ref) async {
         children: [
           Text(s.t('fieldAdd'), style: Theme.of(ctx).textTheme.titleMedium),
           const SizedBox(height: 4),
-          Text(s.t('fieldAddBody', {'n': realmUnlockCost}), style: Theme.of(ctx).textTheme.bodySmall),
+          Text(
+            free > 0 ? s.t('fieldFreeLeft', {'n': free}) : s.t('fieldAddBody', {'n': realmUnlockCost}),
+            style: Theme.of(ctx).textTheme.bodySmall,
+          ),
           const SizedBox(height: 8),
           if (locked.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Text(s.t('fieldNoneLocked'),
-                  style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+                  style: Theme.of(ctx)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
             ),
           for (final f in locked)
             ListTile(
-              leading: const Icon(Icons.lock_outline),
+              leading: Icon(free > 0 ? Icons.lock_open_outlined : Icons.lock_outline),
               title: Text(f.label),
-              trailing: Text('$realmUnlockCost Seeds'),
+              trailing: Text(free > 0 ? s.t('freeTag') : '$realmUnlockCost Seeds'),
               onTap: () => Navigator.pop(ctx, f),
             ),
         ],
@@ -195,5 +215,5 @@ Future<void> showOpenFieldSheet(BuildContext context, WidgetRef ref) async {
     ),
   );
   if (picked == null || !context.mounted) return;
-  await openLockedField(context, ref, picked);
+  await openLockedField(context, ref, picked, toScenes: true);
 }

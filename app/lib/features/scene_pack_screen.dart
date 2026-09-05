@@ -160,12 +160,17 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
     final muted = theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
     // Scenes are written for the learner's own fields — the areas read off
     // their profile and the ones they added — never for the samples' four.
-    final fields = [
-      for (final f in ref.watch(fieldsProvider).value ?? const <Field>[]) if (!f.builtin) f
-    ];
-    final locked = ref.watch(lockedFieldsProvider).value ?? const <Field>[];
+    final fieldsAsync = ref.watch(fieldsProvider);
+    final lockedAsync = ref.watch(lockedFieldsProvider);
+    final fields = [for (final f in fieldsAsync.value ?? const <Field>[]) if (!f.builtin) f];
+    final locked = lockedAsync.value ?? const <Field>[];
+    final freeLeft = ref.watch(freeFieldSlotsProvider).value ?? 0;
+    // A field that is no longer there is dropped — but only once the lists
+    // have loaded, or a field just opened would be lost on the way in.
     final known = {for (final f in fields) f.id, for (final f in locked) f.id};
-    if (_field != null && !known.contains(_field)) _field = null;
+    if (fieldsAsync.hasValue && lockedAsync.hasValue && _field != null && !known.contains(_field)) {
+      _field = null;
+    }
     // A field is always chosen when there is one: the one asked for, else
     // the first open one.
     final field = _field ?? (fields.isEmpty ? null : fields.first.id);
@@ -227,10 +232,12 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
                         DropdownMenuItem(
                           value: f.id,
                           child: Row(children: [
-                            Icon(Icons.lock_outline, size: 16, color: scheme.onSurfaceVariant),
+                            Icon(freeLeft > 0 ? Icons.lock_open_outlined : Icons.lock_outline,
+                                size: 16, color: scheme.onSurfaceVariant),
                             const SizedBox(width: 6),
                             Expanded(child: Text(f.label, overflow: TextOverflow.ellipsis)),
-                            Text('$realmUnlockCost Seeds', style: theme.textTheme.bodySmall),
+                            Text(freeLeft > 0 ? s.t('freeTag') : '$realmUnlockCost Seeds',
+                                style: theme.textTheme.bodySmall),
                           ]),
                         ),
                     ],

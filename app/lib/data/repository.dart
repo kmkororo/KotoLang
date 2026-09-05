@@ -1773,6 +1773,27 @@ class Repository {
   /// misheard, so the AI can aim at that kind of line.
   // ------------------------------------------------------------------ fields
 
+  /// How many fields can still be opened for nothing: the first
+  /// [freeRealmSlots] are free, whenever they are opened.
+  Future<int> freeFieldSlotsLeft() async {
+    final open = (await realms()).where((r) => r.unlocked).length;
+    return (freeRealmSlots - open).clamp(0, freeRealmSlots);
+  }
+
+  /// Opens a field: free while free slots remain, for Seeds after that.
+  /// Returns false, spending nothing, when the balance is short.
+  Future<bool> openField(String realmId) async {
+    final all = await realms();
+    final row = all.where((r) => r.id == realmId).firstOrNull;
+    if (row == null) return false;
+    if (row.unlocked) return true;
+    if (all.where((r) => r.unlocked).length < freeRealmSlots) {
+      await markRealmsUnlocked([realmId]);
+      return true;
+    }
+    return unlockRealm(realmId);
+  }
+
   /// How a field is described to the AI, in English: the built-in four by
   /// their fixed description, a field the learner added by its name and the
   /// contexts the AI once attached to it.

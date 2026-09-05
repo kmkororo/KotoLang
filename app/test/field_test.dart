@@ -95,6 +95,24 @@ void main() {
     expect((await repo.realms()).where((r) => r.normKeyValue == 'cooking'), hasLength(1));
   });
 
+  test('the first three fields open for nothing, whenever they are opened', () async {
+    for (final n in ['A', 'B', 'C', 'D']) {
+      await db.into(db.realms).insertOnConflictUpdate(realmToRow(realm(n).copyWith(unlocked: false)));
+    }
+    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
+    expect(await repo.openField('A'), isTrue);
+    expect(await repo.openField('B'), isTrue);
+    expect(await repo.openField('C'), isTrue);
+    expect(await repo.freeFieldSlotsLeft(), 0);
+    expect((await repo.loadProgress()).seeds, 0, reason: 'the free ones cost nothing');
+    // The fourth needs Seeds.
+    expect(await repo.openField('D'), isFalse);
+    await repo.saveProgress((await repo.loadProgress()).copyWith(seeds: realmUnlockCost));
+    expect(await repo.openField('D'), isTrue);
+    expect((await repo.loadProgress()).seeds, 0);
+    expect(await repo.openField('D'), isTrue, reason: 'already open, nothing charged');
+  });
+
   test('the prompt names the field the scenes are for', () async {
     await repo.saveProgress((await repo.loadProgress()).copyWith(seeds: realmUnlockCost));
     final realm = (await repo.addField('Cooking'))!;

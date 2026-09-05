@@ -137,6 +137,13 @@ void main() {
     await tester.pumpAndSettle();
     expect((await repo.loadProgress()).seeds, 5);
     expect((await repo.realms()).where((r) => !r.unlocked), hasLength(1));
+    // An open field with no scenes is nothing yet: the scenes screen follows,
+    // with the field already chosen.
+    expect(find.byType(ScenePackScreen), findsOneWidget);
+    final picker = tester.widget<DropdownButtonFormField<String>>(find.byKey(const ValueKey('fieldPicker')));
+    expect(picker.initialValue, lockedBefore.first.id);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     // Short of Seeds now: the last one is refused and nothing changes.
     await tester.tap(find.text(s.t('fieldAdd')));

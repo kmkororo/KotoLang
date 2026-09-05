@@ -207,7 +207,7 @@ class S {
     'byEarRunNow', 'hapticsSection', 'voicePerSceneLabel', 'voicePerSceneHint', 'privacyLine',
     'scenePasteButton', 'fieldPickLabel', 'samplesFieldsTitle', 'ownFieldsTitle', 'fieldOwnEmptyHint',
     'treeStage0', 'treeStage1', 'treeStage2', 'treeStage3', 'treeStage4', 'treeStage5', 'treeStageUp',
-    'fieldNoneLocked',
+    'fieldNoneLocked', 'freeTag', 'fieldFreeLeft',
   ];
 }
 
@@ -811,6 +811,8 @@ const _catalogueCore = <String, Map<String, String>>{
     'treeStage5': 'Great tree',
     'treeStageUp': 'Your tree is now a {name}',
     'fieldNoneLocked': 'Every area from your profile is open. Remake the profile to find more.',
+    'freeTag': 'Free',
+    'fieldFreeLeft': '{n} more can be opened for free',
   },
 
   // =========================================================== Japanese
@@ -1371,5 +1373,7 @@ const _catalogueCore = <String, Map<String, String>>{
     'treeStage5': '大木',
     'treeStageUp': '{name}になりました',
     'fieldNoneLocked': 'プロフィールの分野はすべて開いています。新しい分野は、プロフィールを作り直すと増えます。',
+    'freeTag': '無料',
+    'fieldFreeLeft': 'あと{n}つは無料で開けます',
   },
 };
