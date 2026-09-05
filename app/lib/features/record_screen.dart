@@ -13,7 +13,6 @@ import '../domain/progress_service.dart';
 import '../domain/scene.dart';
 import '../domain/skills.dart';
 import 'onboarding_screens.dart' show RealmPickerScreen;
-import 'tree_view.dart';
 
 class RecordScreen extends ConsumerWidget {
   const RecordScreen({super.key});
@@ -77,9 +76,16 @@ class RecordScreen extends ConsumerWidget {
         // -------- the habit --------
         _Block(title: s.t('continuitySection'), children: [
           Row(children: [
-            _Cell('🔥 ${progress.streak}', s.t('streakDays')),
+            _Cell('☀️ ${progress.streak}', s.t('streakDays')),
             _Cell('${progress.bestStreak}', s.t('bestStreakLabel')),
             _Cell('${stats.scenes}', s.t('scenesDoneLabel')),
+          ]),
+          const SizedBox(height: 8),
+          // Runs of right answers: the one going now by ear, and the longest.
+          Row(children: [
+            _Cell('${stats.runs.byEar}', s.t('byEarRunNow')),
+            _Cell('${stats.runs.bestByEar}', s.t('bestByEarLabel')),
+            _Cell('${stats.runs.bestCombo}', s.t('bestComboLabel')),
           ]),
           const SizedBox(height: 12),
           GridView.count(
@@ -201,29 +207,6 @@ class _SeedsBlock extends ConsumerStatefulWidget {
 }
 
 class _SeedsBlockState extends ConsumerState<_SeedsBlock> {
-  bool _busy = false;
-
-  Future<void> _buyOrnament(String kind) async {
-    if (_busy) return;
-    final s = ref.read(stringsProvider);
-    final ok = await confirm(
-      context,
-      title: s.t('ornamentConfirmTitle'),
-      body: s.t('ornamentConfirmBody', {'n': ornamentCost}),
-      confirmLabel: s.t('confirmLabel'),
-      cancelLabel: s.t('cancel'),
-      destructive: false,
-    );
-    if (!ok || !mounted) return;
-    setState(() => _busy = true);
-    final next = await ref.read(repositoryProvider).spendForOrnament(kind);
-    if (!mounted) return;
-    setState(() => _busy = false);
-    if (next == null) return;
-    ref.read(progressProvider.notifier).state = next;
-    ref.invalidate(treeDataProvider);
-    showToast(context, s.t('ornamentDone'));
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -231,7 +214,7 @@ class _SeedsBlockState extends ConsumerState<_SeedsBlock> {
     final theme = Theme.of(context);
     final seeds = widget.progress.seeds;
     final locked = widget.realms.where((r) => !r.unlocked).toList();
-    final shortfall = (locked.isNotEmpty ? realmUnlockCost : ornamentCost) - seeds;
+    final shortfall = realmUnlockCost - seeds;
 
     return _Block(title: '🌱 ${s.t('seedsLabel')}', children: [
       Row(
@@ -265,27 +248,6 @@ class _SeedsBlockState extends ConsumerState<_SeedsBlock> {
           child: Text(s.t('yourRealmsButton')),
         ),
       ],
-      const SizedBox(height: 10),
-      Text(s.t('ornamentNote', {'n': ornamentCost}), style: theme.textTheme.bodySmall),
-      const SizedBox(height: 8),
-      Row(
-        children: [
-          for (final kind in ornamentKinds)
-            Expanded(
-              child: Opacity(
-                opacity: seeds >= ornamentCost ? 1 : 0.45,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: _busy || seeds < ornamentCost ? null : () => _buyOrnament(kind),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Image.asset('assets/tree/ornament_$kind.png', height: 44),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
     ]);
   }
 }

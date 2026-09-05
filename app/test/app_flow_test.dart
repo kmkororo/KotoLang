@@ -181,7 +181,7 @@ void main() {
     // The samples are there to play, and the card to the learner's own AI
     // stays up until an own scene arrives.
     expect(find.text(s.t('todaySceneSample')), findsOneWidget);
-    await tester.tap(find.text(s.t('makeOwnScenes')));
+    await tester.tap(find.text(s.t('makeOwnScenes')).first);
     await tester.pumpAndSettle();
     expect(find.byType(ScenePackScreen), findsOneWidget);
     expect(find.text(s.t('firstSceneMake')), findsOneWidget);
@@ -201,7 +201,7 @@ void main() {
     addTearDown(db.close);
     final s = S('en');
 
-    await tester.tap(find.text(s.t('makeOwnScenes')));
+    await tester.tap(find.text(s.t('makeOwnScenes')).first);
     await tester.pumpAndSettle();
     expect(find.text(s.t('scenePackNeedProfile')), findsOneWidget);
     final copy = find.widgetWithText(FilledButton, s.t('copyPrompt'));
@@ -252,28 +252,4 @@ void main() {
     expect(find.text(S('ja').t('settingsTitle')), findsWidgets);
   });
 
-  testWidgets('a decoration is confirmed, charged for and hung on the tree', (tester) async {
-    _tallScreen(tester);
-    final (db, repo) = await pumpApp(tester, seed: (r) async {
-      await seedLearner(r);
-      await r.saveProgress((await r.loadProgress()).copyWith(seeds: ornamentCost));
-    });
-    addTearDown(db.close);
-    final s = S('en');
-
-    await tester.tap(find.text(s.t('recordTab')).last);
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text(s.t('ornamentNote', {'n': ornamentCost})), 200,
-        scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.byWidgetPredicate(
-        (w) => w is Image && '${w.image}'.contains('ornament_ribbon')));
-    await tester.pumpAndSettle();
-    expect(find.text(s.t('ornamentConfirmTitle')), findsOneWidget);
-    await tester.tap(find.text(s.t('confirmLabel')));
-    await tester.pumpAndSettle();
-
-    final progress = await repo.loadProgress();
-    expect(progress.seeds, 0);
-    expect(progress.ornaments, ['ribbon']);
-  });
 }

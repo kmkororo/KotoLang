@@ -35,21 +35,25 @@ void main() {
     final s = S('en');
 
     expect(find.text(s.t('todayRandomNote')), findsOneWidget);
+    // Two doors: the learner's own scenes by field, then the samples by field.
+    expect(find.text(s.t('ownFieldsTitle')), findsOneWidget);
+    await tester.scrollUntilVisible(find.text(s.t('samplesFieldsTitle')), 200,
+        scrollable: find.byType(Scrollable).first);
     for (final id in builtinFieldIds) {
-      await tester.scrollUntilVisible(find.text(s.t('interest_$id')), 200,
+      await tester.scrollUntilVisible(find.text(s.t('interest_$id')).last, 200,
           scrollable: find.byType(Scrollable).first);
-      expect(find.text(s.t('interest_$id')), findsOneWidget);
     }
-
-    // The own scene was imported without a field, so it sits in the default.
-    await tester.tap(find.text(s.t('interest_$defaultFieldId')));
+    // The own scene was imported without a field, so it sits in the default,
+    // which therefore appears on both sides; the own side comes first.
+    expect(find.text(s.t('interest_$defaultFieldId')), findsNWidgets(2));
+    await tester.scrollUntilVisible(find.text(s.t('interest_$defaultFieldId')).first, -200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text(s.t('interest_$defaultFieldId')).first);
     await tester.pumpAndSettle();
     expect(find.byType(FieldScreen), findsOneWidget);
-    expect(find.text(s.t('sampleTag')), findsOneWidget);
-    expect(find.text(s.t('fieldOwn')), findsOneWidget);
     expect(find.text('Stay late（日本語）'), findsOneWidget);
-    expect(find.text(s.t('fieldStartSamples')), findsOneWidget);
     expect(find.text(s.t('fieldStartOwn')), findsOneWidget);
+    expect(find.text(s.t('fieldStartSamples')), findsNothing);
 
     // Starting from the own half opens the own scene, not a sample.
     await tester.tap(find.text(s.t('fieldStartOwn')));
@@ -68,20 +72,27 @@ void main() {
     addTearDown(db.close);
     final s = S('en');
 
+    // A sample field opens on the samples alone, with no way to make scenes.
     await tester.scrollUntilVisible(find.text(s.t('interest_travel')), 200,
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text(s.t('interest_travel')));
     await tester.pumpAndSettle();
-    expect(find.text(s.t('fieldOwnNone')), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, s.t('makeOwnScenes')), findsOneWidget);
+    expect(find.byType(FieldScreen), findsOneWidget);
+    expect(find.text(s.t('fieldStartSamples')), findsOneWidget);
+    expect(find.text(s.t('makeOwnScenes')), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.text(s.t('makeOwnScenes')));
+    // Making scenes asks for the field with a dropdown, preset to the first
+    // interest the learner named.
+    await tester.scrollUntilVisible(find.text(s.t('nextScenesMake')).first, -200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text(s.t('nextScenesMake')).first);
     await tester.pumpAndSettle();
     expect(find.byType(ScenePackScreen), findsOneWidget);
-    // Travel is already chosen on the scenes screen.
-    final chip = tester.widget<ChoiceChip>(find.byKey(const ValueKey('field_travel')));
-    expect(chip.selected, isTrue);
-    expect(tester.widget<ChoiceChip>(find.byKey(const ValueKey('field_work'))).selected, isFalse);
+    final picker = tester.widget<DropdownButtonFormField<String>>(find.byKey(const ValueKey('fieldPicker')));
+    expect(picker.initialValue, 'work');
+    expect(find.text(s.t('privacyLine')), findsOneWidget);
   });
 
   testWidgets('adding a field asks for a name, charges Seeds and lists it', (tester) async {
@@ -103,7 +114,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect((await repo.loadProgress()).seeds, 5);
-    expect(find.text('Fishing'), findsOneWidget);
+    // It is a field now; it appears on home once scenes are made for it.
+    expect((await repo.realms()).any((r) => r.label == 'Fishing' && r.unlocked), isTrue);
+    expect(find.text('Fishing'), findsNothing);
 
     // Short of Seeds now: the next one is refused and nothing changes.
     await tester.tap(find.textContaining(s.t('fieldAdd')));
@@ -111,7 +124,7 @@ void main() {
     await tester.enterText(find.byType(TextField), 'Cooking');
     await tester.tap(find.text(s.t('confirmLabel')));
     await tester.pumpAndSettle();
-    expect(find.text('Cooking'), findsNothing);
+    expect((await repo.realms()).any((r) => r.label == 'Cooking'), isFalse);
     expect((await repo.loadProgress()).seeds, 5);
   });
 
@@ -141,7 +154,8 @@ void main() {
     await tester.tap(find.text(s.t('profileRemake')));
     await tester.pumpAndSettle();
     expect(find.text(s.t('copyPrompt')), findsOneWidget);
-    expect(find.text(s.t('loadProfile')), findsOneWidget);
+    expect(find.text(s.t('scenePasteButton')), findsOneWidget);
+    expect(find.text(s.t('privacyLine')), findsOneWidget);
   });
 
   testWidgets('the scene screen shows whose words are whose, and carries the gist into the reply',

@@ -1,11 +1,9 @@
 /// The trip to the learner's own AI: five scenes made for them, in one field.
 ///
-/// Pick the field, copy the prompt, open the assistant, paste the reply,
-/// take it in. The first time, the AI has to be told who the learner is —
-/// that is the profile, done once, and this screen leads there before
-/// anything else. Nothing here talks to a network; the learner's own AI does
-/// the writing, in their own app, and the reply comes back through the
-/// clipboard or the share sheet.
+/// Two buttons and one line. Pick the field, copy the prompt (or open the
+/// assistant with it), paste the reply. Nobody reads the explanations here,
+/// so there are none; the one line that stays is the one that matters —
+/// nothing leaves this phone but the text the learner copies.
 library;
 
 import 'package:flutter/material.dart';
@@ -41,15 +39,20 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
   bool _loaded = false;
   int _ownScenes = 0;
   String? _field;
-  List<({String topic, String reason})> _rejected = const [];
   String? _error;
   bool _busy = false;
+
+  /// The paste box is only shown when the clipboard had nothing to offer.
+  bool _showBox = false;
 
   @override
   void initState() {
     super.initState();
     final shared = widget.initialText;
-    if (shared != null) _paste.field.text = shared;
+    if (shared != null) {
+      _paste.field.text = shared;
+      _showBox = true;
+    }
     _field = widget.initialField;
     _load();
   }
@@ -88,8 +91,8 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
     await copyToClipboard(context, text, s.t('copied'));
   }
 
-  /// Same shape as every paste box in the app: with nothing collected, the
-  /// button takes the reply off the clipboard instead.
+  /// Takes the reply off the clipboard; only when that is empty does the
+  /// paste box appear.
   Future<void> _import() async {
     final s = ref.read(stringsProvider);
     if (_paste.isEmpty) {
@@ -97,7 +100,10 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
       final text = data?.text ?? '';
       if (!mounted) return;
       if (text.trim().isEmpty) {
-        setState(() => _error = s.t('clipboardEmpty'));
+        setState(() {
+          _showBox = true;
+          _error = s.t('clipboardEmpty');
+        });
         return;
       }
       _paste.field.text = text;
@@ -106,7 +112,6 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
     setState(() {
       _busy = true;
       _error = null;
-      _rejected = const [];
     });
     final out = await ref
         .read(repositoryProvider)
@@ -116,20 +121,27 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
 
     if (!out.ok) {
       setState(() {
+        _showBox = true;
         _error = out.errors.contains('not a scenes reply')
             ? s.t('scenePackNotScenes')
             : s.t('importFailedHint');
-        _rejected = out.rejected;
       });
       return;
     }
     _paste.clear();
     ref.invalidate(allScenesProvider);
-    setState(() => _rejected = out.rejected);
     await _load();
     if (!mounted) return;
-    showToast(context, s.t('scenesImported', {'n': out.scenes}));
-    if (out.rejected.isEmpty) Navigator.popUntil(context, (r) => r.isFirst);
+    showToast(
+      context,
+      out.rejected.isEmpty
+          ? s.t('scenesImported', {'n': out.scenes})
+          : '${s.t('scenesImported', {'n': out.scenes})} · ${s.t('packRejected', {
+                  'n': out.rejected.length,
+                  'reasons': out.rejected.map((r) => r.topic).join(', ')
+                })}',
+    );
+    Navigator.popUntil(context, (r) => r.isFirst);
   }
 
   Future<void> _makeProfile() async {
@@ -146,8 +158,12 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
     final scheme = theme.colorScheme;
     final muted = theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
     final fields = ref.watch(fieldsProvider).value ?? const <Field>[];
-    // A field is always chosen: the one asked for, else the first.
-    final field = _field ?? (fields.isEmpty ? null : fields.first.id);
+    final interests = ref.watch(settingsProvider).interests;
+    // A field is always chosen: the one asked for, else the first the
+    // learner said they care about, else the first there is.
+    final field = _field ??
+        fields.map((f) => f.id).where(interests.contains).firstOrNull ??
+        (fields.isEmpty ? null : fields.first.id);
     final hasProfile = _profile != null;
     final ready = hasProfile && field != null;
 
@@ -162,42 +178,20 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
             : ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                 children: [
-                  if (widget.initialText != null) ...[
-                    Card(
-                      color: scheme.secondaryContainer,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(children: [
-                          Icon(Icons.ios_share, size: 18, color: scheme.onSecondaryContainer),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(s.t('sharedTextTitle'),
-                                style: TextStyle(color: scheme.onSecondaryContainer)),
-                          ),
-                        ]),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                  Text(s.t('scenePackIntro'), style: theme.textTheme.bodyMedium),
-                  const SizedBox(height: 6),
-                  Text(s.t('scenePackWhat'), style: muted),
-                  const SizedBox(height: 20),
-
                   // The one thing the AI needs before it can write for this
                   // person. Done once; the profile screen comes straight back.
                   if (!hasProfile) ...[
                     Card(
                       color: scheme.primaryContainer,
+                      margin: EdgeInsets.zero,
                       child: Padding(
                         padding: const EdgeInsets.all(14),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(s.t('scenePackNeedProfile'),
                                 style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    color: scheme.onPrimaryContainer)),
+                                    fontWeight: FontWeight.w700, color: scheme.onPrimaryContainer)),
                             const SizedBox(height: 10),
                             FilledButton.icon(
                               icon: const Icon(Icons.person_outline),
@@ -212,96 +206,63 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
                   ],
 
                   // -------- which field --------
-                  Text(s.t('scenePackField'), style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
+                  DropdownButtonFormField<String>(
+                    key: const ValueKey('fieldPicker'),
+                    initialValue: field,
+                    isExpanded: true,
+                    decoration: InputDecoration(labelText: s.t('fieldPickLabel'), isDense: true),
+                    items: [
                       for (final f in fields)
-                        ChoiceChip(
-                          key: ValueKey('field_${f.id}'),
-                          label: Text(f.label),
-                          selected: f.id == field,
-                          onSelected: (_) => setState(() => _field = f.id),
-                        ),
-                      ActionChip(
-                        avatar: const Icon(Icons.add, size: 18),
-                        label: Text(s.t('fieldAdd')),
-                        onPressed: () => showAddFieldDialog(context, ref),
-                      ),
+                        DropdownMenuItem(value: f.id, child: Text(f.label, overflow: TextOverflow.ellipsis)),
                     ],
+                    onChanged: (v) => setState(() => _field = v),
                   ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      icon: const Icon(Icons.add, size: 16),
+                      onPressed: () => showAddFieldDialog(context, ref),
+                      label: Text(s.t('fieldAdd')),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // -------- 1: the prompt --------
+                  _BigButton(
+                    n: 1,
+                    icon: Icons.copy_all,
+                    label: s.t('copyPrompt'),
+                    onPressed: ready ? _copy : null,
+                  ),
+                  const SizedBox(height: 10),
+                  AiLinks(s: s, enabled: ready, prompt: _prompt),
                   const SizedBox(height: 20),
 
-                  _StepHeader(1, s.t('step1Title')),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.copy_all),
-                    onPressed: ready ? _copy : null,
-                    label: Text(s.t('copyPrompt')),
+                  // -------- 2: the reply --------
+                  _BigButton(
+                    n: 2,
+                    icon: Icons.download,
+                    label: s.t('scenePasteButton'),
+                    onPressed: _busy || !ready ? null : _import,
+                    busy: _busy,
                   ),
-                  const SizedBox(height: 16),
-                  AiLinks(s: s, enabled: ready, prompt: _prompt),
-                  const SizedBox(height: 10),
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Icon(Icons.schedule, size: 16, color: scheme.onSurfaceVariant),
-                    const SizedBox(width: 6),
-                    Expanded(child: Text(s.t('scenePackTakesTime'), style: muted)),
-                  ]),
+                  if (_showBox) ...[
+                    const SizedBox(height: 12),
+                    PasteBox(controller: _paste, s: s, expecting: 'scenes'),
+                  ],
+                  if (_error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(_error!, style: TextStyle(color: scheme.error)),
+                  ],
 
                   const SizedBox(height: 24),
-                  const Divider(),
-                  const SizedBox(height: 16),
-
-                  _StepHeader(2, s.t('step2Title')),
-                  CopyTip(s),
-                  const SizedBox(height: 12),
-                  PasteBox(controller: _paste, s: s, expecting: 'scenes'),
-                  if (_error != null) ...[
-                    const SizedBox(height: 12),
-                    Card(
-                      color: scheme.errorContainer,
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(s.t('importFailedTitle'),
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w700, color: scheme.onErrorContainer)),
-                            const SizedBox(height: 4),
-                            Text(_error!, style: TextStyle(color: scheme.onErrorContainer)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                  // Scenes the importer could not make sound, named with the
-                  // reason. Not an error: the rest went in.
-                  if (_rejected.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Card(
-                      color: scheme.tertiaryContainer,
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Text(
-                          s.t('packRejected', {
-                            'n': _rejected.length,
-                            'reasons':
-                                _rejected.map((r) => '${r.topic} (${r.reason})').join('; '),
-                          }),
-                          style: TextStyle(color: scheme.onTertiaryContainer),
-                        ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 14),
-                  FilledButton(
-                    onPressed: _busy ? null : _import,
-                    child: _busy
-                        ? const SizedBox(
-                            height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                        : Text(s.t('packTakeIn')),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.lock_outline, size: 16, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 6),
+                      Expanded(child: Text(s.t('privacyLine'), style: muted)),
+                    ],
                   ),
                 ],
               ),
@@ -310,30 +271,45 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
   }
 }
 
-/// "1 — Copy the prompt". The two halves of the trip, numbered.
-class _StepHeader extends StatelessWidget {
+/// One of the two steps: a numbered, full-width button.
+class _BigButton extends StatelessWidget {
   final int n;
-  final String title;
-  const _StepHeader(this.n, this.title);
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final bool busy;
+  const _BigButton({
+    required this.n,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.busy = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+    return FilledButton(
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        alignment: Alignment.centerLeft,
+      ),
+      onPressed: onPressed,
       child: Row(
         children: [
           CircleAvatar(
             radius: 13,
-            backgroundColor: theme.colorScheme.primary,
+            backgroundColor: theme.colorScheme.onPrimary.withValues(alpha: 0.25),
             child: Text('$n',
                 style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.onPrimary)),
+                    fontSize: 13, fontWeight: FontWeight.w800, color: theme.colorScheme.onPrimary)),
           ),
-          const SizedBox(width: 10),
-          Expanded(child: Text(title, style: theme.textTheme.titleMedium)),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+          if (busy)
+            const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+          else
+            Icon(icon, size: 20),
         ],
       ),
     );

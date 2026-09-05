@@ -1,13 +1,14 @@
-/// Who the learner is: the two quick answers and the profile their AI wrote.
+/// Who the learner is: two quick answers, and the profile their AI wrote.
 ///
 /// The age and the fields they care about are answered here with a tap and
 /// saved at once. The profile itself — level, roles, what they want English
 /// for — comes from the learner's own AI, made once and reused every time
-/// scenes are written; this screen shows it and offers to remake it. Nothing
-/// on this screen leaves the phone except by the learner's own copy and paste.
+/// scenes are written: two buttons, copy the prompt and paste the reply, and
+/// one line that says where the data stays.
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
@@ -38,6 +39,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _loaded = false;
   bool _busy = false;
   bool _remaking = false;
+  bool _showBox = false;
   String? _error;
 
   @override
@@ -47,6 +49,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (shared != null) {
       _paste.field.text = shared;
       _remaking = true;
+      _showBox = true;
     }
     _load();
   }
@@ -67,9 +70,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   String get _lang => ref.read(languageProvider) ?? fallbackLanguage;
+  String get _promptText => prompts.profilePrompt(uiLanguage: _lang);
 
+  /// Takes the reply off the clipboard; the paste box appears only when the
+  /// clipboard had nothing.
   Future<void> _import() async {
     final s = ref.read(stringsProvider);
+    if (_paste.isEmpty) {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = data?.text ?? '';
+      if (!mounted) return;
+      if (text.trim().isEmpty) {
+        setState(() {
+          _showBox = true;
+          _error = s.t('clipboardEmpty');
+        });
+        return;
+      }
+      _paste.field.text = text;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -79,7 +98,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (!res.ok) {
-      setState(() => _error = s.t('importFailedHint'));
+      setState(() {
+        _showBox = true;
+        _error = s.t('importFailedHint');
+      });
       return;
     }
     showToast(
@@ -97,7 +119,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       Navigator.pop(context);
       return;
     }
-    setState(() => _remaking = false);
+    setState(() {
+      _remaking = false;
+      _showBox = false;
+    });
     await _load();
   }
 
@@ -118,9 +143,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             : ListView(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
                 children: [
-                  Text(s.t('firstRunSub'), style: muted),
-                  const SizedBox(height: 18),
-
                   // -------- the two quick answers --------
                   Text(s.t('ageBandLabel'), style: theme.textTheme.titleSmall),
                   const SizedBox(height: 6),
@@ -163,9 +185,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
                   // -------- the profile the AI wrote --------
                   Text(s.t('profileAiSection'), style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  Text(s.t('profileAiBody'), style: muted),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
 
                   if (profile != null && !_remaking) ...[
                     Card(
@@ -179,8 +199,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             if (profile.roles.isNotEmpty)
                               _Row(s.t('profileRoles'), profile.roles.join(', ')),
                             if (profile.learningPriorities.isNotEmpty)
-                              _Row(s.t('profilePriorities'),
-                                  profile.learningPriorities.join(', ')),
+                              _Row(s.t('profilePriorities'), profile.learningPriorities.join(', ')),
                           ],
                         ),
                       ),
@@ -192,56 +211,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       label: Text(s.t('profileRemake')),
                     ),
                   ] else ...[
-                    Text(s.t('useYourAiSub'), style: muted),
-                    const SizedBox(height: 14),
-                    _StepHeader(1, s.t('step1Title')),
-                    FilledButton.icon(
-                      icon: const Icon(Icons.copy_all),
-                      onPressed: () => copyToClipboard(
-                          context, prompts.profilePrompt(uiLanguage: _lang), s.t('copied')),
-                      label: Text(s.t('copyPrompt')),
+                    _BigButton(
+                      n: 1,
+                      icon: Icons.copy_all,
+                      label: s.t('copyPrompt'),
+                      onPressed: () => copyToClipboard(context, _promptText, s.t('copied')),
                     ),
-                    const SizedBox(height: 16),
-                    AiLinks(s: s, prompt: () async => prompts.profilePrompt(uiLanguage: _lang)),
-                    const SizedBox(height: 24),
-                    const Divider(),
-                    const SizedBox(height: 16),
-                    _StepHeader(2, s.t('step2Title')),
-                    Text(s.t('pasteHint'), style: muted),
-                    const SizedBox(height: 12),
-                    CopyTip(s),
-                    const SizedBox(height: 12),
-                    PasteBox(controller: _paste, s: s, expecting: 'profile'),
-                    if (_error != null) ...[
-                      const SizedBox(height: 12),
-                      Card(
-                        color: scheme.errorContainer,
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(s.t('importFailedTitle'),
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: scheme.onErrorContainer)),
-                              const SizedBox(height: 4),
-                              Text(_error!, style: TextStyle(color: scheme.onErrorContainer)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    FilledButton(
+                    const SizedBox(height: 10),
+                    AiLinks(s: s, prompt: () async => _promptText),
+                    const SizedBox(height: 20),
+                    _BigButton(
+                      n: 2,
+                      icon: Icons.download,
+                      label: s.t('scenePasteButton'),
                       onPressed: _busy ? null : _import,
-                      child: _busy
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2))
-                          : Text(s.t('loadProfile')),
+                      busy: _busy,
                     ),
+                    if (_showBox) ...[
+                      const SizedBox(height: 12),
+                      PasteBox(controller: _paste, s: s, expecting: 'profile'),
+                    ],
+                    if (_error != null) ...[
+                      const SizedBox(height: 10),
+                      Text(_error!, style: TextStyle(color: scheme.error)),
+                    ],
                     if (profile != null) ...[
                       const SizedBox(height: 8),
                       TextButton(
@@ -250,6 +243,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                     ],
                   ],
+
+                  const SizedBox(height: 24),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.lock_outline, size: 16, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 6),
+                      Expanded(child: Text(s.t('privacyLine'), style: muted)),
+                    ],
+                  ),
                 ],
               ),
       ),
@@ -279,27 +282,45 @@ class _Row extends StatelessWidget {
   }
 }
 
-class _StepHeader extends StatelessWidget {
+/// One of the two steps: a numbered, full-width button.
+class _BigButton extends StatelessWidget {
   final int n;
-  final String title;
-  const _StepHeader(this.n, this.title);
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final bool busy;
+  const _BigButton({
+    required this.n,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.busy = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+    return FilledButton(
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        alignment: Alignment.centerLeft,
+      ),
+      onPressed: onPressed,
       child: Row(
         children: [
           CircleAvatar(
             radius: 13,
-            backgroundColor: theme.colorScheme.primary,
+            backgroundColor: theme.colorScheme.onPrimary.withValues(alpha: 0.25),
             child: Text('$n',
                 style: TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w700, color: theme.colorScheme.onPrimary)),
+                    fontSize: 13, fontWeight: FontWeight.w800, color: theme.colorScheme.onPrimary)),
           ),
-          const SizedBox(width: 10),
-          Expanded(child: Text(title, style: theme.textTheme.titleMedium)),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+          if (busy)
+            const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+          else
+            Icon(icon, size: 20),
         ],
       ),
     );

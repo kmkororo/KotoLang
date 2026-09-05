@@ -204,7 +204,8 @@ class S {
     'profileRoles', 'profilePriorities',
     'sceneShowTranslation', 'sceneHideTranslation', 'heardOk', 'heardMiss', 'comboLabel',
     'byEarRunLabel', 'tapOtherWhy', 'scenePerfect', 'bestByEarLabel',
-    'byEarRunNow',
+    'byEarRunNow', 'hapticsSection', 'voicePerSceneLabel', 'voicePerSceneHint', 'privacyLine',
+    'scenePasteButton', 'fieldPickLabel', 'samplesFieldsTitle', 'ownFieldsTitle', 'fieldOwnEmptyHint',
   ];
 }
 
@@ -791,6 +792,15 @@ const _catalogueCore = <String, Map<String, String>>{
     'scenePerfect': 'All four right — a fruit for the tree',
     'bestByEarLabel': 'Longest run by ear',
     'byEarRunNow': 'By ear now',
+    'hapticsSection': 'Vibration',
+    'voicePerSceneLabel': 'A different voice per scene',
+    'voicePerSceneHint': "Drawn from the voices of the chosen voice's region only",
+    'privacyLine': 'Your data stays on this phone. The only thing your AI sees is the text you copy.',
+    'scenePasteButton': "Paste the AI's reply and take it in",
+    'fieldPickLabel': 'Field',
+    'samplesFieldsTitle': 'Samples',
+    'ownFieldsTitle': 'Your own scenes',
+    'fieldOwnEmptyHint': 'Fields grow here as your AI writes scenes for them.',
   },
 
   // =========================================================== Japanese
@@ -1334,5 +1344,14 @@ const _catalogueCore = <String, Map<String, String>>{
     'scenePerfect': '4つとも正解 — 木に実がつきました',
     'bestByEarLabel': '音だけの最長連続',
     'byEarRunNow': '音だけ、今',
+    'hapticsSection': '振動',
+    'voicePerSceneLabel': '場面ごとに声を変える',
+    'voicePerSceneHint': '選んだ声と同じ地域の声の中だけで変わります',
+    'privacyLine': 'データはこの端末の中だけで使われます。AI に渡るのは、あなたがコピーした文だけです。',
+    'scenePasteButton': 'AI の返答を貼って取り込む',
+    'fieldPickLabel': '分野',
+    'samplesFieldsTitle': '見本',
+    'ownFieldsTitle': '自分専用の場面',
+    'fieldOwnEmptyHint': 'AI が場面を作った分野が、ここに増えていきます。',
   },
 };

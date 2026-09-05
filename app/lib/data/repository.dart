@@ -238,6 +238,7 @@ class Repository {
       ageBand: (j['ageBand'] ?? '') as String,
       interests: ((j['interests'] as List?) ?? const []).cast<String>(),
       tutorialDone: (j['tutorialDone'] ?? false) as bool,
+      voicePerScene: (j['voicePerScene'] ?? true) as bool,
     );
   }
 
@@ -256,6 +257,7 @@ class Repository {
         'ageBand': s.ageBand,
         'interests': s.interests,
         'tutorialDone': s.tutorialDone,
+        'voicePerScene': s.voicePerScene,
       }));
 
   /// null until the learner has chosen one, which is what triggers the very

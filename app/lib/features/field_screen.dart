@@ -1,10 +1,9 @@
-/// One field of the learner's life, split into the samples that came with
-/// the app and the scenes their own AI wrote for it.
+/// One field of one kind: the samples that came with the app for it, or the
+/// scenes the learner's own AI wrote for it.
 ///
-/// The split is the point: the samples are there to be outgrown, and the
-/// button to make scenes of one's own stands out the moment the samples are
-/// done or there are no own scenes yet. Both halves start a run of scenes
-/// from that half alone.
+/// The two kinds never mix on a screen. The samples are there to be
+/// outgrown; on the learner's own side, the button to make scenes leads the
+/// moment there is nothing yet, and stays close at hand after.
 library;
 
 import 'package:flutter/material.dart';
@@ -19,7 +18,10 @@ import 'scene_screen.dart';
 
 class FieldScreen extends ConsumerWidget {
   final Field field;
-  const FieldScreen({super.key, required this.field});
+
+  /// The learner's own scenes of this field, as opposed to the samples.
+  final bool own;
+  const FieldScreen({super.key, required this.field, required this.own});
 
   void _refresh(WidgetRef ref) {
     ref.invalidate(allScenesProvider);
@@ -37,134 +39,80 @@ class FieldScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(stringsProvider);
     final theme = Theme.of(context);
-    final scenes = ref.watch(allScenesProvider).value ?? const <Scene>[];
+    final scheme = theme.colorScheme;
+    final all = ref.watch(allScenesProvider).value ?? const <Scene>[];
     final results = ref.watch(sceneResultsProvider).value ?? const <SceneResult>[];
-    final split = splitField(scenes, field.id);
+    final split = splitField(all, field.id);
+    final scenes = own ? split.own : split.samples;
     final done = {for (final r in results) if (!r.review) r.sceneId};
-    int doneOf(List<Scene> xs) => xs.where((x) => done.contains(x.id)).length;
-    final samplesDone = split.samples.isNotEmpty && doneOf(split.samples) == split.samples.length;
-    // Making scenes of one's own is the main thing to do here once the
-    // samples are used up or there is nothing of one's own yet.
-    final makeLeads = split.own.isEmpty || samplesDone;
+    final n = scenes.where((x) => done.contains(x.id)).length;
 
     return Scaffold(
-      appBar: AppBar(title: Text(field.label)),
+      appBar: AppBar(
+        title: Text('${field.label} · ${s.t(own ? 'fieldOwn' : 'sampleTag')}',
+            style: const TextStyle(fontSize: 18)),
+      ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        child: Column(
           children: [
-            _Half(
-              title: s.t('sampleTag'),
-              scenes: split.samples,
-              done: done,
-              empty: s.t('sceneNoneYet'),
-              button: split.samples.isEmpty
-                  ? null
-                  : OutlinedButton(
-                      onPressed: () => startScene(context, ref,
-                          all: split.samples, onDone: () => _refresh(ref)),
-                      child: Text(s.t('fieldStartSamples')),
-                    ),
-            ),
-            const SizedBox(height: 16),
-            _Half(
-              title: s.t('fieldOwn'),
-              scenes: split.own,
-              done: done,
-              flowers: true,
-              empty: s.t('fieldOwnNone'),
-              button: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 children: [
-                  if (split.own.isNotEmpty)
-                    (makeLeads ? OutlinedButton.new : FilledButton.new)(
-                      onPressed: () => startScene(context, ref,
-                          all: split.own, onDone: () => _refresh(ref)),
-                      child: Text(s.t('fieldStartOwn')),
+                  if (scenes.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(s.t('fieldCount', {'d': n, 'n': scenes.length}),
+                          style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
                     ),
-                  if (split.own.isNotEmpty) const SizedBox(height: 8),
-                  (makeLeads ? FilledButton.new : OutlinedButton.new)(
-                    onPressed: () => _makeScenes(context, ref),
-                    child: Text(s.t(split.own.isEmpty ? 'makeOwnScenes' : 'nextScenesMake')),
-                  ),
+                  if (scenes.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Column(
+                        children: [
+                          Icon(own ? Icons.local_florist_outlined : Icons.menu_book_outlined,
+                              size: 40, color: scheme.outlineVariant),
+                          const SizedBox(height: 12),
+                          Text(s.t(own ? 'fieldOwnNone' : 'sceneNoneYet'),
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                  for (final sc in scenes)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        done.contains(sc.id) ? Icons.check_circle : Icons.circle_outlined,
+                        color: done.contains(sc.id) ? scheme.primary : scheme.outlineVariant,
+                      ),
+                      title: Text(sc.label),
+                      subtitle: sc.settingNative.isEmpty ? null : Text(sc.settingNative),
+                    ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            Text(s.t('ownScenesCardBody'),
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The samples, or the learner's own: a count, the scenes with a mark on the
-/// ones done, and what to do with them.
-class _Half extends ConsumerWidget {
-  final String title;
-  final List<Scene> scenes;
-  final Set<String> done;
-  final String empty;
-  final Widget? button;
-  final bool flowers;
-  const _Half({
-    required this.title,
-    required this.scenes,
-    required this.done,
-    required this.empty,
-    required this.button,
-    this.flowers = false,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(stringsProvider);
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final n = scenes.where((x) => done.contains(x.id)).length;
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(flowers ? Icons.local_florist : Icons.menu_book_outlined,
-                    size: 18, color: flowers ? scheme.primary : scheme.onSurfaceVariant),
-                const SizedBox(width: 8),
-                Expanded(child: Text(title, style: theme.textTheme.titleMedium)),
-                if (scenes.isNotEmpty)
-                  Text(s.t('fieldCount', {'d': n, 'n': scenes.length}),
-                      style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-              ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (scenes.isNotEmpty)
+                    FilledButton(
+                      onPressed: () => startScene(context, ref, all: scenes, onDone: () => _refresh(ref)),
+                      child: Text(s.t(own ? 'fieldStartOwn' : 'fieldStartSamples')),
+                    ),
+                  if (own) ...[
+                    if (scenes.isNotEmpty) const SizedBox(height: 8),
+                    (scenes.isEmpty ? FilledButton.new : OutlinedButton.new)(
+                      onPressed: () => _makeScenes(context, ref),
+                      child: Text(s.t(scenes.isEmpty ? 'makeOwnScenes' : 'nextScenesMake')),
+                    ),
+                  ],
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            if (scenes.isEmpty)
-              Text(empty,
-                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant))
-            else
-              for (final sc in scenes)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Row(
-                    children: [
-                      Icon(
-                        done.contains(sc.id) ? Icons.check_circle : Icons.circle_outlined,
-                        size: 16,
-                        color: done.contains(sc.id) ? scheme.primary : scheme.outlineVariant,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(sc.label, style: theme.textTheme.bodyMedium)),
-                    ],
-                  ),
-                ),
-            if (button != null) ...[const SizedBox(height: 12), button!],
           ],
         ),
       ),

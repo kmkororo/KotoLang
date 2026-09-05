@@ -31,6 +31,9 @@ class SettingsScreen extends ConsumerStatefulWidget {
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
+/// What the voice test says: one line at the level of the built-in scenes.
+const _sample = 'Can you come a little early tomorrow? The meeting starts at nine.';
+
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String? _resetRealmId;
   bool _wipeOpen = false;
@@ -108,8 +111,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 await speech.setVoice(v);
                 await updateSettings(ref, settings.copyWith(voiceName: v));
                 setState(() {});
-                speech.speak('This is how your listening practice will sound.',
-                    rate: settings.rate);
+                speech.speak(_sample, rate: settings.rate);
               },
             ),
             const SizedBox(height: 12),
@@ -136,83 +138,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             OutlinedButton.icon(
               icon: const Icon(Icons.volume_up),
-              onPressed: () => speech.speak(
-                  'We need to review the repair policy before proceeding.',
-                  rate: settings.rate),
+              onPressed: () => speech.speak(_sample, rate: settings.rate),
               label: Text(s.t('testVoice')),
             ),
-            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: settings.voicePerScene,
+              title: Text(s.t('voicePerSceneLabel')),
+              subtitle: Text(s.t('voicePerSceneHint'), style: theme.textTheme.bodySmall),
+              onChanged: (v) => updateSettings(ref, settings.copyWith(voicePerScene: v)),
+            ),
+            const SizedBox(height: 4),
             Text(s.t('voiceHelp'),
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           ],
         ]),
 
-        // ------------------------------------------------------- learning
-        _Section(title: s.t('learningSection'), children: [
-          // These dropdowns take the full width and ellipsise. Several of the
-          // labels are a short sentence, and in the longer languages an
-          // unconstrained one was cut off mid-word with nothing to show for it.
-          DropdownButtonFormField<String>(
-            initialValue: settings.difficulty,
-            isExpanded: true,
-            decoration: InputDecoration(labelText: s.t('difficultyLabel'), isDense: true),
-            items: [
-              DropdownMenuItem(
-                  value: 'easy',
-                  child: Text(s.t('diffEasy'), overflow: TextOverflow.ellipsis)),
-              DropdownMenuItem(
-                  value: 'normal',
-                  child: Text(s.t('diffNormal'), overflow: TextOverflow.ellipsis)),
-              DropdownMenuItem(
-                  value: 'hard',
-                  child: Text(s.t('diffHard'), overflow: TextOverflow.ellipsis)),
-            ],
-            onChanged: (v) =>
-                v == null ? null : updateSettings(ref, settings.copyWith(difficulty: v)),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            switch (settings.difficulty) {
-              'easy' => s.t('diffEasyHint'),
-              'normal' => s.t('diffNormalHint'),
-              _ => s.t('diffHardHint'),
-            },
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 14),
-          DropdownButtonFormField<String>(
-            initialValue: settings.inputMode,
-            isExpanded: true,
-            decoration: InputDecoration(labelText: s.t('inputModeLabel'), isDense: true),
-            items: [
-              DropdownMenuItem(
-                  value: 'tap',
-                  child: Text(s.t('inputTap'), overflow: TextOverflow.ellipsis)),
-              DropdownMenuItem(
-                  value: 'keyboard',
-                  child: Text(s.t('inputKeyboard'), overflow: TextOverflow.ellipsis)),
-            ],
-            onChanged: (v) =>
-                v == null ? null : updateSettings(ref, settings.copyWith(inputMode: v)),
-          ),
-          const SizedBox(height: 14),
-          DropdownButtonFormField<int>(
-            initialValue: settings.dailyGoal,
-            isExpanded: true,
-            decoration: InputDecoration(labelText: s.t('dailyGoalLabel'), isDense: true),
-            items: [
-              DropdownMenuItem(
-                  value: 1,
-                  child: Text(s.t('goalOne'), overflow: TextOverflow.ellipsis)),
-              const DropdownMenuItem(value: 5, child: Text('5')),
-              const DropdownMenuItem(value: 10, child: Text('10')),
-              const DropdownMenuItem(value: 20, child: Text('20')),
-            ],
-            onChanged: (v) =>
-                v == null ? null : updateSettings(ref, settings.copyWith(dailyGoal: v)),
-          ),
+        // ------------------------------------------------------ feedback
+        _Section(title: s.t('hapticsSection'), children: [
           // The first thing somebody who dislikes it will come looking for.
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
@@ -222,6 +166,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onChanged: (v) => updateSettings(ref, settings.copyWith(haptics: v)),
           ),
         ]),
+
         _Section(title: s.t('materialSection'), children: [
           // Who the learner is, for the AI that writes their scenes.
           OutlinedButton(

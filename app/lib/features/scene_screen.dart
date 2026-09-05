@@ -149,7 +149,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     _speech.speak(
       _x.line,
       rate: ref.read(settingsProvider).rate,
-      voice: _speech.voiceFor(_card.scene.id.hashCode),
+      voice: ref.read(settingsProvider).voicePerScene ? _speech.voiceFor(_card.scene.id.hashCode) : null,
     );
   }
 

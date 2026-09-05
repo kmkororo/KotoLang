@@ -92,6 +92,10 @@ class AppSettings {
   /// The first-run walkthrough has been completed (or skipped).
   final bool tutorialDone;
 
+  /// Each scene speaks in its own voice, drawn from the voices of the chosen
+  /// voice's region; off, every scene uses the chosen voice.
+  final bool voicePerScene;
+
   const AppSettings({
     this.voiceName,
     this.speechRate,
@@ -105,6 +109,7 @@ class AppSettings {
     this.ageBand = '',
     this.interests = const [],
     this.tutorialDone = false,
+    this.voicePerScene = true,
   });
 
   Difficulty get level => difficulties[difficulty] ?? difficulties['normal']!;
@@ -126,8 +131,10 @@ class AppSettings {
     String? ageBand,
     List<String>? interests,
     bool? tutorialDone,
+    bool? voicePerScene,
   }) =>
       AppSettings(
+        voicePerScene: voicePerScene ?? this.voicePerScene,
         ageBand: ageBand ?? this.ageBand,
         interests: interests ?? this.interests,
         tutorialDone: tutorialDone ?? this.tutorialDone,

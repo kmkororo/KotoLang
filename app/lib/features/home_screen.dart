@@ -1,11 +1,11 @@
 /// Home. Opening the app should answer one question: what do I do today?
 ///
-/// The tree, one button that picks a scene at random, one line of numbers,
-/// and then the fields — work, travel, school, everyday, and the learner's
-/// own — for the days one wants to choose. The samples that ship with the
-/// app make the button live from the first minute; the card under it says,
-/// for as long as only samples are here, that the point of the app is the
-/// scenes the learner's own AI writes.
+/// The tree, one button that picks a scene at random — from the learner's
+/// own scenes once there are any, from the samples until then — one line of
+/// numbers, and two doors: the samples and the learner's own scenes, each
+/// opening onto its fields. The card under the button says, for as long as
+/// only samples are here, that the point of the app is the scenes the
+/// learner's own AI writes.
 library;
 
 import 'package:flutter/material.dart';
@@ -39,8 +39,9 @@ class HomeScreen extends ConsumerWidget {
     _refresh(ref);
   }
 
-  Future<void> _openField(BuildContext context, WidgetRef ref, Field field) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => FieldScreen(field: field)));
+  Future<void> _openField(BuildContext context, WidgetRef ref, Field field, {required bool own}) async {
+    await Navigator.push(
+        context, MaterialPageRoute(builder: (_) => FieldScreen(field: field, own: own)));
     if (!context.mounted) return;
     ref.invalidate(allScenesProvider);
     _refresh(ref);
@@ -57,10 +58,17 @@ class HomeScreen extends ConsumerWidget {
     final stats = ref.watch(skillStatsProvider).value ?? SkillStats.empty;
     final fields = ref.watch(fieldsProvider).value ?? const <Field>[];
 
-    final hasOwn = scenes.any((x) => !x.isBuiltin);
+    final ownScenes = [for (final x in scenes) if (!x.isBuiltin) x];
+    final hasOwn = ownScenes.isNotEmpty;
     final done = {for (final r in results) if (!r.review) r.sceneId};
     final allDone = scenes.isNotEmpty && scenes.every((x) => done.contains(x.id));
     final muted = theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    // Today's scene comes from the learner's own scenes once there are any.
+    final pool = hasOwn ? ownScenes : scenes;
+    // The learner's own side lists only the fields that have scenes: the
+    // fields grow as the AI writes for them, rather than standing empty.
+    final ownFields = [for (final f in fields) if (splitField(ownScenes, f.id).own.isNotEmpty) f];
+    final sampleFields = [for (final f in fields) if (splitField(scenes, f.id).samples.isNotEmpty) f];
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -75,7 +83,7 @@ class HomeScreen extends ConsumerWidget {
             Text('KotoLang',
                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
             Wrap(spacing: 8, runSpacing: 4, children: [
-              _Pill(icon: '🔥', text: s.t('streakPill', {'n': progress.streak})),
+              _Pill(icon: '☀️', text: s.t('streakPill', {'n': progress.streak})),
               _Pill(icon: '🌱', text: '${progress.seeds} Seeds'),
             ]),
           ],
@@ -115,7 +123,7 @@ class HomeScreen extends ConsumerWidget {
           )
         else ...[
           FilledButton(
-            onPressed: () => startScene(context, ref, all: scenes, onDone: () => _refresh(ref)),
+            onPressed: () => startScene(context, ref, all: pool, onDone: () => _refresh(ref)),
             child: Text(s.t(hasOwn ? 'todayScene' : 'todaySceneSample')),
           ),
           const SizedBox(height: 4),
@@ -149,58 +157,100 @@ class HomeScreen extends ConsumerWidget {
           style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
         ),
 
-        // -------- the fields --------
+        // -------- the learner's own scenes, by field --------
         const SizedBox(height: 20),
-        Text(s.t('fieldsTitle'), style: theme.textTheme.titleSmall),
+        _GroupTitle(icon: Icons.local_florist, title: s.t('ownFieldsTitle'), color: scheme.primary),
         const SizedBox(height: 8),
-        for (final f in fields) ...[
+        if (ownFields.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(s.t('fieldOwnEmptyHint'), style: muted),
+          ),
+        for (final f in ownFields) ...[
           _FieldTile(
             field: f,
-            split: splitField(scenes, f.id),
+            scenes: splitField(ownScenes, f.id).own,
             done: done,
-            onTap: () => _openField(context, ref, f),
+            own: true,
+            onTap: () => _openField(context, ref, f, own: true),
           ),
           const SizedBox(height: 8),
         ],
-        OutlinedButton.icon(
-          icon: const Icon(Icons.add),
-          onPressed: () => showAddFieldDialog(context, ref),
-          label: Text('${s.t('fieldAdd')} · $realmUnlockCost Seeds'),
-        ),
-
-        const SizedBox(height: 8),
         Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 4,
+          spacing: 8,
+          runSpacing: 4,
           children: [
-            if (hasOwn)
-              TextButton(
-                onPressed: () => _openPack(context, ref),
-                child: Text(s.t('nextScenesMake')),
-              ),
-            TextButton(
-              onPressed: () => Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => const ListenScreen())),
-              child: Text(s.t('listenButton')),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.auto_awesome, size: 18),
+              onPressed: () => _openPack(context, ref),
+              label: Text(s.t(hasOwn ? 'nextScenesMake' : 'makeOwnScenes')),
+            ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              onPressed: () => showAddFieldDialog(context, ref),
+              label: Text('${s.t('fieldAdd')} · $realmUnlockCost Seeds'),
             ),
           ],
+        ),
+
+        // -------- the samples, by field --------
+        const SizedBox(height: 20),
+        _GroupTitle(
+            icon: Icons.menu_book_outlined, title: s.t('samplesFieldsTitle'), color: scheme.onSurfaceVariant),
+        const SizedBox(height: 8),
+        for (final f in sampleFields) ...[
+          _FieldTile(
+            field: f,
+            scenes: splitField(scenes, f.id).samples,
+            done: done,
+            own: false,
+            onTap: () => _openField(context, ref, f, own: false),
+          ),
+          const SizedBox(height: 8),
+        ],
+
+        const SizedBox(height: 4),
+        Center(
+          child: TextButton(
+            onPressed: () =>
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const ListenScreen())),
+            child: Text(s.t('listenButton')),
+          ),
         ),
       ],
     );
   }
 }
 
-/// One field on the home screen: its name, and how far along the samples and
-/// the learner's own scenes are.
+class _GroupTitle extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final Color color;
+  const _GroupTitle({required this.icon, required this.title, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 6),
+          Text(title, style: Theme.of(context).textTheme.titleSmall),
+        ],
+      );
+}
+
+/// One field inside one of the two groups: its name and how many of its
+/// scenes are done.
 class _FieldTile extends ConsumerWidget {
   final Field field;
-  final ({List<Scene> samples, List<Scene> own}) split;
+  final List<Scene> scenes;
   final Set<String> done;
+  final bool own;
   final VoidCallback onTap;
   const _FieldTile({
     required this.field,
-    required this.split,
+    required this.scenes,
     required this.done,
+    required this.own,
     required this.onTap,
   });
 
@@ -209,14 +259,9 @@ class _FieldTile extends ConsumerWidget {
     final s = ref.watch(stringsProvider);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    int doneOf(List<Scene> xs) => xs.where((x) => done.contains(x.id)).length;
-    final parts = <String>[
-      if (split.samples.isNotEmpty)
-        '${s.t('sampleTag')} ${doneOf(split.samples)}/${split.samples.length}',
-      '${s.t('fieldOwn')} ${doneOf(split.own)}/${split.own.length}',
-    ];
+    final n = scenes.where((x) => done.contains(x.id)).length;
     return Material(
-      color: scheme.surfaceContainerLow,
+      color: own ? scheme.primaryContainer.withValues(alpha: 0.35) : scheme.surfaceContainerLow,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
@@ -233,20 +278,14 @@ class _FieldTile extends ConsumerWidget {
                   'daily' => Icons.home_outlined,
                   _ => Icons.label_outline,
                 },
-                color: scheme.primary,
+                color: own ? scheme.primary : scheme.onSurfaceVariant,
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(field.label, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    Text(parts.join(' · '),
-                        style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-                  ],
-                ),
+                child: Text(field.label, style: const TextStyle(fontWeight: FontWeight.w700)),
               ),
-              if (split.own.isNotEmpty) Icon(Icons.local_florist, size: 16, color: scheme.primary),
+              Text(s.t('fieldCount', {'d': n, 'n': scenes.length}),
+                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
               const SizedBox(width: 4),
               Icon(Icons.chevron_right, color: scheme.outlineVariant),
             ],

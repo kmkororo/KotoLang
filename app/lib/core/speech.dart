@@ -101,15 +101,19 @@ class SpeechService {
   }
 
   /// Ranks by the markers that correlate with natural-sounding output.
+  /// Region first, then quality: a learner who never chose a voice should
+  /// hear American or British English, not whichever regional voice the
+  /// phone happens to list first.
   int _score(Voice v) {
     final n = v.name.toLowerCase();
+    final l = v.locale.toLowerCase().replaceAll('_', '-');
     var s = 0;
+    if (l.startsWith('en-us')) s += 200;
+    if (l.startsWith('en-gb')) s += 150;
     if (n.contains('neural') || n.contains('natural')) s += 45;
     if (n.contains('google')) s += 35;
     if (n.contains('enhanced') || n.contains('premium')) s += 30;
     if (n.contains('network')) s += 20;
-    if (v.locale.toLowerCase().startsWith('en-us')) s += 6;
-    if (v.locale.toLowerCase().startsWith('en-gb')) s += 4;
     return s;
   }
 
@@ -139,10 +143,15 @@ class SpeechService {
   /// two scenes sound like two. With one voice, or none, this is the chosen
   /// voice — the caller need not care.
   Voice? voiceFor(int seed) {
-    if (_voices.isEmpty) return _chosen;
-    final english = _voices.where((v) => v.locale.toLowerCase().startsWith('en')).toList();
-    final pool = english.isEmpty ? _voices : english;
-    if (pool.length == 1) return pool.single;
+    final chosen = _chosen;
+    if (_voices.isEmpty || chosen == null) return chosen;
+    // Only voices from the chosen voice's region: a scene may sound like a
+    // different person, never like a different country.
+    final region = chosen.locale.toLowerCase().replaceAll('_', '-');
+    final pool = _voices
+        .where((v) => v.locale.toLowerCase().replaceAll('_', '-') == region)
+        .toList();
+    if (pool.length <= 1) return chosen;
     return pool[seed.abs() % pool.length];
   }
 
