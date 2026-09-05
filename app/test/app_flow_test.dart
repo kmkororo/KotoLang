@@ -20,7 +20,7 @@ import 'package:kotolang/data/database.dart';
 import 'package:kotolang/data/repository.dart';
 import 'package:kotolang/domain/progress_service.dart';
 import 'package:kotolang/features/first_run_screen.dart';
-import 'package:kotolang/features/onboarding_screens.dart';
+import 'package:kotolang/features/profile_screen.dart';
 import 'package:kotolang/features/record_screen.dart';
 import 'package:kotolang/features/scene_pack_screen.dart';
 import 'package:kotolang/features/scene_screen.dart';
@@ -209,7 +209,7 @@ void main() {
 
     await tester.tap(find.text(s.t('scenePackProfileButton')));
     await tester.pumpAndSettle();
-    expect(find.byType(PasteProfileScreen), findsOneWidget);
+    expect(find.byType(ProfileScreen), findsOneWidget);
   });
 
   testWidgets('the three bottom tabs all render', (tester) async {

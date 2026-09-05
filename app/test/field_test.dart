@@ -12,7 +12,6 @@ import 'package:kotolang/data/builtin_scenes.dart';
 import 'package:kotolang/data/database.dart';
 import 'package:kotolang/data/repository.dart';
 import 'package:kotolang/domain/field.dart';
-import 'package:kotolang/domain/models.dart';
 import 'package:kotolang/domain/progress_service.dart';
 
 import 'repository_test.dart' show profileJson;

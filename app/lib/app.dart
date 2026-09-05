@@ -26,6 +26,7 @@ import 'domain/skills.dart';
 import 'features/first_run_screen.dart';
 import 'features/home_screen.dart';
 import 'features/onboarding_screens.dart';
+import 'features/profile_screen.dart';
 import 'features/record_screen.dart';
 import 'features/scene_pack_screen.dart';
 import 'features/settings_screen.dart';
@@ -255,7 +256,7 @@ class _KotoLangAppState extends ConsumerState<KotoLangApp>
     // which says plainly when what arrived is not a scenes reply.
     nav.push(MaterialPageRoute(
       builder: (_) => kind == 'profile'
-          ? PasteProfileScreen(initialText: text, forScenes: true)
+          ? ProfileScreen(initialText: text, popOnDone: true)
           : ScenePackScreen(initialText: text),
     ));
   }

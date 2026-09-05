@@ -16,8 +16,6 @@ import '../core/l10n/strings.dart';
 import '../domain/models.dart';
 import '../domain/progress_service.dart';
 import '../domain/prompts.dart' as prompts;
-import 'ai_links.dart';
-import 'paste_box.dart';
 import 'scene_pack_screen.dart';
 
 // ------------------------------------------------------------ shared pieces
@@ -103,41 +101,6 @@ Future<void> copyToClipboard(BuildContext context, String text, String toast) as
   if (context.mounted) showToast(context, toast);
 }
 
-/// "1 — Copy the prompt". Copying and pasting live on one screen, so the two
-/// halves are numbered: without that the page reads as an undifferentiated
-/// pile of buttons and it is not obvious which comes first.
-class _StepHeader extends StatelessWidget {
-  final int n;
-  final String title;
-  const _StepHeader(this.n, this.title);
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 13,
-            backgroundColor: theme.colorScheme.primary,
-            child: Text('$n',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: theme.colorScheme.onPrimary)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(title,
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w800)),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // -------------------------------------------------------- 1. language picker
 
@@ -242,150 +205,6 @@ class _LanguagePickerScreenState extends ConsumerState<LanguagePickerScreen> {
         ),
       ),
     );
-  }
-}
-
-// -------------------------------------------------------- 3. paste profile
-
-class PasteProfileScreen extends ConsumerStatefulWidget {
-  /// Prefilled when the reply arrived through the share sheet rather than the
-  /// clipboard.
-  final String? initialText;
-
-  /// Opened from the scenes screen, which only needs the profile: once it is
-  /// in, this screen goes back there rather than on to the area picker.
-  final bool forScenes;
-  const PasteProfileScreen({super.key, this.initialText, this.forScenes = false});
-
-  @override
-  ConsumerState<PasteProfileScreen> createState() => _PasteProfileScreenState();
-}
-
-class _PasteProfileScreenState extends ConsumerState<PasteProfileScreen> {
-  final _paste = PasteController();
-  String? _error;
-  bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final shared = widget.initialText;
-    if (shared != null) _paste.field.text = shared;
-  }
-
-  @override
-  void dispose() {
-    _paste.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    final s = ref.read(stringsProvider);
-    final lang = ref.read(languageProvider) ?? fallbackLanguage;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-
-    final res = await ref
-        .read(repositoryProvider)
-        .importProfile(_paste.text, uiLanguage: lang);
-
-    if (!mounted) return;
-    setState(() => _busy = false);
-
-    if (!res.ok) {
-      setState(() => _error = s.t('importFailedHint'));
-      return;
-    }
-    showToast(
-      context,
-      res.partial
-          ? s.t('partialImported', {'n': res.realms})
-          : s.t('importedProfile', {'n': res.realms}),
-    );
-    await reload(ref);
-    if (!mounted) return;
-    if (widget.forScenes) {
-      // The scenes screen sent us; it has what it needs now.
-      Navigator.pop(context);
-      return;
-    }
-    // Pushed, never `pushReplacement`. The root screen decides where the app
-    // belongs, and when the root is itself showing a setup step, replacing the
-    // route deletes that decision-maker for the rest of the session.
-    Navigator.push(context,
-        MaterialPageRoute(builder: (_) => const RealmPickerScreen(firstRun: true)));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = ref.watch(stringsProvider);
-    final lang = ref.watch(languageProvider) ?? fallbackLanguage;
-
-    final theme = Theme.of(context);
-    String promptText() => prompts.profilePrompt(uiLanguage: lang);
-
-    // Copying and pasting are two halves of one job, so they belong on one
-    // screen. Splitting them across two was the whole reason the first run was
-    // hard to follow.
-    return _Page(back: s.t('goToPaste'), children: [
-      Text(s.t('useYourAiSub'),
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-      const SizedBox(height: 20),
-
-      _StepHeader(1, s.t('step1Title')),
-      FilledButton.icon(
-        icon: const Icon(Icons.copy_all),
-        onPressed: () => copyToClipboard(context, promptText(), s.t('copied')),
-        label: Text(s.t('copyPrompt')),
-      ),
-      const SizedBox(height: 16),
-      AiLinks(s: s, prompt: () async => promptText()),
-
-      const SizedBox(height: 24),
-      const Divider(),
-      const SizedBox(height: 16),
-
-      _StepHeader(2, s.t('step2Title')),
-      Text(s.t('pasteHint'),
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-      const SizedBox(height: 12),
-      CopyTip(s),
-      const SizedBox(height: 12),
-      PasteBox(controller: _paste, s: s, expecting: 'profile'),
-      if (_error != null) ...[
-        const SizedBox(height: 12),
-        Card(
-          color: theme.colorScheme.errorContainer,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(s.t('importFailedTitle'),
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: theme.colorScheme.onErrorContainer)),
-                const SizedBox(height: 4),
-                Text(_error!,
-                    style: TextStyle(color: theme.colorScheme.onErrorContainer)),
-              ],
-            ),
-          ),
-        ),
-      ],
-      const SizedBox(height: 16),
-      FilledButton(
-        onPressed: _busy ? null : _load,
-        child: _busy
-            ? const SizedBox(
-                height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-            : Text(s.t('loadProfile')),
-      ),
-    ]);
   }
 }
 

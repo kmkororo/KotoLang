@@ -19,6 +19,7 @@ import '../app.dart';
 import '../core/l10n/languages.dart';
 import '../domain/models.dart';
 import 'onboarding_screens.dart';
+import 'profile_screen.dart';
 
 final _realmsProvider =
     FutureProvider.autoDispose<List<Realm>>((ref) => ref.watch(repositoryProvider).realms());
@@ -222,8 +223,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ]),
         _Section(title: s.t('materialSection'), children: [
+          // Who the learner is, for the AI that writes their scenes.
+          OutlinedButton(
+            onPressed: () => Navigator.push(
+                context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+            child: Text(s.t('profileTitle')),
+          ),
+          const SizedBox(height: 8),
           // Every area the AI ever suggested, lock state and unlock cost
-          // included — the home screen for the "grow your world" loop.
+          // included.
           OutlinedButton(
             onPressed: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const RealmPickerScreen())),
@@ -312,12 +320,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 action: () => ref.read(repositoryProvider).resetProgress(),
               ),
               child: Text(s.t('resetProgressOnly')),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const PasteProfileScreen())),
-              child: Text(s.t('reprofile')),
             ),
             const SizedBox(height: 8),
             OutlinedButton(

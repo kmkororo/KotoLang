@@ -1,11 +1,11 @@
-/// The trip to the learner's own AI: five scenes made for them.
+/// The trip to the learner's own AI: five scenes made for them, in one field.
 ///
-/// Copy the prompt, open the assistant, paste the reply, take it in. The
-/// first time, the AI has to be told who the learner is — that is the
-/// profile step, done once, and this screen leads there before anything
-/// else. Nothing here talks to a network; the learner's own AI does the
-/// writing, in their own app, and the reply comes back through the clipboard
-/// or the share sheet.
+/// Pick the field, copy the prompt, open the assistant, paste the reply,
+/// take it in. The first time, the AI has to be told who the learner is —
+/// that is the profile, done once, and this screen leads there before
+/// anything else. Nothing here talks to a network; the learner's own AI does
+/// the writing, in their own app, and the reply comes back through the
+/// clipboard or the share sheet.
 library;
 
 import 'package:flutter/material.dart';
@@ -15,15 +15,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app.dart';
 import '../core/l10n/languages.dart';
 import '../data/builtin_scenes.dart';
+import '../domain/field.dart';
 import '../domain/models.dart';
 import 'ai_links.dart';
-import 'onboarding_screens.dart' show PasteProfileScreen, copyToClipboard;
+import 'field_screen.dart' show showAddFieldDialog;
+import 'onboarding_screens.dart' show copyToClipboard;
 import 'paste_box.dart';
+import 'profile_screen.dart';
 
 class ScenePackScreen extends ConsumerStatefulWidget {
   /// Prefilled when the reply arrived through the share sheet.
   final String? initialText;
-  const ScenePackScreen({super.key, this.initialText});
+
+  /// The field the scenes are for, when the caller already knows.
+  final String? initialField;
+  const ScenePackScreen({super.key, this.initialText, this.initialField});
 
   @override
   ConsumerState<ScenePackScreen> createState() => _ScenePackScreenState();
@@ -34,6 +40,7 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
   UserProfile? _profile;
   bool _loaded = false;
   int _ownScenes = 0;
+  String? _field;
   List<({String topic, String reason})> _rejected = const [];
   String? _error;
   bool _busy = false;
@@ -43,6 +50,7 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
     super.initState();
     final shared = widget.initialText;
     if (shared != null) _paste.field.text = shared;
+    _field = widget.initialField;
     _load();
   }
 
@@ -70,6 +78,7 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
         uiLanguage: _lang,
         extraTopics: builtinTopics(),
         lookup: {for (final s in builtinScenes(_lang)) s.id: s},
+        field: _field,
       );
 
   Future<void> _copy() async {
@@ -99,7 +108,9 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
       _error = null;
       _rejected = const [];
     });
-    final out = await ref.read(repositoryProvider).importScenes(_paste.text, uiLanguage: _lang);
+    final out = await ref
+        .read(repositoryProvider)
+        .importScenes(_paste.text, uiLanguage: _lang, field: _field ?? defaultFieldId);
     if (!mounted) return;
     setState(() => _busy = false);
 
@@ -123,7 +134,7 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
 
   Future<void> _makeProfile() async {
     await Navigator.push(
-        context, MaterialPageRoute(builder: (_) => const PasteProfileScreen(forScenes: true)));
+        context, MaterialPageRoute(builder: (_) => const ProfileScreen(popOnDone: true)));
     if (!mounted) return;
     await _load();
   }
@@ -134,7 +145,11 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final muted = theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    final fields = ref.watch(fieldsProvider).value ?? const <Field>[];
+    // A field is always chosen: the one asked for, else the first.
+    final field = _field ?? (fields.isEmpty ? null : fields.first.id);
     final hasProfile = _profile != null;
+    final ready = hasProfile && field != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -196,14 +211,37 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
                     const SizedBox(height: 20),
                   ],
 
+                  // -------- which field --------
+                  Text(s.t('scenePackField'), style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      for (final f in fields)
+                        ChoiceChip(
+                          key: ValueKey('field_${f.id}'),
+                          label: Text(f.label),
+                          selected: f.id == field,
+                          onSelected: (_) => setState(() => _field = f.id),
+                        ),
+                      ActionChip(
+                        avatar: const Icon(Icons.add, size: 18),
+                        label: Text(s.t('fieldAdd')),
+                        onPressed: () => showAddFieldDialog(context, ref),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
                   _StepHeader(1, s.t('step1Title')),
                   FilledButton.icon(
                     icon: const Icon(Icons.copy_all),
-                    onPressed: hasProfile ? _copy : null,
+                    onPressed: ready ? _copy : null,
                     label: Text(s.t('copyPrompt')),
                   ),
                   const SizedBox(height: 16),
-                  AiLinks(s: s, enabled: hasProfile, prompt: _prompt),
+                  AiLinks(s: s, enabled: ready, prompt: _prompt),
                   const SizedBox(height: 10),
                   Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Icon(Icons.schedule, size: 16, color: scheme.onSurfaceVariant),

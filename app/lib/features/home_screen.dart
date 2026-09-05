@@ -1,18 +1,23 @@
 /// Home. Opening the app should answer one question: what do I do today?
 ///
-/// Three layers and nothing else: the tree, one button, one line of numbers.
-/// The samples that ship with the app make the button live from the first
-/// minute; the card under it says, for as long as only samples are here,
-/// that the point of the app is the scenes the learner's own AI writes.
+/// The tree, one button that picks a scene at random, one line of numbers,
+/// and then the fields — work, travel, school, everyday, and the learner's
+/// own — for the days one wants to choose. The samples that ship with the
+/// app make the button live from the first minute; the card under it says,
+/// for as long as only samples are here, that the point of the app is the
+/// scenes the learner's own AI writes.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
+import '../domain/field.dart';
 import '../domain/models.dart';
+import '../domain/progress_service.dart';
 import '../domain/scene.dart';
 import '../domain/skills.dart';
+import 'field_screen.dart';
 import 'listen_screen.dart';
 import 'scene_pack_screen.dart';
 import 'scene_screen.dart';
@@ -34,6 +39,13 @@ class HomeScreen extends ConsumerWidget {
     _refresh(ref);
   }
 
+  Future<void> _openField(BuildContext context, WidgetRef ref, Field field) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => FieldScreen(field: field)));
+    if (!context.mounted) return;
+    ref.invalidate(allScenesProvider);
+    _refresh(ref);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(stringsProvider);
@@ -43,6 +55,7 @@ class HomeScreen extends ConsumerWidget {
     final scenes = ref.watch(allScenesProvider).value ?? const <Scene>[];
     final results = ref.watch(sceneResultsProvider).value ?? const <SceneResult>[];
     final stats = ref.watch(skillStatsProvider).value ?? SkillStats.empty;
+    final fields = ref.watch(fieldsProvider).value ?? const <Field>[];
 
     final hasOwn = scenes.any((x) => !x.isBuiltin);
     final done = {for (final r in results) if (!r.review) r.sceneId};
@@ -100,11 +113,14 @@ class HomeScreen extends ConsumerWidget {
             onPressed: () => _openPack(context, ref),
             child: Text(s.t('firstSceneMake')),
           )
-        else
+        else ...[
           FilledButton(
             onPressed: () => startScene(context, ref, all: scenes, onDone: () => _refresh(ref)),
             child: Text(s.t(hasOwn ? 'todayScene' : 'todaySceneSample')),
           ),
+          const SizedBox(height: 4),
+          Text(s.t('todayRandomNote'), textAlign: TextAlign.center, style: muted),
+        ],
 
         // For as long as only samples are here: the way to the real thing,
         // always in view. Gone the moment one own scene arrives.
@@ -132,7 +148,27 @@ class HomeScreen extends ConsumerWidget {
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
         ),
-        const SizedBox(height: 4),
+
+        // -------- the fields --------
+        const SizedBox(height: 20),
+        Text(s.t('fieldsTitle'), style: theme.textTheme.titleSmall),
+        const SizedBox(height: 8),
+        for (final f in fields) ...[
+          _FieldTile(
+            field: f,
+            split: splitField(scenes, f.id),
+            done: done,
+            onTap: () => _openField(context, ref, f),
+          ),
+          const SizedBox(height: 8),
+        ],
+        OutlinedButton.icon(
+          icon: const Icon(Icons.add),
+          onPressed: () => showAddFieldDialog(context, ref),
+          label: Text('${s.t('fieldAdd')} · $realmUnlockCost Seeds'),
+        ),
+
+        const SizedBox(height: 8),
         Wrap(
           alignment: WrapAlignment.center,
           spacing: 4,
@@ -150,6 +186,73 @@ class HomeScreen extends ConsumerWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// One field on the home screen: its name, and how far along the samples and
+/// the learner's own scenes are.
+class _FieldTile extends ConsumerWidget {
+  final Field field;
+  final ({List<Scene> samples, List<Scene> own}) split;
+  final Set<String> done;
+  final VoidCallback onTap;
+  const _FieldTile({
+    required this.field,
+    required this.split,
+    required this.done,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    int doneOf(List<Scene> xs) => xs.where((x) => done.contains(x.id)).length;
+    final parts = <String>[
+      if (split.samples.isNotEmpty)
+        '${s.t('sampleTag')} ${doneOf(split.samples)}/${split.samples.length}',
+      '${s.t('fieldOwn')} ${doneOf(split.own)}/${split.own.length}',
+    ];
+    return Material(
+      color: scheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Icon(
+                switch (field.id) {
+                  'work' => Icons.work_outline,
+                  'travel' => Icons.flight_takeoff,
+                  'school' => Icons.school_outlined,
+                  'daily' => Icons.home_outlined,
+                  _ => Icons.label_outline,
+                },
+                color: scheme.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(field.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(parts.join(' · '),
+                        style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              if (split.own.isNotEmpty) Icon(Icons.local_florist, size: 16, color: scheme.primary),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, color: scheme.outlineVariant),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

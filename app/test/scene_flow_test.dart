@@ -52,9 +52,11 @@ Future<(AppDatabase, Repository, Scene)> pumpScene(
   return (db, repo, sc);
 }
 
-/// A swipe to the right on the option with this text: the one way to answer.
-Future<void> swipe(WidgetTester tester, String text) async {
-  await tester.drag(find.text(text), const Offset(320, 0));
+/// Tap the option with this text, then Confirm: the two steps of an answer.
+Future<void> choose(WidgetTester tester, String text) async {
+  await tester.tap(find.text(text));
+  await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(FilledButton, S('en').t('sceneDecide')));
   await tester.pumpAndSettle();
 }
 
@@ -81,21 +83,23 @@ void main() {
     // No voice under test, so the words are shown from the start.
     expect(find.text(s.t('sceneQ1')), findsOneWidget);
     expect(find.text(sc.exchanges[0].line), findsOneWidget);
-    expect(find.text(s.t('sceneSwipeHint')), findsOneWidget);
+    expect(find.text(s.t('sceneTapHint')), findsOneWidget);
 
-    // A tap does not answer.
+    // The stage: them and you, with the four arrows of the scene between.
+    expect(find.text(s.t('speakerOther')), findsOneWidget);
+    expect(find.text(s.t('speakerYou')), findsOneWidget);
+
+    // Confirm waits for a choice; a tap alone selects and does not answer.
+    final decide = find.widgetWithText(FilledButton, s.t('sceneDecide'));
+    expect(tester.widget<FilledButton>(decide).onPressed, isNull);
     await tester.tap(find.text(sc.exchanges[0].gist.correct));
     await tester.pumpAndSettle();
-    expect(find.text(s.t('sceneCorrect'), skipOffstage: false), findsNothing);
-
-    // A short drag springs back and does not answer either.
-    await tester.drag(find.text(sc.exchanges[0].gist.correct), const Offset(40, 0));
-    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(decide).onPressed, isNotNull);
     expect(find.text(s.t('sceneQ1')), findsOneWidget);
     expect(find.textContaining(s.t('sceneCorrect')), findsNothing);
 
     // Right gist.
-    await swipe(tester, sc.exchanges[0].gist.correct);
+    await choose(tester, sc.exchanges[0].gist.correct);
     expect(find.text('${s.t('sceneCorrect')} · +$gistSeeds'), findsOneWidget);
     expect(find.text(sc.exchanges[0].lineNative), findsOneWidget);
     expect(find.text(s.t('sceneTapNext')), findsOneWidget);
@@ -107,7 +111,7 @@ void main() {
 
     // Wrong reply: red, the right one shown, every why on screen.
     final wrong = sc.exchanges[0].reply.options[(sc.exchanges[0].reply.answer + 1) % 3];
-    await swipe(tester, wrong.text);
+    await choose(tester, wrong.text);
     expect(find.text(s.t('sceneWrong')), findsOneWidget);
     for (final o in sc.exchanges[0].reply.options) {
       expect(find.textContaining(o.why), findsWidgets);
@@ -124,10 +128,10 @@ void main() {
 
     // Second exchange, both right.
     expect(find.text(sc.exchanges[1].line), findsOneWidget);
-    await swipe(tester, sc.exchanges[1].gist.correct);
+    await choose(tester, sc.exchanges[1].gist.correct);
     await tester.tapAt(const Offset(400, 1500));
     await tester.pumpAndSettle();
-    await swipe(tester, sc.exchanges[1].reply.correct.text);
+    await choose(tester, sc.exchanges[1].reply.correct.text);
     await tester.tapAt(const Offset(400, 1500));
     await tester.pumpAndSettle();
 
@@ -158,10 +162,10 @@ void main() {
 
     expect(find.text(s.t('sceneReviewTag')), findsOneWidget);
     expect(find.text(owed.exchanges[1].line), findsOneWidget);
-    await swipe(tester, owed.exchanges[1].gist.correct);
+    await choose(tester, owed.exchanges[1].gist.correct);
     await tester.tapAt(const Offset(400, 1500));
     await tester.pumpAndSettle();
-    await swipe(tester, owed.exchanges[1].reply.correct.text);
+    await choose(tester, owed.exchanges[1].reply.correct.text);
     await tester.tapAt(const Offset(400, 1500));
     await tester.pumpAndSettle();
 
@@ -178,7 +182,7 @@ void main() {
     addTearDown(db.close);
     final s = S('en');
     expect(find.text(s.t('tutListen')), findsOneWidget);
-    await swipe(tester, sc.exchanges[0].gist.correct);
+    await choose(tester, sc.exchanges[0].gist.correct);
     expect(find.text(s.t('tutNext')), findsOneWidget);
     await tester.tapAt(const Offset(400, 1500));
     await tester.pumpAndSettle();
@@ -201,10 +205,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(sc.exchanges[0].line), findsOneWidget);
 
-    await swipe(tester, sc.exchanges[0].gist.correct);
+    await choose(tester, sc.exchanges[0].gist.correct);
     await tester.tapAt(const Offset(400, 1500));
     await tester.pumpAndSettle();
-    await swipe(tester, sc.exchanges[0].reply.correct.text);
+    await choose(tester, sc.exchanges[0].reply.correct.text);
     await tester.tapAt(const Offset(400, 1500));
     await tester.pumpAndSettle();
     final r = (await repo.sceneResults()).single;
