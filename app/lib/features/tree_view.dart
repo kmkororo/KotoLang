@@ -126,6 +126,12 @@ class _TreePanelState extends ConsumerState<TreePanel>
     final boundary = _shot.currentContext?.findRenderObject() as RenderRepaintBoundary?;
     if (boundary == null) return;
     try {
+      // The breeze repaints the tree every frame; a boundary mid-repaint
+      // cannot be captured. Hold it still for two frames, then take the
+      // picture, then let the wind back in.
+      _breeze.stop();
+      await WidgetsBinding.instance.endOfFrame;
+      await WidgetsBinding.instance.endOfFrame;
       final image = await boundary.toImage(pixelRatio: 3);
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
       if (bytes == null) return;
@@ -140,6 +146,8 @@ class _TreePanelState extends ConsumerState<TreePanel>
       // No share target, or a platform without the plugin (tests): nothing
       // to do but not crash.
       debugPrint('[KotoLang] share failed: $e');
+    } finally {
+      if (mounted) _apply();
     }
   }
 
