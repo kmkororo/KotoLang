@@ -14,6 +14,7 @@ import 'package:kotolang/features/field_screen.dart';
 import 'package:kotolang/features/profile_screen.dart';
 import 'package:kotolang/features/scene_pack_screen.dart';
 import 'package:kotolang/features/scene_screen.dart';
+import 'package:kotolang/features/tree_view.dart';
 
 import 'app_flow_test.dart' show pumpApp, seedLearner;
 import 'repository_test.dart' show profileJson;
@@ -104,6 +105,34 @@ void main() {
     expect(picker.initialValue, isNotNull);
     expect(picker.initialValue, isNot(isIn(builtinFieldIds)));
     expect(find.text(s.t('privacyLine')), findsOneWidget);
+  });
+
+  testWidgets('home scrolls back up from the bottom with the samples open', (tester) async {
+    // A phone-shaped viewport, so the list is longer than the screen and the
+    // tree leaves it when the samples are open.
+    tester.view.physicalSize = const Size(400, 640);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final (db, _) = await pumpApp(tester, seed: seedLearner);
+    addTearDown(db.close);
+    final s = S('en');
+
+    final list = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(find.text(s.t('samplesFieldsTitle')), 200, scrollable: list);
+    await tester.tap(find.text(s.t('samplesFieldsTitle')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text(s.t('listenButton')), 200, scrollable: list);
+    await tester.pumpAndSettle();
+    // The tree stays mounted while it is off screen, so nothing above the
+    // viewport changes height on the way back.
+    expect(find.byType(TreePanel, skipOffstage: false), findsOneWidget);
+    await tester.drag(list, const Offset(0, 400));
+    await tester.pumpAndSettle();
+    await tester.drag(list, const Offset(0, 400));
+    await tester.pumpAndSettle();
+    await tester.drag(list, const Offset(0, 400));
+    await tester.pumpAndSettle();
+    expect(find.text('KotoLang'), findsOneWidget);
   });
 
   testWidgets('opening an area from the profile costs Seeds and needs the balance',

@@ -9,6 +9,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
@@ -71,7 +72,18 @@ class HomeScreen extends ConsumerWidget {
     final ownFields = [for (final f in fields) if (splitField(ownScenes, f.id).own.isNotEmpty) f];
     final sampleFields = [for (final f in fields) if (splitField(scenes, f.id).samples.isNotEmpty) f];
 
+    // The tree's data is loaded by an auto-disposing provider. Scrolled far
+    // enough down — the samples open, on a tall phone — the panel leaves the
+    // list's cache, the provider is dropped, and on the way back up the panel
+    // remounts as a shorter placeholder while it reloads: the list shrinks
+    // under the finger and snaps back to the bottom. Watching here keeps the
+    // data alive for as long as home is, and the wide cache keeps the panel
+    // itself mounted, so scrolling up is only scrolling up.
+    ref.watch(treeDataProvider);
+    ref.watch(treeArtProvider);
+
     return ListView(
+      scrollCacheExtent: const ScrollCacheExtent.pixels(2000),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
         // -------- streak / seeds strip --------
