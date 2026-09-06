@@ -372,12 +372,11 @@ class Repository {
     // The areas the AI read off the profile are the learner's fields. The
     // first few open for nothing; the rest wait, priced, in the field list.
     final all = await realms();
-    final open = all.where((r) => r.unlocked).length;
-    if (open < freeRealmSlots) {
-      final free = [
-        for (final r in all.where((r) => !r.unlocked).take(freeRealmSlots - open)) r.id
-      ];
+    final left = await freeFieldSlotsLeft();
+    if (left > 0) {
+      final free = [for (final r in all.where((r) => !r.unlocked).take(left)) r.id];
       await markRealmsUnlocked(free);
+      await _useFreeFieldSlots(free.length);
     }
 
     return ImportOutcome(ok: true, realms: toWrite.length, partial: ex.repaired);
@@ -1776,8 +1775,14 @@ class Repository {
   /// How many fields can still be opened for nothing: the first
   /// [freeRealmSlots] are free, whenever they are opened.
   Future<int> freeFieldSlotsLeft() async {
-    final open = (await realms()).where((r) => r.unlocked).length;
-    return (freeRealmSlots - open).clamp(0, freeRealmSlots);
+    final used = (await loadProgress()).freeFieldsUsed;
+    return (freeRealmSlots - used).clamp(0, freeRealmSlots);
+  }
+
+  Future<void> _useFreeFieldSlots(int n) async {
+    if (n <= 0) return;
+    final p = await loadProgress();
+    await saveProgress(p.copyWith(freeFieldsUsed: p.freeFieldsUsed + n));
   }
 
   /// Opens a field: free while free slots remain, for Seeds after that.
@@ -1787,8 +1792,9 @@ class Repository {
     final row = all.where((r) => r.id == realmId).firstOrNull;
     if (row == null) return false;
     if (row.unlocked) return true;
-    if (all.where((r) => r.unlocked).length < freeRealmSlots) {
+    if (await freeFieldSlotsLeft() > 0) {
       await markRealmsUnlocked([realmId]);
+      await _useFreeFieldSlots(1);
       return true;
     }
     return unlockRealm(realmId);

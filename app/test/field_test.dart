@@ -113,6 +113,18 @@ void main() {
     expect(await repo.openField('D'), isTrue, reason: 'already open, nothing charged');
   });
 
+  test('fields already open from before do not use up the free ones', () async {
+    // Two realms unlocked the old way (before the counter existed), one not.
+    for (final n in ['A', 'B']) {
+      await db.into(db.realms).insertOnConflictUpdate(realmToRow(realm(n)));
+    }
+    await db.into(db.realms).insertOnConflictUpdate(realmToRow(realm('C').copyWith(unlocked: false)));
+    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
+    expect(await repo.openField('C'), isTrue);
+    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 1);
+    expect((await repo.loadProgress()).seeds, 0);
+  });
+
   test('the prompt names the field the scenes are for', () async {
     await repo.saveProgress((await repo.loadProgress()).copyWith(seeds: realmUnlockCost));
     final realm = (await repo.addField('Cooking'))!;

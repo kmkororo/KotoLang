@@ -207,7 +207,8 @@ class S {
     'byEarRunNow', 'hapticsSection', 'voicePerSceneLabel', 'voicePerSceneHint', 'privacyLine',
     'scenePasteButton', 'fieldPickLabel', 'samplesFieldsTitle', 'ownFieldsTitle', 'fieldOwnEmptyHint',
     'treeStage0', 'treeStage1', 'treeStage2', 'treeStage3', 'treeStage4', 'treeStage5', 'treeStageUp',
-    'fieldNoneLocked', 'freeTag', 'fieldFreeLeft',
+    'fieldNoneLocked', 'freeTag', 'fieldFreeLeft', 'firstChoiceTitle', 'firstChoiceAi',
+    'firstChoiceAiBody', 'firstChoiceSample', 'firstChoiceSampleBody',
   ];
 }
 
@@ -813,6 +814,11 @@ const _catalogueCore = <String, Map<String, String>>{
     'fieldNoneLocked': 'Every area from your profile is open. Remake the profile to find more.',
     'freeTag': 'Free',
     'fieldFreeLeft': '{n} more can be opened for free',
+    'firstChoiceTitle': 'How do you want to start?',
+    'firstChoiceAi': 'Make scenes of your own with your AI',
+    'firstChoiceAiBody': 'Scenes from your work and your plans. About five minutes.',
+    'firstChoiceSample': 'Try a sample first',
+    'firstChoiceSampleBody': 'One short scene now; your own scenes any time after.',
   },
 
   // =========================================================== Japanese
@@ -1375,5 +1381,10 @@ const _catalogueCore = <String, Map<String, String>>{
     'fieldNoneLocked': 'プロフィールの分野はすべて開いています。新しい分野は、プロフィールを作り直すと増えます。',
     'freeTag': '無料',
     'fieldFreeLeft': 'あと{n}つは無料で開けます',
+    'firstChoiceTitle': 'どう始めますか？',
+    'firstChoiceAi': 'AI で自分専用の場面を作る',
+    'firstChoiceAiBody': 'あなたの仕事や予定に合わせた場面。5分ほど。',
+    'firstChoiceSample': '見本の場面で試してみる',
+    'firstChoiceSampleBody': 'まず1つ解いてみる。自分専用はあとからいつでも。',
   },
 };

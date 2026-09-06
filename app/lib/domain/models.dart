@@ -512,6 +512,11 @@ class Progress {
   /// and copying the prompt a second time charged all over again.
   final int realmCredits;
 
+  /// Free field openings used up, out of `freeRealmSlots`. Counted here rather
+  /// than read off the areas, so areas opened by the old flows do not eat
+  /// into the three the learner is promised.
+  final int freeFieldsUsed;
+
   /// Replies the learner reported having actually used in a real
   /// conversation, by attempt id. Paid for once each; the list is what makes
   /// "once" true.
@@ -528,6 +533,7 @@ class Progress {
     this.seeds = 0,
     this.journeyBonusDay,
     this.realmCredits = 0,
+    this.freeFieldsUsed = 0,
     this.breakthroughs = const [],
     this.ornaments = const [],
     this.usedClaims = const [],
@@ -546,6 +552,7 @@ class Progress {
     List<String>? breakthroughs,
     List<String>? ornaments,
     int? realmCredits,
+    int? freeFieldsUsed,
     List<String>? usedClaims,
   }) =>
       Progress(
@@ -560,6 +567,7 @@ class Progress {
         seeds: seeds ?? this.seeds,
         journeyBonusDay: journeyBonusDay ?? this.journeyBonusDay,
         realmCredits: realmCredits ?? this.realmCredits,
+        freeFieldsUsed: freeFieldsUsed ?? this.freeFieldsUsed,
         breakthroughs: breakthroughs ?? this.breakthroughs,
         ornaments: ornaments ?? this.ornaments,
       );
@@ -573,6 +581,7 @@ class Progress {
         'seeds': seeds,
         'journeyBonusDay': journeyBonusDay,
         'realmCredits': realmCredits,
+        'freeFieldsUsed': freeFieldsUsed,
         'breakthroughs': breakthroughs,
         'ornaments': ornaments,
         'usedClaims': usedClaims,
@@ -589,6 +598,7 @@ class Progress {
         seeds: (j['seeds'] ?? j['kotoCoins'] ?? 0) as int,
         journeyBonusDay: j['journeyBonusDay'] as String?,
         realmCredits: (j['realmCredits'] ?? 0) as int,
+        freeFieldsUsed: (j['freeFieldsUsed'] ?? 0) as int,
         breakthroughs:
             ((j['breakthroughs'] as List?) ?? const []).cast<String>(),
         ornaments: ((j['ornaments'] as List?) ?? const []).cast<String>(),

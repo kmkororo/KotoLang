@@ -38,22 +38,9 @@ class _FirstRunScreenState extends ConsumerState<FirstRunScreen> {
       settings.copyWith(ageBand: _age, interests: _interests.toList()),
     );
     if (!mounted) return;
-    final lang = ref.read(languageProvider) ?? fallbackLanguage;
-    final sample = tutorialScene(lang);
-    if (sample == null) {
-      // No samples in this build: straight to the sprout, which points at the
-      // learner's own AI.
-      await Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const SproutScreen(sampleDone: false)));
-      return;
-    }
-    await Navigator.push<SceneRunResult>(
-      context,
-      MaterialPageRoute(builder: (_) => SceneScreen(scene: sample, tutorial: true)),
-    );
-    if (!mounted) return;
+    // Two ways in: scenes of their own from their AI, or a sample first.
     await Navigator.push(
-        context, MaterialPageRoute(builder: (_) => const SproutScreen(sampleDone: true)));
+        context, MaterialPageRoute(builder: (_) => const StartChoiceScreen()));
   }
 
   @override
@@ -107,6 +94,149 @@ class _FirstRunScreenState extends ConsumerState<FirstRunScreen> {
               child: Text(s.t('continueLabel')),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The fork after the two questions: make scenes with one's own AI now, or
+/// try a sample first. The samples are the starter set and the AI is the
+/// point, so the AI comes first and in the main colour.
+class StartChoiceScreen extends ConsumerWidget {
+  const StartChoiceScreen({super.key});
+
+  /// Straight to the scenes screen, over home. With no profile yet, that
+  /// screen asks for it first.
+  Future<void> _own(BuildContext context, WidgetRef ref) async {
+    final settings = ref.read(settingsProvider);
+    await updateSettings(ref, settings.copyWith(tutorialDone: true));
+    if (!context.mounted) return;
+    Navigator.popUntil(context, (r) => r.isFirst);
+    await reload(ref);
+    if (!context.mounted) return;
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const ScenePackScreen()));
+  }
+
+  /// The sample scene with the guide on it, then the sprout.
+  Future<void> _sample(BuildContext context, WidgetRef ref) async {
+    final lang = ref.read(languageProvider) ?? fallbackLanguage;
+    final sample = tutorialScene(lang);
+    if (sample == null) {
+      // No samples in this build: straight to the sprout, which points at the
+      // learner's own AI.
+      await Navigator.push(
+          context, MaterialPageRoute(builder: (_) => const SproutScreen(sampleDone: false)));
+      return;
+    }
+    await Navigator.push<SceneRunResult>(
+      context,
+      MaterialPageRoute(builder: (_) => SceneScreen(scene: sample, tutorial: true)),
+    );
+    if (!context.mounted) return;
+    await Navigator.push(
+        context, MaterialPageRoute(builder: (_) => const SproutScreen(sampleDone: true)));
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(s.t('firstChoiceTitle'), style: theme.textTheme.headlineSmall),
+              const SizedBox(height: 24),
+              _ChoiceCard(
+                icon: Icons.auto_awesome,
+                title: s.t('firstChoiceAi'),
+                body: s.t('firstChoiceAiBody'),
+                color: scheme.primaryContainer,
+                fg: scheme.onPrimaryContainer,
+                onTap: () => _own(context, ref),
+              ),
+              const SizedBox(height: 14),
+              _ChoiceCard(
+                icon: Icons.menu_book_outlined,
+                title: s.t('firstChoiceSample'),
+                body: s.t('firstChoiceSampleBody'),
+                color: scheme.surfaceContainerHigh,
+                fg: scheme.onSurface,
+                onTap: () => _sample(context, ref),
+              ),
+              const Spacer(),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.lock_outline, size: 16, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(s.t('privacyLine'),
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: scheme.onSurfaceVariant)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One of the two doors: icon, title, one line, chevron.
+class _ChoiceCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String body;
+  final Color color;
+  final Color fg;
+  final VoidCallback onTap;
+  const _ChoiceCard({
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.color,
+    required this.fg,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: color,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              Icon(icon, size: 30, color: fg),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(color: fg, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 4),
+                    Text(body, style: theme.textTheme.bodySmall?.copyWith(color: fg)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: fg),
+            ],
+          ),
         ),
       ),
     );

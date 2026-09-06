@@ -128,7 +128,11 @@ void main() {
     expect(settings.ageBand, '20s');
     expect(settings.interests, ['travel']);
 
-    // The sample scene, with the guide on it. Leaving it early still leads on.
+    // Two ways in. The sample first here; leaving it early still leads on.
+    expect(find.byType(StartChoiceScreen), findsOneWidget);
+    expect(find.text(s.t('firstChoiceAi')), findsOneWidget);
+    await tester.tap(find.text(s.t('firstChoiceSample')));
+    await tester.pumpAndSettle();
     expect(find.byType(SceneScreen), findsOneWidget);
     expect(find.text(s.t('tutListen')), findsOneWidget);
     await tester.tap(find.byIcon(Icons.close));
@@ -146,6 +150,29 @@ void main() {
     expect(find.text(s.t('todaySceneSample')), findsOneWidget);
     expect(find.text(s.t('ownScenesCardTitle')), findsOneWidget);
     expect(find.text(s.t('axisEmpty')), findsOneWidget);
+  });
+
+  testWidgets('choosing the AI at the start leads straight to making scenes', (tester) async {
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) => r.saveUiLanguage('en'));
+    addTearDown(db.close);
+    final s = S('en');
+    await tester.tap(find.text(s.t('age_30s')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, s.t('continueLabel')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.t('firstChoiceAi')));
+    await tester.pumpAndSettle();
+    expect((await repo.loadSettings()).tutorialDone, isTrue);
+    expect(find.byType(ScenePackScreen), findsOneWidget);
+    // No profile yet: the scenes screen asks for it first.
+    expect(find.text(s.t('scenePackNeedProfile')), findsOneWidget);
+    // Closing it lands on home, with the samples open since there is
+    // nothing else yet.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text(s.t('todaySceneSample')), findsOneWidget);
+    expect(find.text(s.t('interest_work')), findsOneWidget);
   });
 
   testWidgets('a learner with a scene lands on home and can start it', (tester) async {
