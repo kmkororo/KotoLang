@@ -171,7 +171,6 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   // ------------------------------------------------------------- answering
 
   bool get _choosing => _phase == _Phase.listen || _phase == _Phase.reply;
-  bool get _answered => _phase == _Phase.gistAnswer || _phase == _Phase.replyAnswer;
 
   void _select(int i, BuildContext rowContext) {
     if (!_choosing) return;
@@ -339,18 +338,13 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
               ? _result(s, theme)
               : Stack(
                   children: [
-                    GestureDetector(
-                      // The whole screen is the "next" button after an answer:
-                      // on a train nobody wants to find a control.
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _answered && !_saving ? _advance : null,
-                      child: Column(
+                    // Moving on is the button in the panel below, never a tap on
+                    // the screen: after an answer the other rows are still
+                    // live, and each one has a reason to show.
+                    Column(
                         children: [
                           _topBar(e, theme),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                            child: _stage(e, theme),
-                          ),
+                          _dots(theme),
                           Expanded(
                             child: SingleChildScrollView(
                               // A fallback for very small screens; the layout
@@ -362,6 +356,10 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
                                   if (widget.tutorial) _guide(s, theme),
                                   if (_card.review) _reviewTag(e, theme),
                                   _lineBubble(e, theme),
+                                  if (_phase == _Phase.reply || _phase == _Phase.replyAnswer) ...[
+                                    const SizedBox(height: 10),
+                                    _yourBubble(e, theme),
+                                  ],
                                   const SizedBox(height: 12),
                                   AnimatedSwitcher(
                                     duration: const Duration(milliseconds: 220),
@@ -378,7 +376,6 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
                           _bottom(e, theme),
                         ],
                       ),
-                    ),
                     if (_leafFrom != null && _leafTo != null)
                       AnimatedBuilder(
                         animation: _leaf,
@@ -443,55 +440,91 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     );
   }
 
-  /// The two figures and the arrows between them. A scene is four arrows —
-  /// their line, your reply, their line, your reply — and the one lit is the
-  /// step being taken. A review card is a single exchange, so two arrows.
-  Widget _stage(S s, ThemeData theme) {
+  /// How far through the conversation this is. One dot per step — their line,
+  /// your reply, their line, your reply — and the step being taken is the
+  /// larger one. A review card is a single exchange, so two dots.
+  Widget _dots(ThemeData theme) {
     final scheme = theme.colorScheme;
-    final arrows = _card.review ? 2 : widget.scene.exchanges.length * 2;
+    final steps = _card.review ? 2 : widget.scene.exchanges.length * 2;
     final exchangeAt = _card.review ? 0 : _index - widget.reviews.length;
     final half = _phase == _Phase.listen || _phase == _Phase.gistAnswer ? 0 : 1;
     final now = exchangeAt * 2 + half;
-    final otherOn = half == 0;
-    // The last arrow answered right: the whole stage warms for a moment.
-    final complete = _phase == _Phase.replyAnswer && now == arrows - 1 && _replyPick == _x.reply.answer;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 400),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: complete ? scheme.primaryContainer.withValues(alpha: 0.7) : scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 2),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _Figure(label: s.t('speakerOther'), other: true, lit: otherOn),
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (var i = 0; i < arrows; i++)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 3),
-                    child: Icon(
-                      i.isEven ? Icons.arrow_forward : Icons.arrow_back,
-                      size: i == now ? 22 : 16,
-                      color: i == now
-                          ? (i.isEven ? _otherColor(theme) : scheme.primary)
-                          : i < now
-                              ? scheme.primary.withValues(alpha: 0.45)
-                              : scheme.outlineVariant,
-                    ),
-                  ),
-              ],
+          for (var i = 0; i < steps; i++)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: i == now ? 9 : 7,
+              height: i == now ? 9 : 7,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: i <= now ? scheme.primary : scheme.outlineVariant,
+              ),
             ),
-          ),
-          KeyedSubtree(
-            key: _youKey,
-            child: _Figure(label: s.t('speakerYou'), other: false, lit: !otherOn),
-          ),
         ],
       ),
+    );
+  }
+
+  /// Your side of the conversation: an empty bubble while the reply is being
+  /// chosen, the words you picked once it is answered. It appears only when
+  /// it is your turn — the first question is about their line, not yours.
+  Widget _yourBubble(S s, ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final answered = _phase == _Phase.replyAnswer;
+    final pick = _replyPick;
+    final words = answered && pick != null ? _x.reply.options[pick].text : s.t('sceneYourTurn');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(right: 32, bottom: 2),
+          child: Text(s.t('speakerYou'),
+              style: theme.textTheme.labelSmall?.copyWith(color: scheme.primary)),
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Flexible(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                child: Container(
+                  key: ValueKey('you$_index$answered'),
+                  padding: const EdgeInsets.fromLTRB(14, 9, 14, 10),
+                  decoration: BoxDecoration(
+                    color: answered ? scheme.primaryContainer : Colors.transparent,
+                    border: answered
+                        ? null
+                        : Border.all(color: scheme.primary.withValues(alpha: 0.45), width: 1.4),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(4),
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
+                    ),
+                  ),
+                  child: Text(
+                    words,
+                    style: answered
+                        ? theme.textTheme.bodyMedium
+                            ?.copyWith(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w600)
+                        : theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _Figure.small(other: false),
+          ],
+        ),
+      ],
     );
   }
 
@@ -616,7 +649,15 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
             ],
           );
 
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 32, bottom: 2),
+          child: Text(s.t('speakerOther'),
+              style: theme.textTheme.labelSmall?.copyWith(color: _otherColor(theme))),
+        ),
+        Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _Figure.small(other: true),
@@ -644,6 +685,8 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
               ),
             ),
           ),
+        ),
+      ],
         ),
       ],
     );
@@ -828,11 +871,26 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
                     color: ok ? scheme.onPrimaryContainer : scheme.onErrorContainer),
               ),
             ],
-            const SizedBox(height: 6),
-            Text(
-              isGist ? s.t('sceneTapNext') : '${s.t('sceneTapNext')} · ${s.t('tapOtherWhy')}',
-              style: theme.textTheme.labelSmall?.copyWith(
-                  color: (ok ? scheme.onPrimaryContainer : scheme.onErrorContainer).withValues(alpha: 0.75)),
+            if (!isGist) ...[
+              const SizedBox(height: 6),
+              Text(
+                s.t('tapOtherWhy'),
+                style: theme.textTheme.labelSmall?.copyWith(
+                    color: (ok ? scheme.onPrimaryContainer : scheme.onErrorContainer)
+                        .withValues(alpha: 0.75)),
+              ),
+            ],
+            const SizedBox(height: 10),
+            // Moving on is deliberate: the rows above stay live for their
+            // reasons until this is pressed.
+            FilledButton(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(double.infinity, 44),
+                backgroundColor: ok ? scheme.onPrimaryContainer : scheme.onErrorContainer,
+                foregroundColor: ok ? scheme.primaryContainer : scheme.errorContainer,
+              ),
+              onPressed: _saving ? null : _advance,
+              child: Text(s.t('sceneNextButton')),
             ),
           ],
         ),

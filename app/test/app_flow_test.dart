@@ -185,12 +185,11 @@ void main() {
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
 
-    // Home, on the samples, with the way to the real thing in view and the
-    // samples folded until asked for.
+    // Home, on the samples, with the way to the real thing in view.
     expect((await repo.loadSettings()).tutorialDone, isTrue);
     expect(find.text(s.t('todaySceneSample')), findsOneWidget);
     expect(find.text(s.t('ownScenesCardTitle')), findsOneWidget);
-    expect(find.text(s.t('samplesFieldsTitle')), findsOneWidget);
+    expect(find.text(s.t('homeSampleScenes')), findsOneWidget);
     expect(find.text(s.t('interest_work')), findsNothing);
   });
 

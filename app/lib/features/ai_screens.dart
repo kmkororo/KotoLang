@@ -26,7 +26,7 @@ import 'onboarding_screens.dart' show copyToClipboard;
 import 'paste_box.dart';
 
 /// What the AI is being asked for.
-enum AiJob { profile, scenes }
+enum AiJob { profile, scenes, feedback }
 
 const firstRunSteps = 4;
 
@@ -104,6 +104,11 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
   int _ownScenes = 0;
   String? _field;
 
+  /// What this batch of conversations costs, read before the reply is taken:
+  /// afterwards the field always has some, and the first batch is what is
+  /// free.
+  int _cost = 0;
+
   @override
   void initState() {
     super.initState();
@@ -115,10 +120,12 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
     final repo = ref.read(repositoryProvider);
     final profile = await repo.loadProfile();
     final own = await repo.scenes(includeDisabled: true);
+    final cost = await repo.sceneAddCostFor(_field);
     if (!mounted) return;
     setState(() {
       _profile = profile;
       _ownScenes = own.length;
+      _cost = cost;
       _loaded = true;
     });
   }
@@ -127,6 +134,14 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
 
   Future<String> _prompt() async {
     if (widget.job == AiJob.profile) return prompts.profilePrompt(uiLanguage: _lang);
+    if (widget.job == AiJob.feedback) {
+      final all = await ref.read(fieldsProvider.future);
+      return ref.read(repositoryProvider).feedbackPromptText(
+            uiLanguage: _lang,
+            fieldId: _field ?? '',
+            fieldLabel: all.where((f) => f.id == _field).firstOrNull?.label ?? '',
+          );
+    }
     return ref.read(repositoryProvider).scenesPromptText(
           uiLanguage: _lang,
           extraTopics: builtinTopics(),
@@ -141,6 +156,9 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
     if (!mounted) return;
     await copyToClipboard(context, text, s.t('copied'));
     if (!mounted) return;
+    // Feedback is one way: what comes back is coaching to read, so there is
+    // no reply to take.
+    if (widget.job == AiJob.feedback) return;
     await _toReply();
   }
 
@@ -191,6 +209,12 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
     await reload(ref);
   }
 
+  /// The price follows the field: the first batch in each one is free.
+  Future<void> _reloadCost() async {
+    final cost = await ref.read(repositoryProvider).sceneAddCostFor(_field);
+    if (mounted) setState(() => _cost = cost);
+  }
+
   Future<void> _makeProfile() async {
     await Navigator.push<bool>(
         context, MaterialPageRoute(builder: (_) => const AiPromptScreen(job: AiJob.profile)));
@@ -224,9 +248,11 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
     final hasProfile = _profile != null;
     final ready = scenes ? hasProfile && field != null : true;
 
-    final title = scenes
-        ? s.t(_ownScenes == 0 ? 'firstSceneMake' : 'nextScenesMake')
-        : s.t('profileAiSection');
+    final title = switch (widget.job) {
+      AiJob.scenes => s.t(_ownScenes == 0 ? 'firstSceneMake' : 'nextScenesMake'),
+      AiJob.profile => s.t('profileAiSection'),
+      AiJob.feedback => s.t('feedbackButton'),
+    };
 
     return Scaffold(
       appBar: AppBar(title: Text(title, maxLines: 2, style: const TextStyle(fontSize: 18))),
@@ -302,11 +328,15 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
                         final l = locked.where((f) => f.id == v).firstOrNull;
                         if (l != null) {
                           openLockedField(context, ref, l).then((opened) {
-                            if (opened && mounted) setState(() => _field = l.id);
+                            if (opened && mounted) {
+                              setState(() => _field = l.id);
+                              _reloadCost();
+                            }
                           });
                           return;
                         }
                         setState(() => _field = v);
+                        _reloadCost();
                       },
                     ),
                     const SizedBox(height: 16),
@@ -317,8 +347,23 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
                     label: s.t('copyPrompt'),
                     onPressed: ready ? _copy : null,
                   ),
+                  // What this batch costs, said before the trip rather than
+                  // after it.
+                  if (scenes) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _cost == 0
+                          ? s.t('sceneAddFirstFree')
+                          : s.t('sceneAddPriced', {'n': _cost}),
+                      style: muted,
+                    ),
+                  ],
                   const SizedBox(height: 10),
-                  AiLinks(s: s, enabled: ready, prompt: _prompt, onOpened: _toReply),
+                  AiLinks(
+                      s: s,
+                      enabled: ready,
+                      prompt: _prompt,
+                      onOpened: widget.job == AiJob.feedback ? null : _toReply),
                   const SizedBox(height: 24),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -435,7 +480,18 @@ class _AiReplyScreenState extends ConsumerState<AiReplyScreen> {
         final fields = await ref.read(fieldsProvider.future);
         field = fields.where((f) => !f.builtin).firstOrNull?.id;
       }
+      // The price of this batch, read before the import: afterwards the field
+      // always has conversations, and the first batch is the free one.
+      final cost = await repo.sceneAddCostFor(field);
+      final seeds = (await repo.loadProgress()).seeds;
       if (!mounted) return;
+      if (seeds < cost) {
+        setState(() {
+          _busy = false;
+          _error = s.t('unlockRealmNeedMore', {'n': cost - seeds});
+        });
+        return;
+      }
       final out = await repo.importScenes(_paste.text, uiLanguage: _lang, field: field);
       if (!mounted) return;
       setState(() => _busy = false);
@@ -449,6 +505,11 @@ class _AiReplyScreenState extends ConsumerState<AiReplyScreen> {
         return;
       }
       _paste.clear();
+      // Paid only now, when conversations actually arrived.
+      if (await repo.spendSeeds(cost) && mounted) {
+        ref.read(progressProvider.notifier).state = await repo.loadProgress();
+      }
+      if (!mounted) return;
       ref.invalidate(allScenesProvider);
       showToast(
         context,

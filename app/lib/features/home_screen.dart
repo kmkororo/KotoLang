@@ -13,7 +13,6 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
-import '../domain/field.dart';
 import '../domain/models.dart';
 import '../domain/scene.dart';
 import '../domain/skills.dart';
@@ -40,13 +39,6 @@ class HomeScreen extends ConsumerWidget {
     _refresh(ref);
   }
 
-  Future<void> _openField(BuildContext context, WidgetRef ref, Field field, {required bool own}) async {
-    await Navigator.push(
-        context, MaterialPageRoute(builder: (_) => FieldScreen(field: field, own: own)));
-    if (!context.mounted) return;
-    ref.invalidate(allScenesProvider);
-    _refresh(ref);
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -57,20 +49,14 @@ class HomeScreen extends ConsumerWidget {
     final scenes = ref.watch(allScenesProvider).value ?? const <Scene>[];
     final results = ref.watch(sceneResultsProvider).value ?? const <SceneResult>[];
     final stats = ref.watch(skillStatsProvider).value ?? SkillStats.empty;
-    final fields = ref.watch(fieldsProvider).value ?? const <Field>[];
 
     final ownScenes = [for (final x in scenes) if (!x.isBuiltin) x];
     final hasOwn = ownScenes.isNotEmpty;
-    final samplesOpen = ref.watch(samplesOpenProvider);
     final done = {for (final r in results) if (!r.review) r.sceneId};
     final allDone = scenes.isNotEmpty && scenes.every((x) => done.contains(x.id));
     final muted = theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
     // Today's scene comes from the learner's own scenes once there are any.
     final pool = hasOwn ? ownScenes : scenes;
-    // The learner's own side lists only the fields that have scenes: the
-    // fields grow as the AI writes for them, rather than standing empty.
-    final ownFields = [for (final f in fields) if (splitField(ownScenes, f.id).own.isNotEmpty) f];
-    final sampleFields = [for (final f in fields) if (splitField(scenes, f.id).samples.isNotEmpty) f];
 
     // The tree's data is loaded by an auto-disposing provider. Scrolled far
     // enough down — the samples open, on a tall phone — the panel leaves the
@@ -141,6 +127,20 @@ class HomeScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(s.t('todayRandomNote'), textAlign: TextAlign.center, style: muted),
+          // The same family, one step narrower: a field of their own, or the
+          // samples. Both ask which field before they start.
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.local_florist, size: 18),
+            onPressed: () => showScenesFieldSheet(context, ref, own: true),
+            label: Text(s.t('homeFieldScenes')),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.menu_book_outlined, size: 18),
+            onPressed: () => showScenesFieldSheet(context, ref, own: false),
+            label: Text(s.t('homeSampleScenes')),
+          ),
         ],
 
         // For as long as only samples are here: the way to the real thing,
@@ -170,74 +170,6 @@ class HomeScreen extends ConsumerWidget {
           style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
         ),
 
-        // -------- the learner's own scenes, by field --------
-        const SizedBox(height: 20),
-        _GroupTitle(icon: Icons.local_florist, title: s.t('ownFieldsTitle'), color: scheme.primary),
-        const SizedBox(height: 8),
-        if (ownFields.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(s.t('fieldOwnEmptyHint'), style: muted),
-          ),
-        for (final f in ownFields) ...[
-          _FieldTile(
-            field: f,
-            scenes: splitField(ownScenes, f.id).own,
-            done: done,
-            own: true,
-            onTap: () => _openField(context, ref, f, own: true),
-          ),
-          const SizedBox(height: 8),
-        ],
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: [
-            OutlinedButton.icon(
-              icon: const Icon(Icons.auto_awesome, size: 18),
-              onPressed: () => _openPack(context, ref),
-              label: Text(s.t(hasOwn ? 'nextScenesMake' : 'makeOwnScenes')),
-            ),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.add, size: 18),
-              onPressed: () => showOpenFieldSheet(context, ref),
-              label: Text(s.t('fieldAdd')),
-            ),
-          ],
-        ),
-
-        // -------- the samples, by field: folded away by default --------
-        const SizedBox(height: 20),
-        InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: () => ref.read(samplesOpenProvider.notifier).state = !samplesOpen,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _GroupTitle(
-                      icon: Icons.menu_book_outlined, title: s.t('samplesFieldsTitle'), color: scheme.onSurfaceVariant),
-                ),
-                Icon(samplesOpen ? Icons.expand_less : Icons.expand_more, color: scheme.onSurfaceVariant),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        if (samplesOpen)
-          for (final f in sampleFields) ...[
-          _FieldTile(
-            field: f,
-            scenes: splitField(scenes, f.id).samples,
-            done: done,
-            own: false,
-            onTap: () => _openField(context, ref, f, own: false),
-          ),
-          const SizedBox(height: 8),
-        ],
-
-        const SizedBox(height: 4),
         Center(
           child: TextButton(
             onPressed: () =>
@@ -246,80 +178,6 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _GroupTitle extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final Color color;
-  const _GroupTitle({required this.icon, required this.title, required this.color});
-
-  @override
-  Widget build(BuildContext context) => Row(
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 6),
-          Text(title, style: Theme.of(context).textTheme.titleSmall),
-        ],
-      );
-}
-
-/// One field inside one of the two groups: its name and how many of its
-/// scenes are done.
-class _FieldTile extends ConsumerWidget {
-  final Field field;
-  final List<Scene> scenes;
-  final Set<String> done;
-  final bool own;
-  final VoidCallback onTap;
-  const _FieldTile({
-    required this.field,
-    required this.scenes,
-    required this.done,
-    required this.own,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(stringsProvider);
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final n = scenes.where((x) => done.contains(x.id)).length;
-    return Material(
-      color: own ? scheme.primaryContainer.withValues(alpha: 0.35) : scheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              Icon(
-                switch (field.id) {
-                  'work' => Icons.work_outline,
-                  'travel' => Icons.flight_takeoff,
-                  'school' => Icons.school_outlined,
-                  'daily' => Icons.home_outlined,
-                  _ => Icons.label_outline,
-                },
-                color: own ? scheme.primary : scheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(field.label, style: const TextStyle(fontWeight: FontWeight.w700)),
-              ),
-              Text(s.t('fieldCount', {'d': n, 'n': scenes.length}),
-                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-              const SizedBox(width: 4),
-              Icon(Icons.chevron_right, color: scheme.outlineVariant),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -425,6 +283,3 @@ class _Pill extends StatelessWidget {
       );
 }
 
-/// Whether the samples are unfolded on home. Folded by default: they are the
-/// starter set, and the learner's own scenes are the point.
-final samplesOpenProvider = StateProvider<bool>((ref) => false);

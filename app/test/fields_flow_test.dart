@@ -18,7 +18,8 @@ import 'package:kotolang/features/tree_view.dart';
 
 import 'app_flow_test.dart' show pumpApp, seedLearner;
 import 'repository_test.dart' show profileJson;
-import 'scene_flow_test.dart' show pumpScene, choose;
+import 'scene_flow_test.dart' show pumpScene, choose, goOn;
+import 'scene_test.dart' show pack, scene;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -29,7 +30,7 @@ void main() {
     addTearDown(tester.view.reset);
   }
 
-  testWidgets('home lists the four fields; a field splits into samples and own',
+  testWidgets('home offers a field of their own and the samples, each behind a picker',
       (tester) async {
     tall(tester);
     final (db, _) = await pumpApp(tester, seed: seedLearner);
@@ -37,32 +38,38 @@ void main() {
     final s = S('en');
 
     expect(find.text(s.t('todayRandomNote')), findsOneWidget);
-    // Two doors: the learner's own scenes by field, then the samples by field.
-    expect(find.text(s.t('ownFieldsTitle')), findsOneWidget);
-    await tester.scrollUntilVisible(find.text(s.t('samplesFieldsTitle')), 200,
-        scrollable: find.byType(Scrollable).first);
-    // The samples are folded away until asked for.
+    // Three ways in, in one family: today's, a field of their own, the
+    // samples. Neither list is on home itself.
+    expect(find.text(s.t('todayScene')), findsOneWidget);
+    expect(find.text(s.t('homeFieldScenes')), findsOneWidget);
+    expect(find.text(s.t('homeSampleScenes')), findsOneWidget);
     expect(find.text(s.t('interest_travel')), findsNothing);
-    await tester.tap(find.text(s.t('samplesFieldsTitle')));
+
+    // The samples' picker lists the four built-in fields.
+    await tester.tap(find.text(s.t('homeSampleScenes')));
     await tester.pumpAndSettle();
     for (final id in builtinFieldIds) {
-      await tester.scrollUntilVisible(find.text(s.t('interest_$id')).last, 200,
-          scrollable: find.byType(Scrollable).first);
+      expect(find.text(s.t('interest_$id')), findsOneWidget, reason: id);
     }
-    // The own scene was imported without a field, so it sits in the default,
-    // which therefore appears on both sides; the own side comes first.
-    expect(find.text(s.t('interest_$defaultFieldId')), findsNWidgets(2));
-    await tester.scrollUntilVisible(find.text(s.t('interest_$defaultFieldId')).first, -200,
-        scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text(s.t('interest_$defaultFieldId')).first);
+    await tester.tap(find.text(s.t('interest_travel')));
     await tester.pumpAndSettle();
     expect(find.byType(FieldScreen), findsOneWidget);
-    expect(find.text('Stay late（日本語）'), findsOneWidget);
-    expect(find.text(s.t('fieldStartOwn')), findsOneWidget);
-    expect(find.text(s.t('fieldStartSamples')), findsNothing);
+    // A field is a place to start, not a list to read.
+    expect(find.text(s.t('fieldStart')), findsOneWidget);
+    expect(find.text(s.t('feedbackButton')), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Their own picker leads to the field the imported scene landed in.
+    await tester.tap(find.text(s.t('homeFieldScenes')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.t('interest_$defaultFieldId')));
+    await tester.pumpAndSettle();
+    expect(find.byType(FieldScreen), findsOneWidget);
+    expect(find.text(s.t('feedbackButton')), findsOneWidget);
 
     // Starting from the own half opens the own scene, not a sample.
-    await tester.tap(find.text(s.t('fieldStartOwn')));
+    await tester.tap(find.text(s.t('fieldStart')));
     await tester.pumpAndSettle();
     expect(find.byType(SceneScreen), findsOneWidget);
     expect(find.text(s.t('sceneReviewTag')), findsNothing);
@@ -71,45 +78,83 @@ void main() {
     expect(find.byType(FieldScreen), findsOneWidget);
   });
 
-  testWidgets('a field with no own scenes leads to making them for that field',
+  testWidgets('a sample field only starts; their own also asks for more and for feedback',
       (tester) async {
     tall(tester);
-    final (db, _) = await pumpApp(tester, seed: seedLearner);
+    final (db, _) = await pumpApp(tester, seed: (r) async {
+      await seedLearner(r);
+      await r.saveProgress((await r.loadProgress()).copyWith(seeds: sceneAddCost));
+    });
     addTearDown(db.close);
     final s = S('en');
 
-    // A sample field opens on the samples alone, with no way to make scenes.
-    await tester.scrollUntilVisible(find.text(s.t('samplesFieldsTitle')), 200,
-        scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text(s.t('samplesFieldsTitle')));
+    // A sample field opens on the samples alone: nothing to make, nothing to
+    // send back.
+    await tester.tap(find.text(s.t('homeSampleScenes')));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text(s.t('interest_travel')), 200,
-        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text(s.t('interest_travel')));
     await tester.pumpAndSettle();
     expect(find.byType(FieldScreen), findsOneWidget);
-    expect(find.text(s.t('fieldStartSamples')), findsOneWidget);
+    expect(find.text(s.t('fieldStart')), findsOneWidget);
     expect(find.text(s.t('makeOwnScenes')), findsNothing);
+    expect(find.text(s.t('nextScenesMake')), findsNothing);
+    expect(find.text(s.t('feedbackButton')), findsNothing);
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    // Making scenes asks for the field with a dropdown, preset to the first
-    // interest the learner named.
-    await tester.scrollUntilVisible(find.text(s.t('nextScenesMake')).first, -200,
-        scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text(s.t('nextScenesMake')).first);
+    // Their own field: another batch here is priced, since it already has
+    // conversations, and the way to it leads to the prompt.
+    await tester.tap(find.text(s.t('homeFieldScenes')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.t('interest_$defaultFieldId')));
+    await tester.pumpAndSettle();
+    // This field already has conversations, so another batch is priced.
+    expect(find.text(s.t('seedsCost', {'n': sceneAddCost})), findsOneWidget);
+    await tester.tap(find.text(s.t('nextScenesMake')));
     await tester.pumpAndSettle();
     expect(find.byType(AiPromptScreen), findsOneWidget);
-    final picker = tester.widget<DropdownButtonFormField<String>>(find.byKey(const ValueKey('fieldPicker')));
+    final picker =
+        tester.widget<DropdownButtonFormField<String>>(find.byKey(const ValueKey('fieldPicker')));
     // Only the learner's own fields are offered, never the samples' four.
     expect(picker.initialValue, isNotNull);
     expect(picker.initialValue, isNot(isIn(builtinFieldIds)));
     expect(find.text(s.t('privacyLine')), findsOneWidget);
   });
 
-  testWidgets('home scrolls back up from the bottom with the samples open', (tester) async {
+  testWidgets('the results go back to the AI only once there are enough of them',
+      (tester) async {
+    tall(tester);
+    final (db, _) = await pumpApp(tester, seed: (r) async {
+      await seedLearner(r, withScene: false);
+      await r.importScenes(
+          pack([for (var i = 0; i < feedbackAfter; i++) scene('Talk $i')]),
+          uiLanguage: 'en');
+    });
+    addTearDown(db.close);
+    final s = S('en');
+
+    Future<void> openField() async {
+      await tester.tap(find.text(s.t('homeFieldScenes')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(s.t('interest_$defaultFieldId')));
+      await tester.pumpAndSettle();
+    }
+
+    // Nothing answered here yet: the button counts what is missing, and a
+    // press explains rather than opens.
+    await openField();
+    expect(find.text('0 / $feedbackAfter'), findsOneWidget);
+    await tester.tap(find.text(s.t('feedbackButton')));
+    await tester.pumpAndSettle();
+    expect(find.text(s.t('feedbackLockedTitle')), findsOneWidget);
+    await tester.tap(find.text(s.t('close')));
+    await tester.pumpAndSettle();
+    expect(find.byType(AiPromptScreen), findsNothing);
+  });
+
+  testWidgets('home scrolls back up from the bottom', (tester) async {
     // A phone-shaped viewport, so the list is longer than the screen and the
-    // tree leaves it when the samples are open.
+    // tree leaves it once the bottom is reached.
     tester.view.physicalSize = const Size(400, 640);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -118,9 +163,6 @@ void main() {
     final s = S('en');
 
     final list = find.byType(Scrollable).first;
-    await tester.scrollUntilVisible(find.text(s.t('samplesFieldsTitle')), 200, scrollable: list);
-    await tester.tap(find.text(s.t('samplesFieldsTitle')));
-    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text(s.t('listenButton')), 200, scrollable: list);
     await tester.pumpAndSettle();
     // The tree stays mounted while it is off screen, so nothing above the
@@ -150,12 +192,18 @@ void main() {
     });
     addTearDown(db.close);
     final s = S('en');
+
+    // Opening another field lives behind the picker for their own fields:
+    // it is the only other thing that list can lead to.
+    Future<void> openAddSheet() async {
+      await tester.tap(find.text(s.t('homeFieldScenes')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(s.t('fieldAdd')));
+      await tester.pumpAndSettle();
+    }
     final lockedBefore = (await repo.realms()).where((r) => !r.unlocked).toList();
     expect(lockedBefore, hasLength(2));
-
-    await tester.scrollUntilVisible(find.text(s.t('fieldAdd')), 200,
-        scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text(s.t('fieldAdd')));
+    await openAddSheet();
     await tester.pumpAndSettle();
     // The sheet lists the two closed areas, priced.
     for (final r in lockedBefore) {
@@ -176,8 +224,7 @@ void main() {
     expect(picker.initialValue, lockedBefore.first.id);
     await tester.pageBack();
     await tester.pumpAndSettle();
-
-    // Short of Seeds now: the last one is refused and nothing changes.
+    await openAddSheet();
     await tester.tap(find.text(s.t('fieldAdd')));
     await tester.pumpAndSettle();
     await tester.tap(find.text(lockedBefore.last.label));
@@ -227,13 +274,16 @@ void main() {
     addTearDown(db.close);
     final s = S('en');
 
+    // Their side is labelled from the start; yours appears when it is your
+    // turn, as an empty bubble.
     expect(find.text(s.t('speakerOther')), findsOneWidget);
-    expect(find.text(s.t('speakerYou')), findsOneWidget);
+    expect(find.text(s.t('speakerYou')), findsNothing);
     expect(find.text(s.t('afterYourReply')), findsNothing);
 
     await choose(tester, sc.exchanges[0].gist.correct);
-    await tester.tap(find.text(s.t('speakerYou')));
-    await tester.pumpAndSettle();
+    await goOn(tester);
+    expect(find.text(s.t('speakerYou')), findsOneWidget);
+    expect(find.text(s.t('sceneYourTurn')), findsOneWidget);
     // What was heard is folded to a mark, so the reply is not read off it;
     // a tap opens it.
     expect(find.text(s.t('heardOk')), findsOneWidget);
@@ -242,8 +292,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(sc.exchanges[0].gist.correct), findsOneWidget);
     await choose(tester, sc.exchanges[0].reply.correct.text);
-    await tester.tap(find.text(s.t('speakerYou')));
-    await tester.pumpAndSettle();
+    await goOn(tester);
 
     // The second line says it follows the learner's reply.
     expect(find.text(sc.exchanges[1].line), findsOneWidget);

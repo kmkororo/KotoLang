@@ -52,6 +52,13 @@ Future<(AppDatabase, Repository, Scene)> pumpScene(
   return (db, repo, sc);
 }
 
+/// Move on from an answer: the button in the panel below, which is now the
+/// only way forward.
+Future<void> goOn(WidgetTester tester) async {
+  await tester.tap(find.widgetWithText(FilledButton, S('en').t('sceneNextButton')));
+  await tester.pumpAndSettle();
+}
+
 /// Tap the option with this text, then Confirm: the two steps of an answer.
 Future<void> choose(WidgetTester tester, String text) async {
   await tester.tap(find.text(text));
@@ -85,9 +92,9 @@ void main() {
     expect(find.text(sc.exchanges[0].line), findsOneWidget);
     expect(find.text(s.t('sceneTapHint')), findsOneWidget);
 
-    // The stage: them and you, with the four arrows of the scene between.
+    // Whose words are whose: their side is labelled from the start.
     expect(find.text(s.t('speakerOther')), findsOneWidget);
-    expect(find.text(s.t('speakerYou')), findsOneWidget);
+
 
     // Confirm waits for a choice; a tap alone selects and does not answer.
     final decide = find.widgetWithText(FilledButton, s.t('sceneDecide'));
@@ -106,11 +113,10 @@ void main() {
     await tester.tap(find.byIcon(Icons.translate_outlined));
     await tester.pumpAndSettle();
     expect(find.text(sc.exchanges[0].lineNative), findsOneWidget);
-    expect(find.text(s.t('sceneTapNext')), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, s.t('sceneNextButton')), findsOneWidget);
 
-    // Tap anywhere: on to the reply.
-    await tester.tap(find.text(s.t('speakerYou')));
-    await tester.pumpAndSettle();
+    // Next: on to the reply.
+    await goOn(tester);
     expect(find.text(s.t('sceneQ2')), findsOneWidget);
 
     // Wrong reply: red, the right one shown, every why on screen.
@@ -119,14 +125,15 @@ void main() {
     expect(find.text(s.t('sceneWrong')), findsOneWidget);
     // The panel explains the chosen reply; tapping another shows its reason.
     for (final o in sc.exchanges[0].reply.options) {
-      await tester.tap(find.text(o.text));
+      // The chosen reply also sits in the bubble above it, so the row to
+      // tap is the later of the two.
+      await tester.tap(find.text(o.text).last);
       await tester.pumpAndSettle();
       expect(find.textContaining(o.why), findsOneWidget, reason: o.text);
     }
 
     // Written down at once, and the miss has booked its review.
-    await tester.tap(find.text(s.t('speakerYou')));
-    await tester.pumpAndSettle();
+    await goOn(tester);
     final results = await repo.sceneResults();
     expect(results, hasLength(1));
     expect(results.single.gistOk, isTrue);
@@ -136,11 +143,9 @@ void main() {
     // Second exchange, both right.
     expect(find.text(sc.exchanges[1].line), findsOneWidget);
     await choose(tester, sc.exchanges[1].gist.correct);
-    await tester.tap(find.text(s.t('speakerYou')));
-    await tester.pumpAndSettle();
+    await goOn(tester);
     await choose(tester, sc.exchanges[1].reply.correct.text);
-    await tester.tap(find.text(s.t('speakerYou')));
-    await tester.pumpAndSettle();
+    await goOn(tester);
 
     // The result: 3 of 4, the Seeds, the twig — and flowers, since this is
     // the learner's own scene.
@@ -170,11 +175,9 @@ void main() {
     expect(find.text(s.t('sceneReviewTag')), findsOneWidget);
     expect(find.text(owed.exchanges[1].line), findsOneWidget);
     await choose(tester, owed.exchanges[1].gist.correct);
-    await tester.tap(find.text(s.t('speakerYou')));
-    await tester.pumpAndSettle();
+    await goOn(tester);
     await choose(tester, owed.exchanges[1].reply.correct.text);
-    await tester.tap(find.text(s.t('speakerYou')));
-    await tester.pumpAndSettle();
+    await goOn(tester);
 
     // Then today's scene, no tag.
     expect(find.text(s.t('sceneReviewTag')), findsNothing);
@@ -191,8 +194,7 @@ void main() {
     expect(find.text(s.t('tutListen')), findsOneWidget);
     await choose(tester, sc.exchanges[0].gist.correct);
     expect(find.text(s.t('tutNext')), findsOneWidget);
-    await tester.tap(find.text(s.t('speakerYou')));
-    await tester.pumpAndSettle();
+    await goOn(tester);
     expect(find.text(s.t('tutReply')), findsOneWidget);
   });
 
@@ -213,11 +215,9 @@ void main() {
     expect(find.text(sc.exchanges[0].line), findsOneWidget);
 
     await choose(tester, sc.exchanges[0].gist.correct);
-    await tester.tap(find.text(s.t('speakerYou')));
-    await tester.pumpAndSettle();
+    await goOn(tester);
     await choose(tester, sc.exchanges[0].reply.correct.text);
-    await tester.tap(find.text(s.t('speakerYou')));
-    await tester.pumpAndSettle();
+    await goOn(tester);
     final r = (await repo.sceneResults()).single;
     expect(r.peeked, isTrue);
     expect(r.gistOk, isTrue);

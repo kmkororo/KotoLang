@@ -945,3 +945,57 @@ The example above only shows the shape. Do not write that topic; write $scenes n
 scenes in the same shape, with real $native text in every native and why field.
 ''';
 }
+
+/// The learner's own results, for the assistant that has been writing their
+/// conversations. Nothing comes back into the app: the answer is coaching to
+/// read, so it asks for plain prose in the learner's own language rather than
+/// JSON.
+String feedbackPrompt({
+  required String uiLanguage,
+  required String field,
+  required String level,
+  required int scenesDone,
+  required int gistPct,
+  required int replyPct,
+  required List<({String topic, String line, bool gist, bool reply})> misses,
+}) {
+  final native = languageFor(uiLanguage).englishName;
+  final missText = misses.isEmpty
+      ? '  (nothing missed)'
+      : misses
+          .map((m) => '  - topic: ${m.topic}\n'
+              '    they said: "${m.line}"\n'
+              '    missed: ${[
+                if (m.gist) 'the gist of their line',
+                if (m.reply) 'choosing a reply that fits'
+              ].join(' and ')}')
+          .join('\n');
+
+  return '''
+You are coaching one person who is learning to understand spoken English by
+ear (CEFR $level). They practise with short conversations: they hear a line,
+choose what it meant, then choose how to reply.
+
+THEIR RESULTS IN THE AREA "$field"
+- conversations finished: $scenesDone
+- got the gist right: $gistPct% of the time
+- chose a fitting reply: $replyPct% of the time
+
+WHAT THEY MISSED
+$missText
+
+WHAT TO WRITE BACK
+1. One short paragraph: the pattern behind the misses, in plain words. Name
+   the kind of thing they mishear (numbers, times, negatives, places, who is
+   doing what), not the individual mistakes.
+2. Three things to listen for next time, one line each, concrete enough to
+   act on while listening.
+3. One short paragraph: what is already working, so they know what to keep.
+
+RULES
+- Write in $native. The learner reads this, not a program.
+- No JSON, no code blocks, no headings — just the three parts above.
+- Do not invent mistakes that are not in the list.
+- Under 200 words in total.
+''';
+}

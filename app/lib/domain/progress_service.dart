@@ -259,6 +259,15 @@ const freeRealmSlots = 3;
 /// curve: simple to reason about, and just as tunable.
 const realmUnlockCost = 100;
 
+/// Flat cost to have the AI write another batch of conversations for a field
+/// that already has some. The first batch in a field costs nothing, so an
+/// opened field is always worth something on its own.
+const sceneAddCost = 50;
+
+/// Conversations answered in a field before its results are worth sending to
+/// the AI. Below this there is not enough there to see a pattern.
+const feedbackAfter = 5;
+
 /// Paid once a session is finished. Flat, because the learner now chooses how
 /// long a session is: paying more for a longer one would make the choice a
 /// price list rather than a preference.

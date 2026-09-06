@@ -1594,6 +1594,47 @@ class Repository {
     );
   }
 
+  /// The results in one of the learner's own fields, as coaching to ask their
+  /// AI for. One way: what comes back is prose to read, not material to
+  /// import, so nothing here expects a reply.
+  Future<String> feedbackPromptText({
+    required String uiLanguage,
+    required String fieldId,
+    required String fieldLabel,
+  }) async {
+    final profile = await loadProfile();
+    final own = await scenes(includeDisabled: true);
+    final inField = {for (final s in splitField(own, fieldId).own) s.id: s};
+    final results = [
+      for (final r in await sceneResults()) if (inField.containsKey(r.sceneId)) r
+    ];
+
+    var gistOk = 0;
+    var replyOk = 0;
+    final misses = <({String topic, String line, bool gist, bool reply})>[];
+    for (final r in results) {
+      if (r.gistOk) gistOk++;
+      if (r.replyOk) replyOk++;
+      if (r.gistOk && r.replyOk) continue;
+      if (misses.length >= 12) continue;
+      final sc = inField[r.sceneId];
+      final ex = sc?.exchanges.elementAtOrNull(r.exchange);
+      if (sc == null || ex == null) continue;
+      misses.add((topic: sc.label, line: ex.line, gist: !r.gistOk, reply: !r.replyOk));
+    }
+
+    final n = results.length;
+    return pr.feedbackPrompt(
+      uiLanguage: uiLanguage,
+      field: fieldLabel,
+      level: profile?.englishLevel ?? 'A2',
+      scenesDone: {for (final r in results) if (!r.review) r.sceneId}.length,
+      gistPct: n == 0 ? 0 : (gistOk * 100 / n).round(),
+      replyPct: n == 0 ? 0 : (replyOk * 100 / n).round(),
+      misses: misses,
+    );
+  }
+
   // ------------------------------------------------------------------ scenes
   //
   // Listen, choose, grow. Scenes the learner's own AI wrote live here; the
@@ -1789,6 +1830,25 @@ class Repository {
   }
 
   /// Returns false, spending nothing, when the balance is short.
+  /// What the next batch of conversations costs for this field: nothing the
+  /// first time, [sceneAddCost] once the field already has some. Asked before
+  /// the reply is taken, since afterwards the field always has some.
+  Future<int> sceneAddCostFor(String? fieldId) async {
+    if (fieldId == null) return 0;
+    final own = await scenes(includeDisabled: true);
+    return splitField(own, fieldId).own.isEmpty ? 0 : sceneAddCost;
+  }
+
+  /// Takes Seeds off the balance. False when there are not enough, and then
+  /// nothing is taken.
+  Future<bool> spendSeeds(int n) async {
+    if (n <= 0) return true;
+    final p = await loadProgress();
+    if (p.seeds < n) return false;
+    await saveProgress(p.copyWith(seeds: p.seeds - n));
+    return true;
+  }
+
   Future<bool> openField(String realmId) async {
     final all = await realms();
     final row = all.where((r) => r.id == realmId).firstOrNull;
