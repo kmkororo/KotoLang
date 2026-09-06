@@ -53,8 +53,9 @@ void main() {
 
   test('the fields are the four built-ins and then the unlocked areas', () async {
     await repo.importProfile(profileJson(['Nursing', 'Cycling']), uiLanguage: 'en');
+    await repo.chooseFields([for (final r in await repo.realms()) r.id]);
     final realms = await repo.realms();
-    // Both areas came off the profile and are open: the built-ins, then them.
+    // Both areas came off the profile and were chosen: the built-ins, then them.
     final fields = fieldsFrom(realms, (id) => id.toUpperCase());
     expect(fields.map((f) => f.label).take(4), ['WORK', 'TRAVEL', 'SCHOOL', 'DAILY']);
     expect(fields.skip(4).map((f) => f.label).toSet(), {'Nursing', 'Cycling'});
@@ -65,18 +66,23 @@ void main() {
     expect(fieldsFrom(await repo.realms(), (id) => id).map((f) => f.id), isNot(contains('Sailing')));
   });
 
-  test('the profile opens its first three areas as fields; the rest wait, priced', () async {
+  test('the profile opens nothing by itself; the learner chooses the starting fields', () async {
     await repo.importProfile(profileJson(['Nursing', 'Cycling', 'Gardening', 'Chess', 'Sailing']),
         uiLanguage: 'en');
     final realms = await repo.realms();
-    expect(realms.where((r) => r.unlocked), hasLength(freeRealmSlots));
-    final open = fieldsFrom(realms, (id) => id);
-    expect(open.where((f) => !f.builtin), hasLength(freeRealmSlots));
-    final locked = lockedFieldsFrom(realms, (id) => id);
-    expect(locked, hasLength(5 - freeRealmSlots));
-    // A second import does not hand out more free slots.
+    expect(realms.where((r) => r.unlocked), isEmpty);
+    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
+    // Any three, not the top three.
+    await repo.chooseFields([realms[4].id, realms[1].id, realms[3].id]);
+    final after = await repo.realms();
+    expect(after.where((r) => r.unlocked).map((r) => r.name).toSet(), {'Sailing', 'Cycling', 'Chess'});
+    expect(fieldsFrom(after, (id) => id).where((f) => !f.builtin), hasLength(freeRealmSlots));
+    expect(lockedFieldsFrom(after, (id) => id), hasLength(5 - freeRealmSlots));
+    expect(await repo.freeFieldSlotsLeft(), 0);
+    // A second import does not hand out more starting picks.
     await repo.importProfile(profileJson(['Nursing', 'Cycling', 'Gardening', 'Chess', 'Sailing', 'Rowing']),
         uiLanguage: 'en');
+    expect(await repo.freeFieldSlotsLeft(), 0);
     expect((await repo.realms()).where((r) => r.unlocked), hasLength(freeRealmSlots));
   });
 

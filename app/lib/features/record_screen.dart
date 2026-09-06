@@ -12,7 +12,7 @@ import '../domain/models.dart';
 import '../domain/progress_service.dart';
 import '../domain/scene.dart';
 import '../domain/skills.dart';
-import 'onboarding_screens.dart' show RealmPickerScreen;
+import 'field_picker_screen.dart';
 
 class RecordScreen extends ConsumerWidget {
   const RecordScreen({super.key});

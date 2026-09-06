@@ -17,6 +17,7 @@ import '../domain/models.dart';
 import '../domain/progress_service.dart';
 import '../domain/prompts.dart' as prompts;
 import 'ai_links.dart';
+import 'field_picker_screen.dart';
 import 'onboarding_screens.dart' show copyToClipboard;
 import 'paste_box.dart';
 
@@ -115,6 +116,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     ref.invalidate(realmsProvider);
     ref.invalidate(fieldsProvider);
     if (!mounted) return;
+    // The fields the AI read off the profile: the learner picks the starting
+    // ones now, while there are still some to pick.
+    final repo = ref.read(repositoryProvider);
+    final left = await repo.freeFieldSlotsLeft();
+    final anyLocked = (await repo.realms()).any((r) => !r.unlocked);
+    if (!mounted) return;
+    if (left > 0 && anyLocked) {
+      await Navigator.push(
+          context, MaterialPageRoute(builder: (_) => const RealmPickerScreen(choose: true)));
+      if (!mounted) return;
+    }
     if (widget.popOnDone) {
       Navigator.pop(context);
       return;

@@ -113,9 +113,10 @@ void main() {
       await r.saveUiLanguage('en');
       await r.saveSettings(
           const AppSettings(ageBand: '30s', interests: ['work'], tutorialDone: true));
-      // Five areas: the first three open for free, two wait, priced.
+      // Five areas: three chosen to start with, two wait, priced.
       await r.importProfile(profileJson(['Nursing', 'Cycling', 'Gardening', 'Chess', 'Sailing']),
           uiLanguage: 'en');
+      await r.chooseFields([for (final x in (await r.realms()).take(3)) x.id]);
       await r.saveProgress((await r.loadProgress()).copyWith(seeds: realmUnlockCost + 5));
     });
     addTearDown(db.close);
@@ -133,7 +134,9 @@ void main() {
     }
     await tester.tap(find.text(lockedBefore.first.label));
     await tester.pumpAndSettle();
-    await tester.tap(find.text(s.t('unlockButton')));
+    // The popup: the price, the balance, and the button that pays it.
+    expect(find.text(s.t('lockedFieldTitle', {'realm': lockedBefore.first.label})), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, s.t('seedsCost', {'n': realmUnlockCost})));
     await tester.pumpAndSettle();
     expect((await repo.loadProgress()).seeds, 5);
     expect((await repo.realms()).where((r) => !r.unlocked), hasLength(1));
@@ -150,7 +153,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text(lockedBefore.last.label));
     await tester.pumpAndSettle();
-    expect(find.text(s.t('unlockButton')), findsNothing);
+    expect(find.widgetWithText(FilledButton, s.t('seedsCost', {'n': realmUnlockCost})), findsNothing);
+    expect(find.text(s.t('close')), findsOneWidget);
     expect((await repo.realms()).where((r) => !r.unlocked), hasLength(1));
     expect((await repo.loadProgress()).seeds, 5);
   });

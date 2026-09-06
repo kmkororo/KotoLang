@@ -60,6 +60,7 @@ Future<void> seedLearner(Repository repo, {bool withScene = true}) async {
   await repo.saveSettings(
       const AppSettings(ageBand: '30s', interests: ['work'], tutorialDone: true));
   await repo.importProfile(profileJson(['Work']), uiLanguage: 'en');
+  await repo.chooseFields([for (final r in await repo.realms()) r.id]);
   if (withScene) await repo.importScenes(pack([scene('Stay late')]), uiLanguage: 'en');
 }
 

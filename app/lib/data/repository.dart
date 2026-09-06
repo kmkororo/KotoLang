@@ -369,15 +369,9 @@ class Repository {
     });
     await _saveProfile(norm.profile);
 
-    // The areas the AI read off the profile are the learner's fields. The
-    // first few open for nothing; the rest wait, priced, in the field list.
-    final all = await realms();
-    final left = await freeFieldSlotsLeft();
-    if (left > 0) {
-      final free = [for (final r in all.where((r) => !r.unlocked).take(left)) r.id];
-      await markRealmsUnlocked(free);
-      await _useFreeFieldSlots(free.length);
-    }
+    // The areas the AI read off the profile are the learner's fields. None
+    // opens by itself: the learner chooses the starting ones on the next
+    // screen, through [chooseFields].
 
     return ImportOutcome(ok: true, realms: toWrite.length, partial: ex.repaired);
   }
@@ -1786,6 +1780,14 @@ class Repository {
   }
 
   /// Opens a field: free while free slots remain, for Seeds after that.
+  /// The starting fields, chosen by the learner: opened without charge, and
+  /// counted against the [freeRealmSlots].
+  Future<void> chooseFields(List<String> realmIds) async {
+    if (realmIds.isEmpty) return;
+    await markRealmsUnlocked(realmIds);
+    await _useFreeFieldSlots(realmIds.length);
+  }
+
   /// Returns false, spending nothing, when the balance is short.
   Future<bool> openField(String realmId) async {
     final all = await realms();

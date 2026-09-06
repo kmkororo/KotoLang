@@ -236,7 +236,7 @@ class _ScenePackScreenState extends ConsumerState<ScenePackScreen> {
                                 size: 16, color: scheme.onSurfaceVariant),
                             const SizedBox(width: 6),
                             Expanded(child: Text(f.label, overflow: TextOverflow.ellipsis)),
-                            Text(freeLeft > 0 ? s.t('freeTag') : '$realmUnlockCost Seeds',
+                            Text(freeLeft > 0 ? s.t('fieldChooseButton') : s.t('seedsCost', {'n': realmUnlockCost}),
                                 style: theme.textTheme.bodySmall),
                           ]),
                         ),

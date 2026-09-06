@@ -25,6 +25,7 @@ import 'domain/scene.dart';
 import 'domain/skills.dart';
 import 'features/first_run_screen.dart';
 import 'features/home_screen.dart';
+import 'features/field_picker_screen.dart';
 import 'features/onboarding_screens.dart';
 import 'features/profile_screen.dart';
 import 'features/record_screen.dart';
@@ -354,7 +355,7 @@ class _Root extends ConsumerWidget {
         // Home would offer areas that were never chosen.
         if (!b.settings.tutorialDone &&
             b.realmCount > 0 && b.questionCount == 0 && b.unlockedRealmCount == 0) {
-          return const RealmPickerScreen(firstRun: true);
+          return const RealmPickerScreen(choose: true);
         }
         return const HomeShell();
       },

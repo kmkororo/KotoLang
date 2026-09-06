@@ -18,6 +18,7 @@ import 'package:share_plus/share_plus.dart';
 import '../app.dart';
 import '../core/l10n/languages.dart';
 import '../domain/models.dart';
+import 'field_picker_screen.dart';
 import 'onboarding_screens.dart';
 import 'profile_screen.dart';
 

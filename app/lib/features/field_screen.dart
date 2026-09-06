@@ -129,30 +129,21 @@ class FieldScreen extends ConsumerWidget {
   }
 }
 
-/// Opens one of the areas the AI read off the profile: free while the first
-/// slots last, for Seeds after that. When [toScenes] is set, the scenes
-/// screen follows with the field already chosen — an open field with no
-/// scenes is nothing yet. Returns true when opened.
+/// Opens one of the areas the AI read off the profile: as one of the starting
+/// fields while those are still to be chosen, for Seeds after that. When
+/// [toScenes] is set, the scenes screen follows with the field already
+/// chosen — an open field with no scenes is nothing yet. Returns true when
+/// opened.
 Future<bool> openLockedField(BuildContext context, WidgetRef ref, Field f,
     {bool toScenes = false}) async {
   final s = ref.read(stringsProvider);
   final repo = ref.read(repositoryProvider);
-  final free = await repo.freeFieldSlotsLeft() > 0;
+  // The starting fields are the learner's to choose; after those, a field
+  // is bought with Seeds, and the dialog says so.
+  final choosing = await repo.freeFieldSlotsLeft() > 0;
   if (!context.mounted) return false;
-  if (!free) {
-    final progress = ref.read(progressProvider);
-    if (progress.seeds < realmUnlockCost) {
-      showToast(context, s.t('unlockRealmNeedMore', {'n': realmUnlockCost - progress.seeds}));
-      return false;
-    }
-    final ok = await confirm(
-      context,
-      title: s.t('unlockRealmConfirmTitle', {'realm': f.label}),
-      body: s.t('unlockRealmConfirmBody', {'n': realmUnlockCost}),
-      confirmLabel: s.t('unlockButton'),
-      cancelLabel: s.t('cancel'),
-      destructive: false,
-    );
+  if (!choosing) {
+    final ok = await showLockedFieldDialog(context, ref, f.label);
     if (!ok || !context.mounted) return false;
   }
   final opened = await repo.openField(f.id);
@@ -171,13 +162,122 @@ Future<bool> openLockedField(BuildContext context, WidgetRef ref, Field f,
   return true;
 }
 
+/// The locked field's popup: what it costs, what the learner has, and — when
+/// the balance covers it — the button that opens it. Returns true only when
+/// that button was pressed.
+Future<bool> showLockedFieldDialog(BuildContext context, WidgetRef ref, String label) async {
+  final s = ref.read(stringsProvider);
+  final seeds = ref.read(progressProvider).seeds;
+  final enough = seeds >= realmUnlockCost;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      icon: const Icon(Icons.lock_outline),
+      // A field name can be long; the default headline size wraps it into
+      // three lines on a narrow screen.
+      titleTextStyle: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+      title: Text(s.t('lockedFieldTitle', {'realm': label})),
+      content: Text(s.t('lockedFieldBody', {'n': realmUnlockCost, 'have': seeds})),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text(s.t(enough ? 'cancel' : 'close')),
+        ),
+        if (enough)
+          FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(s.t('seedsCost', {'n': realmUnlockCost})),
+          ),
+      ],
+    ),
+  );
+  return ok ?? false;
+}
+
+/// One field as a card: the name on its own line, so a long one wraps
+/// instead of being squeezed beside a button; under it a small line and,
+/// for a closed field, the button that opens it.
+class FieldCard extends StatelessWidget {
+  final String label;
+  final String? sub;
+  final bool locked;
+
+  /// The button's words, when there is one: "Choose" while starting fields
+  /// are still to be picked, the Seeds price after that.
+  final String? action;
+  final VoidCallback? onTap;
+  const FieldCard({
+    super.key,
+    required this.label,
+    this.sub,
+    this.locked = false,
+    this.action,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final dim = locked ? scheme.onSurfaceVariant : null;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(locked ? Icons.lock_outline : Icons.local_florist,
+                      size: 18, color: locked ? scheme.onSurfaceVariant : scheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(label,
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700, color: dim)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(sub ?? '',
+                        style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                  ),
+                  if (action != null)
+                    FilledButton.tonal(
+                      style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 34),
+                          padding: const EdgeInsets.symmetric(horizontal: 12)),
+                      onPressed: onTap,
+                      child: Text(action!),
+                    )
+                  else
+                    Icon(Icons.chevron_right, size: 18, color: scheme.onSurfaceVariant),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The areas from the profile that are still closed, as a sheet to pick
 /// from. There is nothing to type: a field the AI never heard of would have
 /// no scenes written for it.
 Future<void> showOpenFieldSheet(BuildContext context, WidgetRef ref) async {
   final s = ref.read(stringsProvider);
   final locked = await ref.read(lockedFieldsProvider.future);
-  final free = await ref.read(freeFieldSlotsProvider.future);
+  final left = await ref.read(freeFieldSlotsProvider.future);
   if (!context.mounted) return;
   final picked = await showModalBottomSheet<Field>(
     context: context,
@@ -190,10 +290,10 @@ Future<void> showOpenFieldSheet(BuildContext context, WidgetRef ref) async {
           Text(s.t('fieldAdd'), style: Theme.of(ctx).textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            free > 0 ? s.t('fieldFreeLeft', {'n': free}) : s.t('fieldAddBody', {'n': realmUnlockCost}),
+            left > 0 ? s.t('fieldChooseLeft', {'n': left}) : s.t('fieldAddBody', {'n': realmUnlockCost}),
             style: Theme.of(ctx).textTheme.bodySmall,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           if (locked.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -203,13 +303,16 @@ Future<void> showOpenFieldSheet(BuildContext context, WidgetRef ref) async {
                       .bodyMedium
                       ?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
             ),
-          for (final f in locked)
-            ListTile(
-              leading: Icon(free > 0 ? Icons.lock_open_outlined : Icons.lock_outline),
-              title: Text(f.label),
-              trailing: Text(free > 0 ? s.t('freeTag') : '$realmUnlockCost Seeds'),
+          for (final f in locked) ...[
+            FieldCard(
+              label: f.label,
+              locked: true,
+              sub: s.t('fieldFromProfile'),
+              action: left > 0 ? s.t('fieldChooseButton') : s.t('seedsCost', {'n': realmUnlockCost}),
               onTap: () => Navigator.pop(ctx, f),
             ),
+            const SizedBox(height: 8),
+          ],
         ],
       ),
     ),
