@@ -23,13 +23,11 @@ import 'domain/models.dart';
 import 'domain/progress_service.dart';
 import 'domain/scene.dart';
 import 'domain/skills.dart';
-import 'features/first_run_screen.dart';
+import 'features/ai_screens.dart';
 import 'features/home_screen.dart';
-import 'features/field_picker_screen.dart';
 import 'features/onboarding_screens.dart';
-import 'features/profile_screen.dart';
 import 'features/record_screen.dart';
-import 'features/scene_pack_screen.dart';
+import 'features/start_screen.dart';
 import 'features/settings_screen.dart';
 
 // ---------------------------------------------------------------- providers
@@ -243,7 +241,16 @@ class _KotoLangAppState extends ConsumerState<KotoLangApp>
     }
   }
 
+  /// The same share can arrive twice — once down the stream, once from the
+  /// check on resume — and would open two screens for one reply.
+  String? _lastShare;
+  DateTime _lastShareAt = DateTime.fromMillisecondsSinceEpoch(0);
+
   void _offerShare(String text) {
+    final now = DateTime.now();
+    if (text == _lastShare && now.difference(_lastShareAt) < const Duration(seconds: 5)) return;
+    _lastShare = text;
+    _lastShareAt = now;
     _pendingShare = text;
     _drainShare();
   }
@@ -264,8 +271,8 @@ class _KotoLangAppState extends ConsumerState<KotoLangApp>
     // which says plainly when what arrived is not a scenes reply.
     nav.push(MaterialPageRoute(
       builder: (_) => kind == 'profile'
-          ? ProfileScreen(initialText: text, popOnDone: true)
-          : ScenePackScreen(initialText: text),
+          ? AiReplyScreen(job: AiJob.profile, initialText: text)
+          : AiReplyScreen(job: AiJob.scenes, initialText: text),
     ));
   }
 
@@ -345,17 +352,11 @@ class _Root extends ConsumerWidget {
         if (ref.watch(languageProvider) == null) {
           return const LanguagePickerScreen(firstRun: true);
         }
-        // Two questions and one sample scene, once. A phone that already has
-        // a profile or areas came through the older setup and skips it.
-        if (!b.settings.tutorialDone && b.profile == null && b.realmCount == 0) {
-          return const FirstRunScreen();
-        }
-        // Areas exist but none was ever confirmed and the phone never came
-        // through the new first run: setup was abandoned at the old picker.
-        // Home would offer areas that were never chosen.
-        if (!b.settings.tutorialDone &&
-            b.realmCount > 0 && b.questionCount == 0 && b.unlockedRealmCount == 0) {
-          return const RealmPickerScreen(choose: true);
+        // The setup, until it is done: the overview of the four steps, which
+        // picks the flow up wherever it stopped. A phone that already has a
+        // profile and open fields came through the older setup and skips it.
+        if (!b.settings.tutorialDone && (b.profile == null || b.unlockedRealmCount == 0)) {
+          return const StartOverviewScreen();
         }
         return const HomeShell();
       },

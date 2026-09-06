@@ -12,7 +12,7 @@ import 'package:kotolang/domain/field.dart';
 import 'package:kotolang/domain/progress_service.dart';
 import 'package:kotolang/features/field_screen.dart';
 import 'package:kotolang/features/profile_screen.dart';
-import 'package:kotolang/features/scene_pack_screen.dart';
+import 'package:kotolang/features/ai_screens.dart';
 import 'package:kotolang/features/scene_screen.dart';
 import 'package:kotolang/features/tree_view.dart';
 
@@ -99,7 +99,7 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text(s.t('nextScenesMake')).first);
     await tester.pumpAndSettle();
-    expect(find.byType(ScenePackScreen), findsOneWidget);
+    expect(find.byType(AiPromptScreen), findsOneWidget);
     final picker = tester.widget<DropdownButtonFormField<String>>(find.byKey(const ValueKey('fieldPicker')));
     // Only the learner's own fields are offered, never the samples' four.
     expect(picker.initialValue, isNotNull);
@@ -171,7 +171,7 @@ void main() {
     expect((await repo.realms()).where((r) => !r.unlocked), hasLength(1));
     // An open field with no scenes is nothing yet: the scenes screen follows,
     // with the field already chosen.
-    expect(find.byType(ScenePackScreen), findsOneWidget);
+    expect(find.byType(AiPromptScreen), findsOneWidget);
     final picker = tester.widget<DropdownButtonFormField<String>>(find.byKey(const ValueKey('fieldPicker')));
     expect(picker.initialValue, lockedBefore.first.id);
     await tester.pageBack();
@@ -213,8 +213,11 @@ void main() {
     expect(find.text(s.t('copyPrompt')), findsNothing);
     await tester.tap(find.text(s.t('profileRemake')));
     await tester.pumpAndSettle();
+    // Remaking is the two-screen trip: the prompt first, the reply on the
+    // next screen only.
+    expect(find.byType(AiPromptScreen), findsOneWidget);
     expect(find.text(s.t('copyPrompt')), findsOneWidget);
-    expect(find.text(s.t('scenePasteButton')), findsOneWidget);
+    expect(find.text(s.t('scenePasteButton')), findsNothing);
     expect(find.text(s.t('privacyLine')), findsOneWidget);
   });
 

@@ -17,12 +17,15 @@ import '../domain/models.dart';
 import '../domain/progress_service.dart';
 import 'field_screen.dart' show FieldCard, openLockedField;
 import 'onboarding_screens.dart' show explainSeedGate;
-import 'scene_pack_screen.dart';
+import 'ai_screens.dart';
 
 class RealmPickerScreen extends ConsumerStatefulWidget {
   /// Choosing the starting fields, rather than browsing them all.
   final bool choose;
-  const RealmPickerScreen({super.key, this.choose = false});
+
+  /// On the first run: the step band at the top.
+  final bool firstRun;
+  const RealmPickerScreen({super.key, this.choose = false, this.firstRun = false});
 
   @override
   ConsumerState<RealmPickerScreen> createState() => _RealmPickerScreenState();
@@ -109,6 +112,8 @@ class _RealmPickerScreenState extends ConsumerState<RealmPickerScreen> {
   }
 
   List<Widget> _chooseBody(S s, TextStyle? muted, List<Realm> locked) => [
+        if (widget.firstRun)
+          StepBand(step: 3, title: s.t('step3Title'), hint: s.t('step3Hint')),
         Text(s.t('realmsHint'), style: muted),
         const SizedBox(height: 12),
         for (final r in locked) ...[
@@ -132,7 +137,7 @@ class _RealmPickerScreenState extends ConsumerState<RealmPickerScreen> {
             label: r.label,
             sub: r.hasMaterial ? s.t('hasMaterial') : s.t('unlockedLabel'),
             onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => ScenePackScreen(initialField: r.id))),
+                MaterialPageRoute(builder: (_) => AiPromptScreen(job: AiJob.scenes, initialField: r.id))),
           ),
           const SizedBox(height: 8),
         ],

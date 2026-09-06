@@ -14,7 +14,7 @@ import '../domain/field.dart';
 import '../domain/progress_service.dart';
 import '../domain/scene.dart';
 import '../domain/tree.dart';
-import 'scene_pack_screen.dart';
+import 'ai_screens.dart';
 import 'scene_screen.dart';
 import 'tree_view.dart';
 
@@ -33,7 +33,7 @@ class FieldScreen extends ConsumerWidget {
 
   Future<void> _makeScenes(BuildContext context, WidgetRef ref) async {
     await Navigator.push(context,
-        MaterialPageRoute(builder: (_) => ScenePackScreen(initialField: field.id)));
+        MaterialPageRoute(builder: (_) => AiPromptScreen(job: AiJob.scenes, initialField: field.id)));
     if (context.mounted) _refresh(ref);
   }
 
@@ -157,7 +157,7 @@ Future<bool> openLockedField(BuildContext context, WidgetRef ref, Field f,
   showToast(context, s.t('fieldAdded', {'name': f.label}));
   if (toScenes) {
     await Navigator.push(
-        context, MaterialPageRoute(builder: (_) => ScenePackScreen(initialField: f.id)));
+        context, MaterialPageRoute(builder: (_) => AiPromptScreen(job: AiJob.scenes, initialField: f.id)));
   }
   return true;
 }

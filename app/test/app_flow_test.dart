@@ -10,6 +10,7 @@ library;
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/native.dart';
@@ -20,9 +21,9 @@ import 'package:kotolang/data/database.dart';
 import 'package:kotolang/data/repository.dart';
 import 'package:kotolang/domain/progress_service.dart';
 import 'package:kotolang/features/first_run_screen.dart';
-import 'package:kotolang/features/profile_screen.dart';
 import 'package:kotolang/features/record_screen.dart';
-import 'package:kotolang/features/scene_pack_screen.dart';
+import 'package:kotolang/features/ai_screens.dart';
+import 'package:kotolang/features/start_screen.dart';
 import 'package:kotolang/features/scene_screen.dart';
 import 'package:kotolang/features/tree_view.dart';
 
@@ -99,6 +100,11 @@ void main() {
     await tester.pumpAndSettle();
 
     final s = S('en');
+    // The overview of the setup first; its button leads to the two questions.
+    expect(find.byType(StartOverviewScreen), findsOneWidget);
+    expect(find.text(s.t('startTitle')), findsOneWidget);
+    await tester.tap(find.text(s.t('startButton')));
+    await tester.pumpAndSettle();
     expect(find.byType(FirstRunScreen), findsOneWidget);
     expect(find.text(s.t('firstRunTitle')), findsOneWidget);
     for (final band in ageBands) {
@@ -109,14 +115,24 @@ void main() {
     }
   });
 
-  testWidgets("the first run keeps the answers and ends pointing at the learner's own AI",
+  testWidgets('the first run: the overview, then step 1 keeps the answers, then step 2 in two screens',
       (tester) async {
     _tallScreen(tester);
     final (db, repo) = await pumpApp(tester, seed: (r) => r.saveUiLanguage('en'));
     addTearDown(db.close);
     final s = S('en');
 
-    // Continue waits for an age.
+    // The overview: four steps and one button.
+    expect(find.byType(StartOverviewScreen), findsOneWidget);
+    for (final k in ['step1Title', 'step2Title', 'step3Title', 'step4Title']) {
+      expect(find.text(s.t(k)), findsOneWidget);
+    }
+    await tester.tap(find.text(s.t('startButton')));
+    await tester.pumpAndSettle();
+
+    // Step 1. Continue waits for an age.
+    expect(find.byType(FirstRunScreen), findsOneWidget);
+    expect(find.text(s.t('stepLabel', {'n': 1, 'total': firstRunSteps})), findsOneWidget);
     final go = find.widgetWithText(FilledButton, s.t('continueLabel'));
     expect(tester.widget<FilledButton>(go).onPressed, isNull);
     await tester.tap(find.text(s.t('age_20s')));
@@ -129,49 +145,51 @@ void main() {
     expect(settings.ageBand, '20s');
     expect(settings.interests, ['travel']);
 
-    // Two ways in. The sample first here; leaving it early still leads on.
-    expect(find.byType(StartChoiceScreen), findsOneWidget);
-    expect(find.text(s.t('firstChoiceAi')), findsOneWidget);
-    await tester.tap(find.text(s.t('firstChoiceSample')));
+    // Step 2, screen A: the prompt. Copying it moves on to screen B.
+    expect(find.byType(AiPromptScreen), findsOneWidget);
+    expect(find.text(s.t('stepLabel', {'n': 2, 'total': firstRunSteps})), findsOneWidget);
+    expect(find.text(s.t('step2Title')), findsOneWidget);
+    final copy = find.widgetWithText(FilledButton, s.t('copyPrompt'));
+    expect(tester.widget<FilledButton>(copy).onPressed, isNotNull);
+    expect(find.text(s.t('scenePasteButton')), findsNothing);
+    // The clipboard is a platform call; in a test it needs someone to answer.
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (_) async => null);
+    await tester.tap(copy);
     await tester.pumpAndSettle();
+
+    // Screen B: only the paste button, and the way back to the prompt.
+    expect(find.byType(AiReplyScreen), findsOneWidget);
+    expect(find.text(s.t('stepLabel', {'n': 2, 'total': firstRunSteps})), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, s.t('scenePasteButton')), findsOneWidget);
+    expect(find.text(s.t('copyPrompt')), findsNothing);
+    await tester.tap(find.text(s.t('promptAgain')));
+    await tester.pumpAndSettle();
+    expect(find.byType(AiPromptScreen), findsOneWidget);
+    expect(find.byType(AiReplyScreen), findsNothing);
+    // Nothing is marked done until the conversations are in.
+    expect((await repo.loadSettings()).tutorialDone, isFalse);
+  });
+
+  testWidgets('trying a sample first goes through the sample to home', (tester) async {
+    _tallScreen(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) => r.saveUiLanguage('en'));
+    addTearDown(db.close);
+    final s = S('en');
+
+    await tester.tap(find.text(s.t('startSample')));
+    await tester.pumpAndSettle();
+    // The sample scene, with the guide on it. Leaving it early still leads on.
     expect(find.byType(SceneScreen), findsOneWidget);
     expect(find.text(s.t('tutListen')), findsOneWidget);
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
 
-    // The sprout: the main button is the way to the learner's own AI.
-    expect(find.text(s.t('sproutTitle')), findsOneWidget);
-    expect(find.text(s.t('sproutSample')), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, s.t('makeOwnScenes')), findsOneWidget);
-    await tester.tap(find.text(s.t('laterSamples')));
-    await tester.pumpAndSettle();
-
-    // Home, on the samples, with the way to the real thing always in view.
+    // Home, on the samples, with the way to the real thing in view and the
+    // samples folded until asked for.
     expect((await repo.loadSettings()).tutorialDone, isTrue);
     expect(find.text(s.t('todaySceneSample')), findsOneWidget);
     expect(find.text(s.t('ownScenesCardTitle')), findsOneWidget);
-    expect(find.text(s.t('axisEmpty')), findsOneWidget);
-  });
-
-  testWidgets('choosing the AI at the start leads straight to making scenes', (tester) async {
-    _tallScreen(tester);
-    final (db, repo) = await pumpApp(tester, seed: (r) => r.saveUiLanguage('en'));
-    addTearDown(db.close);
-    final s = S('en');
-    await tester.tap(find.text(s.t('age_30s')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, s.t('continueLabel')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(s.t('firstChoiceAi')));
-    await tester.pumpAndSettle();
-    expect((await repo.loadSettings()).tutorialDone, isTrue);
-    expect(find.byType(ScenePackScreen), findsOneWidget);
-    // No profile yet: the scenes screen asks for it first.
-    expect(find.text(s.t('scenePackNeedProfile')), findsOneWidget);
-    // Closing it lands on home; the samples stay folded until asked for.
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    expect(find.text(s.t('todaySceneSample')), findsOneWidget);
     expect(find.text(s.t('samplesFieldsTitle')), findsOneWidget);
     expect(find.text(s.t('interest_work')), findsNothing);
   });
@@ -211,7 +229,7 @@ void main() {
     expect(find.text(s.t('todaySceneSample')), findsOneWidget);
     await tester.tap(find.text(s.t('makeOwnScenes')).first);
     await tester.pumpAndSettle();
-    expect(find.byType(ScenePackScreen), findsOneWidget);
+    expect(find.byType(AiPromptScreen), findsOneWidget);
     expect(find.text(s.t('firstSceneMake')), findsOneWidget);
     // The profile is there, so the prompt is ready to copy.
     final copy = find.widgetWithText(FilledButton, s.t('copyPrompt'));
@@ -237,7 +255,9 @@ void main() {
 
     await tester.tap(find.text(s.t('scenePackProfileButton')));
     await tester.pumpAndSettle();
-    expect(find.byType(ProfileScreen), findsOneWidget);
+    // The profile trip: its own prompt screen, titled for the profile.
+    expect(find.text(s.t('profileAiSection')), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, s.t('copyPrompt')), findsOneWidget);
   });
 
   testWidgets('the three bottom tabs all render', (tester) async {

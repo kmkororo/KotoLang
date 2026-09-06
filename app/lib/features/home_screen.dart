@@ -20,7 +20,7 @@ import '../domain/skills.dart';
 import '../domain/tree.dart';
 import 'field_screen.dart';
 import 'listen_screen.dart';
-import 'scene_pack_screen.dart';
+import 'ai_screens.dart';
 import 'scene_screen.dart';
 import 'tree_view.dart';
 
@@ -34,7 +34,7 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Future<void> _openPack(BuildContext context, WidgetRef ref) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => const ScenePackScreen()));
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const AiPromptScreen(job: AiJob.scenes)));
     if (!context.mounted) return;
     ref.invalidate(allScenesProvider);
     _refresh(ref);

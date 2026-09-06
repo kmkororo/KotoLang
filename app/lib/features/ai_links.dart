@@ -60,11 +60,16 @@ class AiLinks extends StatelessWidget {
   /// Disabled while there is nothing to ask for yet.
   final bool enabled;
 
+  /// Called once the assistant has been opened (or has failed to open — the
+  /// prompt is on the clipboard either way), so the caller can move on.
+  final VoidCallback? onOpened;
+
   const AiLinks({
     super.key,
     required this.s,
     required this.prompt,
     this.enabled = true,
+    this.onOpened,
   });
 
   Future<void> _open(BuildContext context, AiService ai) async {
@@ -75,10 +80,10 @@ class AiLinks extends StatelessWidget {
 
     // The installed app first, the web address second.
     final scheme = ai.scheme;
-    if (scheme != null && await _launch(Uri.parse('$scheme://'))) return;
-    if (await _launch(Uri.parse(ai.url))) return;
-
-    if (context.mounted) showToast(context, s.t('openFailed'));
+    final opened = (scheme != null && await _launch(Uri.parse('$scheme://'))) ||
+        await _launch(Uri.parse(ai.url));
+    if (!opened && context.mounted) showToast(context, s.t('openFailed'));
+    onOpened?.call();
   }
 
   /// True only if something actually opened. `canLaunchUrl` is asked first so
