@@ -168,12 +168,12 @@ void main() {
     expect(find.byType(ScenePackScreen), findsOneWidget);
     // No profile yet: the scenes screen asks for it first.
     expect(find.text(s.t('scenePackNeedProfile')), findsOneWidget);
-    // Closing it lands on home, with the samples open since there is
-    // nothing else yet.
+    // Closing it lands on home; the samples stay folded until asked for.
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text(s.t('todaySceneSample')), findsOneWidget);
-    expect(find.text(s.t('interest_work')), findsOneWidget);
+    expect(find.text(s.t('samplesFieldsTitle')), findsOneWidget);
+    expect(find.text(s.t('interest_work')), findsNothing);
   });
 
   testWidgets('a learner with a scene lands on home and can start it', (tester) async {

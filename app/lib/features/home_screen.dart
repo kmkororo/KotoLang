@@ -60,8 +60,7 @@ class HomeScreen extends ConsumerWidget {
 
     final ownScenes = [for (final x in scenes) if (!x.isBuiltin) x];
     final hasOwn = ownScenes.isNotEmpty;
-    // With no scenes of their own yet, the samples are all there is: open.
-    final samplesOpen = ref.watch(samplesOpenProvider) || !hasOwn;
+    final samplesOpen = ref.watch(samplesOpenProvider);
     final done = {for (final r in results) if (!r.review) r.sceneId};
     final allDone = scenes.isNotEmpty && scenes.every((x) => done.contains(x.id));
     final muted = theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
