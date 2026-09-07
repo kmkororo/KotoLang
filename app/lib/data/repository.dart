@@ -1187,6 +1187,7 @@ class Repository {
             .write(const RealmsCompanion(hasMaterial: Value(false)));
       }
     });
+
   }
 
   /// Rebuilds every question from the sentences already stored, and returns
@@ -1840,7 +1841,13 @@ class Repository {
   /// [freeRealmSlots] are free, whenever they are opened.
   Future<int> freeFieldSlotsLeft() async {
     final used = (await loadProgress()).freeFieldsUsed;
-    return (freeRealmSlots - used).clamp(0, freeRealmSlots);
+    // An opening is only spent while the field it opened is still there.
+    // Counting the open fields as well as the tally means deleting a field
+    // hands its opening back, and a phone whose tally drifted before this
+    // rule existed comes right on its own.
+    final open = (await realms()).where((r) => r.unlocked).length;
+    final spent = used < open ? used : open;
+    return (freeRealmSlots - spent).clamp(0, freeRealmSlots);
   }
 
   Future<void> _useFreeFieldSlots(int n) async {

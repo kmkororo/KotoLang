@@ -300,6 +300,32 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
                     const SizedBox(height: 20),
                   ],
 
+                  // Every field deleted: nothing here can be asked for until
+                  // there is a field again, and fields come from the profile.
+                  if (scenes && hasProfile && fields.isEmpty && locked.isEmpty) ...[
+                    Card(
+                      color: scheme.secondaryContainer,
+                      margin: EdgeInsets.zero,
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(s.t('fieldsGoneBody'),
+                                style: TextStyle(color: scheme.onSecondaryContainer)),
+                            const SizedBox(height: 10),
+                            FilledButton.icon(
+                              icon: const Icon(Icons.refresh),
+                              onPressed: _makeProfile,
+                              label: Text(s.t('profileRemake')),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
                   if (scenes) ...[
                     DropdownButtonFormField<String>(
                       key: const ValueKey('fieldPicker'),
@@ -353,7 +379,7 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
                   ),
                   // What this batch costs, said before the trip rather than
                   // after it.
-                  if (scenes) ...[
+                  if (scenes && field != null) ...[
                     const SizedBox(height: 6),
                     Text(
                       _cost == 0

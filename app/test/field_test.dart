@@ -232,4 +232,18 @@ void main() {
     // The next profile must not arrive with its fields already priced.
     expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
   });
+
+  test('deleting every field gives the starting openings back', () async {
+    await repo.importProfile(profileJson(['Nursing', 'Cycling']), uiLanguage: 'en');
+    final ids = [for (final r in await repo.realms()) r.id];
+    await repo.chooseFields(ids);
+    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 2);
+
+    await repo.deleteRealmMaterial(ids.first, removeRealm: true);
+    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 1);
+    await repo.deleteRealmMaterial(ids.last, removeRealm: true);
+    // Nothing is open, so nothing has been opened: the three are owed again.
+    expect(await repo.realms(), isEmpty);
+    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
+  });
 }

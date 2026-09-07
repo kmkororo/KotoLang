@@ -214,7 +214,7 @@ class S {
     'step4Title', 'step4Hint', 'promptStepHint', 'replyStepTitle', 'replyStepHint', 'promptAgain',
     'homeFieldScenes', 'homeSampleScenes', 'fieldStart', 'sceneAddFirstFree', 'sceneAddPriced',
     'feedbackButton', 'feedbackLockedTitle', 'feedbackLockedBody', 'sceneYourTurn',
-    'sceneNextButton',
+    'sceneNextButton', 'fieldsGoneBody',
 
   ];
 }
@@ -839,6 +839,7 @@ const _catalogueCore = <String, Map<String, String>>{
     'feedbackLockedBody': "Finish {n} conversations in this field and this opens. You are at {d}.",
     'sceneYourTurn': "choose below",
     'sceneNextButton': "Next",
+    'fieldsGoneBody': "No fields left. Remaking your profile brings back the ones your AI found.",
   },
 
   // =========================================================== Japanese
@@ -1419,5 +1420,6 @@ const _catalogueCore = <String, Map<String, String>>{
     'feedbackLockedBody': "この分野の“会話”を{n}回終えると使えます。いまは{d}回です。",
     'sceneYourTurn': "choose below",
     'sceneNextButton': "Next",
+    'fieldsGoneBody': "分野がありません。プロフィールを作り直すと、AI が読み取った分野が戻ります。",
   },
 };
