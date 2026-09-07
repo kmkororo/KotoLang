@@ -15,7 +15,7 @@ import '../core/l10n/strings.dart';
 import '../domain/field.dart';
 import '../domain/models.dart';
 import '../domain/progress_service.dart';
-import 'field_screen.dart' show FieldCard, openLockedField;
+import 'field_screen.dart' show FieldCard, FieldScreen, openLockedField;
 import 'onboarding_screens.dart' show explainSeedGate;
 import 'ai_screens.dart';
 
@@ -136,8 +136,14 @@ class _RealmPickerScreenState extends ConsumerState<RealmPickerScreen> {
           FieldCard(
             label: r.label,
             sub: r.hasMaterial ? s.t('hasMaterial') : s.t('unlockedLabel'),
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => AiPromptScreen(job: AiJob.scenes, initialField: r.id))),
+            // The field's own screen, the same as from home: asking for more
+            // is one of the three things there, and it checks the balance
+            // before the trip to the AI rather than after it.
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) =>
+                        FieldScreen(field: Field(id: r.id, label: r.label), own: true))),
           ),
           const SizedBox(height: 8),
         ],

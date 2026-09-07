@@ -115,9 +115,8 @@ void main() {
     expect(find.byType(AiPromptScreen), findsOneWidget);
     final picker =
         tester.widget<DropdownButtonFormField<String>>(find.byKey(const ValueKey('fieldPicker')));
-    // Only the learner's own fields are offered, never the samples' four.
-    expect(picker.initialValue, isNotNull);
-    expect(picker.initialValue, isNot(isIn(builtinFieldIds)));
+    // The field carries over from the screen it was opened from.
+    expect(picker.initialValue, defaultFieldId);
     expect(find.text(s.t('privacyLine')), findsOneWidget);
   });
 
@@ -150,6 +149,61 @@ void main() {
     await tester.tap(find.text(s.t('close')));
     await tester.pumpAndSettle();
     expect(find.byType(AiPromptScreen), findsNothing);
+  });
+
+  testWidgets('a field of their own that is one of the built-in four keeps its name',
+      (tester) async {
+    // Conversations imported before fields existed sit in the default field,
+    // which is one of the samples' four. Asking for more there must stay in
+    // that field rather than silently moving to another.
+    tall(tester);
+    final (db, _) = await pumpApp(tester, seed: (r) async {
+      await seedLearner(r);
+      await r.saveProgress((await r.loadProgress()).copyWith(seeds: sceneAddCost));
+    });
+    addTearDown(db.close);
+    final s = S('en');
+
+    await tester.tap(find.text(s.t('homeFieldScenes')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.t('interest_$defaultFieldId')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.t('nextScenesMake')));
+    await tester.pumpAndSettle();
+    final picker =
+        tester.widget<DropdownButtonFormField<String>>(find.byKey(const ValueKey('fieldPicker')));
+    expect(picker.initialValue, defaultFieldId);
+  });
+
+  testWidgets('with the field answered through, the results open on the prompt',
+      (tester) async {
+    tall(tester);
+    final (db, repo) = await pumpApp(tester, seed: (r) async {
+      await seedLearner(r, withScene: false);
+      await r.importScenes(pack([for (var i = 0; i < feedbackAfter; i++) scene('Talk $i')]),
+          uiLanguage: 'en');
+      for (final sc in await r.scenes()) {
+        await r.recordSceneExchange(
+            sceneId: sc.id, exchange: 0, gistOk: true, replyOk: false);
+      }
+    });
+    addTearDown(db.close);
+    final s = S('en');
+    expect(await repo.scenes(), hasLength(feedbackAfter));
+
+    await tester.tap(find.text(s.t('homeFieldScenes')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(s.t('interest_$defaultFieldId')));
+    await tester.pumpAndSettle();
+    // Every conversation here is answered, so the button is a button again.
+    expect(find.text('$feedbackAfter / $feedbackAfter'), findsNothing);
+    await tester.tap(find.text(s.t('feedbackButton')));
+    await tester.pumpAndSettle();
+    expect(find.text(s.t('feedbackLockedTitle')), findsNothing);
+    expect(find.byType(AiPromptScreen), findsOneWidget);
+    // One way: the prompt is copied, and no reply is asked for.
+    expect(find.widgetWithText(FilledButton, s.t('copyPrompt')), findsOneWidget);
+    expect(find.byKey(const ValueKey('fieldPicker')), findsNothing);
   });
 
   testWidgets('home scrolls back up from the bottom', (tester) async {

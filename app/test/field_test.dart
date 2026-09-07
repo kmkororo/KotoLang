@@ -141,4 +141,30 @@ void main() {
     final none = await repo.scenesPromptText(uiLanguage: 'en');
     expect(none, isNot(contains('This set is about')));
   });
+
+  test('the feedback prompt carries the field, the score and what was missed', () async {
+    await repo.importScenes(pack([scene('Stay late')]), uiLanguage: 'en', field: 'work');
+    final sc = (await repo.scenes()).single;
+    await repo.recordSceneExchange(
+        sceneId: sc.id, exchange: 0, gistOk: false, replyOk: true);
+    await repo.recordSceneExchange(
+        sceneId: sc.id, exchange: 1, gistOk: true, replyOk: true);
+
+    final text = await repo.feedbackPromptText(
+        uiLanguage: 'en', fieldId: 'work', fieldLabel: 'English at work');
+    expect(text, contains('"English at work"'));
+    expect(text, contains('conversations finished: 1'));
+    expect(text, contains('got the gist right: 50%'));
+    expect(text, contains('chose a fitting reply: 100%'));
+    expect(text, contains('missed: the gist of their line'));
+    expect(text, contains(sc.exchanges[0].line));
+    // Nothing to import comes back, so the reply is asked for as prose.
+    expect(text, contains('No JSON'));
+
+    // A field with nothing answered has nothing to say about it.
+    final empty = await repo.feedbackPromptText(
+        uiLanguage: 'en', fieldId: 'travel', fieldLabel: 'Travel');
+    expect(empty, contains('(nothing missed)'));
+    expect(empty, contains('conversations finished: 0'));
+  });
 }

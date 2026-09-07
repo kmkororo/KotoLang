@@ -234,7 +234,11 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
     // their profile — never for the samples' four.
     final fieldsAsync = ref.watch(fieldsProvider);
     final lockedAsync = ref.watch(lockedFieldsProvider);
-    final fields = [for (final f in fieldsAsync.value ?? const <Field>[]) if (!f.builtin) f];
+    // Their own fields, never the samples' four — except when the field
+    // already chosen is one of those: conversations imported before fields
+    // existed sit in the default field, and it is still theirs.
+    final all = fieldsAsync.value ?? const <Field>[];
+    final fields = [for (final f in all) if (!f.builtin || f.id == _field) f];
     final locked = lockedAsync.value ?? const <Field>[];
     final left = ref.watch(freeFieldSlotsProvider).value ?? 0;
     // A field that is no longer there is dropped — but only once the lists
@@ -531,10 +535,23 @@ class _AiReplyScreenState extends ConsumerState<AiReplyScreen> {
       final left = await repo.freeFieldSlotsLeft();
       final anyLocked = (await repo.realms()).any((r) => !r.unlocked);
       if (!mounted) return;
+      final setup = !ref.read(settingsProvider).tutorialDone;
       if (left > 0 && anyLocked) {
         await Navigator.push(
-            context, MaterialPageRoute(builder: (_) => const RealmPickerScreen(choose: true)));
+            context,
+            MaterialPageRoute(
+                builder: (_) => RealmPickerScreen(choose: true, firstRun: setup)));
         if (!mounted) return;
+      }
+      // Mid-setup, a profile that arrived through the share sheet still owes
+      // the learner step 4 — otherwise the flow ends here, and home is
+      // reached without their AI ever being asked for conversations.
+      if (setup) {
+        Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+                builder: (_) => const AiPromptScreen(job: AiJob.scenes, firstRun: true)));
+        return;
       }
       Navigator.pop(context);
     } else {

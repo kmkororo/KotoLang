@@ -66,15 +66,15 @@ class _FieldScreenState extends ConsumerState<FieldScreen> {
     if (mounted) _refresh();
   }
 
-  Future<void> _feedback(int done) async {
+  Future<void> _feedback(int done, int need) async {
     final s = ref.read(stringsProvider);
-    if (done < feedbackAfter) {
+    if (done < need) {
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
           icon: const Icon(Icons.insights_outlined),
           title: Text(s.t('feedbackLockedTitle')),
-          content: Text(s.t('feedbackLockedBody', {'n': feedbackAfter, 'd': done})),
+          content: Text(s.t('feedbackLockedBody', {'n': need, 'd': done})),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.t('close'))),
           ],
@@ -152,13 +152,19 @@ class _FieldScreenState extends ConsumerState<FieldScreen> {
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
                 ],
-                const SizedBox(height: 10),
-                _FeedbackButton(
-                  label: s.t('feedbackButton'),
-                  done: n,
-                  need: feedbackAfter,
-                  onTap: () => _feedback(n),
-                ),
+                // Sending the results back needs enough of them — but never
+                // more than this field holds, or a small field could never
+                // reach it.
+                if (scenes.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _FeedbackButton(
+                    label: s.t('feedbackButton'),
+                    done: n,
+                    need: feedbackAfter < scenes.length ? feedbackAfter : scenes.length,
+                    onTap: () => _feedback(
+                        n, feedbackAfter < scenes.length ? feedbackAfter : scenes.length),
+                  ),
+                ],
               ],
             ],
           ),
