@@ -167,4 +167,69 @@ void main() {
     expect(empty, contains('(nothing missed)'));
     expect(empty, contains('conversations finished: 0'));
   });
+
+  test('deleting a field takes its conversations and the record of them', () async {
+    await repo.saveProgress((await repo.loadProgress()).copyWith(seeds: realmUnlockCost));
+    final mine = (await repo.addField('Cooking'))!;
+    await repo.importScenes(pack([scene('Stew')]), uiLanguage: 'en', field: mine.id);
+    await repo.importScenes(pack([scene('Standup')]), uiLanguage: 'en', field: 'work');
+    final here = (await repo.scenes()).firstWhere((s) => fieldOf(s) == mine.id);
+    await repo.recordSceneExchange(
+        sceneId: here.id, exchange: 0, gistOk: false, replyOk: false);
+    expect(await repo.sceneResults(), isNotEmpty);
+    expect(await repo.reviews(), isNotEmpty);
+
+    // The plan says what is about to go, in the terms the app now uses.
+    expect((await repo.planRealmDeletion(mine.id)).scenes, 1);
+
+    await repo.deleteRealmMaterial(mine.id, removeRealm: true);
+    final left = await repo.scenes();
+    expect(left.map((s) => fieldOf(s)), everyElement('work'));
+    expect(await repo.sceneResults(), isEmpty);
+    expect(await repo.reviews(), isEmpty);
+    // Nothing is left pointing at a field that no longer exists.
+    expect((await repo.realms()).map((r) => r.id), isNot(contains(mine.id)));
+  });
+
+  test('deleting every conversation takes the answers to them too', () async {
+    await repo.importScenes(pack([scene('Standup')]), uiLanguage: 'en', field: 'work');
+    final sc = (await repo.scenes()).single;
+    await repo.recordSceneExchange(
+        sceneId: sc.id, exchange: 0, gistOk: false, replyOk: true);
+
+    await repo.deleteAllMaterial();
+    expect(await repo.scenes(), isEmpty);
+    // A grown tree and a full record with nothing behind them is the bug.
+    expect(await repo.sceneResults(), isEmpty);
+    expect(await repo.reviews(), isEmpty);
+  });
+
+  test('a progress reset does not hand back the fields already opened for nothing',
+      () async {
+    for (final n in ['A', 'B', 'C']) {
+      await db.into(db.realms).insertOnConflictUpdate(
+          realmToRow(realm(n).copyWith(unlocked: false)));
+    }
+    expect(await repo.openField('A'), isTrue);
+    expect(await repo.openField('B'), isTrue);
+    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 2);
+
+    await repo.resetProgress();
+    // Seeds and the streak go; the two fields are still open, so the two
+    // openings they cost stay spent.
+    expect((await repo.loadProgress()).seeds, 0);
+    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 2);
+    expect((await repo.realms()).where((r) => r.unlocked), hasLength(2));
+  });
+
+  test('clearing the profile gives the starting fields back', () async {
+    await repo.importProfile(profileJson(['Nursing', 'Cycling']), uiLanguage: 'en');
+    await repo.chooseFields([for (final r in await repo.realms()) r.id]);
+    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 2);
+
+    await repo.resetProfileAndRealms();
+    expect(await repo.realms(), isEmpty);
+    // The next profile must not arrive with its fields already priced.
+    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
+  });
 }

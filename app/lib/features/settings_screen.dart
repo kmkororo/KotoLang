@@ -341,9 +341,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final ok = await confirm(
       context,
       title: removeRealm ? s.t('deleteRealmEntirely') : s.t('deleteRealmMaterial'),
-      body: '${s.t('readyItems')}: ${plan.items} · '
-          '${s.t('readySentences')}: ${plan.sentences} · '
-          '${s.t('readyQuestions')}: ${plan.questions}',
+      body: '${s.t('scenesDoneLabel')}: ${plan.scenes}',
       confirmLabel: s.t('confirmLabel'),
       cancelLabel: s.t('cancel'),
     );

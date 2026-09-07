@@ -1112,7 +1112,7 @@ class Repository {
   // ------------------------------------------------------------------ resets
 
   /// What deleting a realm would remove. Shown before anything is touched.
-  Future<({int items, int sharedItems, int sentences, int questions, int srs})>
+  Future<({int items, int sharedItems, int sentences, int questions, int srs, int scenes})>
       planRealmDeletion(String realmId) async {
     final sents = (await sentences()).where((s) => s.realmId == realmId).toList();
     final sentIds = sents.map((s) => s.id).toSet();
@@ -1130,6 +1130,9 @@ class Repository {
       sentences: sents.length,
       questions: qs.length,
       srs: states,
+      scenes: (await scenes(includeDisabled: true))
+          .where((s) => fieldOf(s) == realmId)
+          .length,
     );
   }
 
@@ -1141,6 +1144,14 @@ class Repository {
     final qs = (await questions())
         .where((q) => q.realmId == realmId || sentIds.contains(q.sentenceId))
         .toList();
+    // The conversations of this field, and the record of answering them. A
+    // field's conversations are what the field IS now: leaving them behind
+    // would keep them in the tree and in "today's conversation" while their
+    // field is gone from every list.
+    final mine = [
+      for (final s in await scenes(includeDisabled: true))
+        if (fieldOf(s) == realmId) s.id
+    ];
     final owned = (await items()).where((i) => i.realmIds.contains(realmId)).toList();
 
     await db.transaction(() async {
@@ -1163,6 +1174,11 @@ class Repository {
         }
       }
       await (db.delete(db.batches)..where((t) => t.realmId.equals(realmId))).go();
+      for (final id in mine) {
+        await (db.delete(db.scenes)..where((t) => t.id.equals(id))).go();
+        await (db.delete(db.sceneResults)..where((t) => t.sceneId.equals(id))).go();
+        await (db.delete(db.reviews)..where((t) => t.sceneId.equals(id))).go();
+      }
 
       if (removeRealm) {
         await (db.delete(db.realms)..where((t) => t.id.equals(realmId))).go();
@@ -1227,6 +1243,11 @@ class Repository {
       await db.delete(db.debates).go();
       await db.delete(db.scenes).go();
       await db.delete(db.chunks).go();
+      // The answers were about conversations that are going: keeping them
+      // would leave the tree grown and the record full with nothing behind
+      // either of them.
+      await db.delete(db.sceneResults).go();
+      await db.delete(db.reviews).go();
     });
     await _delMeta('recentSentences');
   }
@@ -1244,7 +1265,11 @@ class Repository {
       await db.delete(db.reviews).go();
       await db.delete(db.failures).go();
     });
-    await saveProgress(const Progress());
+    // Seeds and the streak are progress and go. How many fields were opened
+    // without paying is not: the fields are still open, so handing the free
+    // openings back would be three more fields for nothing.
+    final opened = (await loadProgress()).freeFieldsUsed;
+    await saveProgress(Progress(freeFieldsUsed: opened));
     await _delMeta('recentSentences');
   }
 
@@ -1271,6 +1296,10 @@ class Repository {
       await db.delete(db.failures).go();
     });
     await _delMeta('profile');
+    // Every field is gone with the profile, so the three that open for
+    // nothing are owed again — otherwise the next profile arrives with its
+    // fields already priced.
+    await saveProgress((await loadProgress()).copyWith(freeFieldsUsed: 0));
     await _delMeta('recentSentences');
   }
 
