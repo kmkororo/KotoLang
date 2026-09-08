@@ -187,8 +187,12 @@ void main() {
     expect(left.map((s) => fieldOf(s)), everyElement('work'));
     expect(await repo.sceneResults(), isEmpty);
     expect(await repo.reviews(), isEmpty);
-    // Nothing is left pointing at a field that no longer exists.
-    expect((await repo.realms()).map((r) => r.id), isNot(contains(mine.id)));
+    // The field is closed rather than destroyed: it goes back to the list it
+    // came off, where it can be opened again.
+    final after = (await repo.realms()).firstWhere((r) => r.id == mine.id);
+    expect(after.unlocked, isFalse);
+    expect(lockedFieldsFrom(await repo.realms(), (id) => id).map((f) => f.id),
+        contains(mine.id));
   });
 
   test('deleting every conversation takes the answers to them too', () async {
@@ -242,8 +246,10 @@ void main() {
     await repo.deleteRealmMaterial(ids.first, removeRealm: true);
     expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 1);
     await repo.deleteRealmMaterial(ids.last, removeRealm: true);
-    // Nothing is open, so nothing has been opened: the three are owed again.
-    expect(await repo.realms(), isEmpty);
+    // Nothing is open, so nothing has been opened: the three are owed again,
+    // and both fields are still on the list to be opened with.
+    expect((await repo.realms()).where((r) => r.unlocked), isEmpty);
+    expect(lockedFieldsFrom(await repo.realms(), (id) => id), hasLength(2));
     expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
   });
 }

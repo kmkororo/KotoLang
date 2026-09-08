@@ -1180,12 +1180,16 @@ class Repository {
         await (db.delete(db.reviews)..where((t) => t.sceneId.equals(id))).go();
       }
 
-      if (removeRealm) {
-        await (db.delete(db.realms)..where((t) => t.id.equals(realmId))).go();
-      } else {
-        await (db.update(db.realms)..where((t) => t.id.equals(realmId)))
-            .write(const RealmsCompanion(hasMaterial: Value(false)));
-      }
+      // Closing a field, not destroying it. The area came off the profile and
+      // stays on the list it came from, so a field opened with Seeds can be
+      // opened again and the picker keeps offering it; deleting the row would
+      // put it out of reach for good.
+      await (db.update(db.realms)..where((t) => t.id.equals(realmId))).write(
+        RealmsCompanion(
+          hasMaterial: const Value(false),
+          unlocked: Value(!removeRealm),
+        ),
+      );
     });
 
   }
@@ -1299,8 +1303,11 @@ class Repository {
     await _delMeta('profile');
     // Every field is gone with the profile, so the three that open for
     // nothing are owed again — otherwise the next profile arrives with its
-    // fields already priced.
-    await saveProgress((await loadProgress()).copyWith(freeFieldsUsed: 0));
+    // fields already priced. The streak counted days of answering that are
+    // gone with them, so it goes too; the Seeds those answers earned are
+    // spending money and stay.
+    final had = await loadProgress();
+    await saveProgress(Progress(seeds: had.seeds, freezes: had.freezes));
     await _delMeta('recentSentences');
   }
 

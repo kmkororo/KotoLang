@@ -17,10 +17,12 @@ import 'package:share_plus/share_plus.dart';
 
 import '../app.dart';
 import '../core/l10n/languages.dart';
+import '../domain/field.dart';
 import '../domain/models.dart';
 import 'field_picker_screen.dart';
 import 'onboarding_screens.dart';
 import 'profile_screen.dart';
+import 'tree_view.dart';
 
 final _realmsProvider =
     FutureProvider.autoDispose<List<Realm>>((ref) => ref.watch(repositoryProvider).realms());
@@ -51,7 +53,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final settings = ref.watch(settingsProvider);
     final speech = ref.watch(speechProvider);
     final lang = ref.watch(languageProvider) ?? fallbackLanguage;
-    final realms = ref.watch(_realmsProvider).value ?? const <Realm>[];
+    // Every field the learner can actually study in — the samples' four and
+    // the areas they have opened. A field never opened has nothing to clear.
+    final fields = ref.watch(fieldsProvider).value ?? const <Field>[];
     final theme = Theme.of(context);
 
     return ListView(
@@ -206,29 +210,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           const SizedBox(height: 12),
-          if (realms.isNotEmpty) ...[
+          if (fields.isNotEmpty) ...[
             DropdownButtonFormField<String>(
-              initialValue: _resetRealmId ?? realms.first.id,
+              initialValue: _resetRealmId ?? fields.first.id,
               isExpanded: true,
               decoration: InputDecoration(labelText: s.t('resetRealmLabel'), isDense: true),
               items: [
-                for (final r in realms)
+                for (final f in fields)
                   DropdownMenuItem(
-                      value: r.id,
-                      child: Text(r.label, overflow: TextOverflow.ellipsis)),
+                      value: f.id,
+                      child: Text(f.label, overflow: TextOverflow.ellipsis)),
               ],
               onChanged: (v) => setState(() => _resetRealmId = v),
             ),
             const SizedBox(height: 8),
             OutlinedButton(
-              onPressed: () => _deleteRealm(realms, removeRealm: false),
+              onPressed: () => _deleteRealm(fields, removeRealm: false),
               child: Text(s.t('deleteRealmMaterial')),
             ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: () => _deleteRealm(realms, removeRealm: true),
-              child: Text(s.t('deleteRealmEntirely')),
-            ),
+            // Only a field of their own can be closed again. The samples' four
+            // are always there, so there is nothing to close.
+            if (!(fields
+                    .where((f) => f.id == (_resetRealmId ?? fields.first.id))
+                    .firstOrNull
+                    ?.builtin ??
+                true)) ...[
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () => _deleteRealm(fields, removeRealm: true),
+                child: Text(s.t('deleteRealmEntirely')),
+              ),
+            ],
           ],
           // Everything below wipes more than one area. Rarely wanted, and
           // permanent, so it is folded away rather than sitting one stray tap
@@ -305,6 +317,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  /// Everything a reset can move. The screens that read these are all still
+  /// alive underneath this one, so leaving any of them cached shows the
+  /// learner data that no longer exists until they restart the app.
+  void _forgetEverything() {
+    ref.invalidate(_realmsProvider);
+    ref.invalidate(realmsProvider);
+    ref.invalidate(fieldsProvider);
+    ref.invalidate(lockedFieldsProvider);
+    ref.invalidate(freeFieldSlotsProvider);
+    ref.invalidate(allScenesProvider);
+    ref.invalidate(sceneResultsProvider);
+    ref.invalidate(skillStatsProvider);
+    ref.invalidate(treeDataProvider);
+  }
+
   Future<void> _confirmed({
     required String title,
     required Future<void> Function() action,
@@ -320,8 +347,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (!ok) return;
     await action();
     if (!mounted) return;
+    // A reset that clears the settings clears the chosen voice with them.
+    // The speech engine is set up once per launch and would otherwise keep
+    // reporting the old voice until the app is next started.
+    final voice = ref.read(settingsProvider).voiceName;
+    if (voice != null && voice.isNotEmpty) await ref.read(speechProvider).setVoice(voice);
+    if (!mounted) return;
     showToast(context, s.t('deletedLabel'));
-    ref.invalidate(_realmsProvider);
+    _forgetEverything();
     await reload(ref);
     if (!mounted) return;
     // A reset can change which screen the app should be on entirely — a
@@ -331,9 +364,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     Navigator.of(context).popUntil((r) => r.isFirst);
   }
 
-  Future<void> _deleteRealm(List<Realm> realms, {required bool removeRealm}) async {
+  Future<void> _deleteRealm(List<Field> fields, {required bool removeRealm}) async {
     final s = ref.read(stringsProvider);
-    final id = _resetRealmId ?? realms.first.id;
+    final id = _resetRealmId ?? fields.first.id;
     final repo = ref.read(repositoryProvider);
     final plan = await repo.planRealmDeletion(id);
 
@@ -351,7 +384,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (!mounted) return;
     showToast(context, s.t('deletedLabel'));
     setState(() => _resetRealmId = null);
-    ref.invalidate(_realmsProvider);
+    _forgetEverything();
     await reload(ref);
     if (!mounted) return;
     // Removing the last area leaves nothing to study, so let the root re-route.

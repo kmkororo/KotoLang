@@ -236,7 +236,17 @@ class _SeedsBlockState extends ConsumerState<_SeedsBlock> {
       ),
       if (locked.isNotEmpty) ...[
         const SizedBox(height: 10),
-        Text(s.t('unlockRealmCost', {'n': realmUnlockCost}), style: theme.textTheme.bodySmall),
+        // The price only applies once the starting fields are chosen; quoting
+        // it while they are still owed contradicts the picker, which gives
+        // those away.
+        Builder(builder: (_) {
+          final left = ref.watch(freeFieldSlotsProvider).value ?? 0;
+          return Text(
+              left > 0
+                  ? s.t('fieldChooseLeft', {'n': left})
+                  : s.t('unlockRealmCost', {'n': realmUnlockCost}),
+              style: theme.textTheme.bodySmall);
+        }),
         const SizedBox(height: 6),
         OutlinedButton(
           onPressed: () async {
