@@ -952,9 +952,9 @@ String feedbackPrompt({
   required String field,
   required String level,
   required int scenesDone,
-  required int gistPct,
-  required int replyPct,
-  required List<({String topic, String line, bool gist, bool reply})> misses,
+  required int rightPct,
+  required int firstTimePct,
+  required List<({String topic, String line, String? slot})> misses,
 }) {
   final native = languageFor(uiLanguage).englishName;
   final missText = misses.isEmpty
@@ -962,21 +962,19 @@ String feedbackPrompt({
       : misses
           .map((m) => '  - topic: ${m.topic}\n'
               '    they said: "${m.line}"\n'
-              '    missed: ${[
-                if (m.gist) 'the gist of their line',
-                if (m.reply) 'choosing a reply that fits'
-              ].join(' and ')}')
+              '    missed: ${m.slot ?? 'the line as a whole'}')
           .join('\n');
 
   return '''
 You are coaching one person who is learning to understand spoken English by
-ear (CEFR $level). They practise with short conversations: they hear a line,
-choose what it meant, then choose how to reply.
+ear (CEFR $level). They practise with short conversations: the three possible
+replies are on screen first, then one line is spoken once, and they choose
+before a short window closes. So a miss is a hearing, not a reading.
 
 THEIR RESULTS IN THE AREA "$field"
 - conversations finished: $scenesDone
-- got the gist right: $gistPct% of the time
-- chose a fitting reply: $replyPct% of the time
+- chose the right reply: $rightPct% of the time
+- got it on the first hearing, inside the window: $firstTimePct% of the time
 
 WHAT THEY MISSED
 $missText
@@ -984,7 +982,8 @@ $missText
 WHAT TO WRITE BACK
 1. One short paragraph: the pattern behind the misses, in plain words. Name
    the kind of thing they mishear (numbers, times, negatives, places, who is
-   doing what), not the individual mistakes.
+   doing what), not the individual mistakes. A reply chosen too slowly is a
+   different problem from one chosen wrongly; say which you are seeing.
 2. Three things to listen for next time, one line each, concrete enough to
    act on while listening.
 3. One short paragraph: what is already working, so they know what to keep.

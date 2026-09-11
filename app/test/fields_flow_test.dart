@@ -18,8 +18,7 @@ import 'package:kotolang/features/tree_view.dart';
 
 import 'app_flow_test.dart' show pumpApp, seedLearner;
 import 'repository_test.dart' show profileJson;
-import 'scene_flow_test.dart' show pumpScene, choose, goOn;
-import 'scene_test.dart' show pack, scene;
+import 'fixtures.dart' show pack, scene;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +29,7 @@ void main() {
     addTearDown(tester.view.reset);
   }
 
-  testWidgets('home offers a field of their own and the samples, each behind a picker',
+  testWidgets('home puts the fields behind a picker, not on home itself',
       (tester) async {
     tall(tester);
     final (db, _) = await pumpApp(tester, seed: seedLearner);
@@ -38,27 +37,12 @@ void main() {
     final s = S('en');
 
     expect(find.text(s.t('todayRandomNote')), findsOneWidget);
-    // Three ways in, in one family: today's, a field of their own, the
-    // samples. Neither list is on home itself.
+    // Two ways in, in one family: today's, and a field of their own. Neither
+    // list is on home itself. The samples button is not here because there
+    // are no samples yet — it comes back with them.
     expect(find.text(s.t('todayScene')), findsOneWidget);
     expect(find.text(s.t('homeFieldScenes')), findsOneWidget);
-    expect(find.text(s.t('homeSampleScenes')), findsOneWidget);
     expect(find.text(s.t('interest_travel')), findsNothing);
-
-    // The samples' picker lists the four built-in fields.
-    await tester.tap(find.text(s.t('homeSampleScenes')));
-    await tester.pumpAndSettle();
-    for (final id in builtinFieldIds) {
-      expect(find.text(s.t('interest_$id')), findsOneWidget, reason: id);
-    }
-    await tester.tap(find.text(s.t('interest_travel')));
-    await tester.pumpAndSettle();
-    expect(find.byType(FieldScreen), findsOneWidget);
-    // A field is a place to start, not a list to read.
-    expect(find.text(s.t('fieldStart')), findsOneWidget);
-    expect(find.text(s.t('feedbackButton')), findsNothing);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
 
     // Their own picker leads to the field the imported scene landed in.
     await tester.tap(find.text(s.t('homeFieldScenes')));
@@ -78,7 +62,7 @@ void main() {
     expect(find.byType(FieldScreen), findsOneWidget);
   });
 
-  testWidgets('a sample field only starts; their own also asks for more and for feedback',
+  testWidgets('a field of their own asks for more conversations, and for feedback',
       (tester) async {
     tall(tester);
     final (db, _) = await pumpApp(tester, seed: (r) async {
@@ -88,21 +72,7 @@ void main() {
     addTearDown(db.close);
     final s = S('en');
 
-    // A sample field opens on the samples alone: nothing to make, nothing to
-    // send back.
-    await tester.tap(find.text(s.t('homeSampleScenes')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(s.t('interest_travel')));
-    await tester.pumpAndSettle();
-    expect(find.byType(FieldScreen), findsOneWidget);
-    expect(find.text(s.t('fieldStart')), findsOneWidget);
-    expect(find.text(s.t('makeOwnScenes')), findsNothing);
-    expect(find.text(s.t('nextScenesMake')), findsNothing);
-    expect(find.text(s.t('feedbackButton')), findsNothing);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    // Their own field: another batch here is priced, since it already has
+    // Another batch here is priced, since the field already has
     // conversations, and the way to it leads to the prompt.
     await tester.tap(find.text(s.t('homeFieldScenes')));
     await tester.pumpAndSettle();
@@ -183,8 +153,7 @@ void main() {
       await r.importScenes(pack([for (var i = 0; i < feedbackAfter; i++) scene('Talk $i')]),
           uiLanguage: 'en');
       for (final sc in await r.scenes()) {
-        await r.recordSceneExchange(
-            sceneId: sc.id, exchange: 0, gistOk: true, replyOk: false);
+        await r.recordTurn(sceneId: sc.id, turn: 0, correct: true);
       }
     });
     addTearDown(db.close);
@@ -320,36 +289,5 @@ void main() {
     expect(find.text(s.t('copyPrompt')), findsOneWidget);
     expect(find.text(s.t('scenePasteButton')), findsNothing);
     expect(find.text(s.t('privacyLine')), findsOneWidget);
-  });
-
-  testWidgets('the scene screen shows whose words are whose, and carries the gist into the reply',
-      (tester) async {
-    final (db, _, sc) = await pumpScene(tester);
-    addTearDown(db.close);
-    final s = S('en');
-
-    // Their side is labelled from the start; yours appears when it is your
-    // turn, as an empty bubble.
-    expect(find.text(s.t('speakerOther')), findsOneWidget);
-    expect(find.text(s.t('speakerYou')), findsNothing);
-    expect(find.text(s.t('afterYourReply')), findsNothing);
-
-    await choose(tester, sc.exchanges[0].gist.correct);
-    await goOn(tester);
-    expect(find.text(s.t('speakerYou')), findsOneWidget);
-    expect(find.text(s.t('sceneYourTurn')), findsOneWidget);
-    // What was heard is folded to a mark, so the reply is not read off it;
-    // a tap opens it.
-    expect(find.text(s.t('heardOk')), findsOneWidget);
-    expect(find.text(sc.exchanges[0].gist.correct), findsNothing);
-    await tester.tap(find.text(s.t('heardOk')));
-    await tester.pumpAndSettle();
-    expect(find.text(sc.exchanges[0].gist.correct), findsOneWidget);
-    await choose(tester, sc.exchanges[0].reply.correct.text);
-    await goOn(tester);
-
-    // The second line says it follows the learner's reply.
-    expect(find.text(sc.exchanges[1].line), findsOneWidget);
-    expect(find.text(s.t('afterYourReply')), findsOneWidget);
   });
 }

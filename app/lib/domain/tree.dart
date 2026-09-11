@@ -82,6 +82,19 @@ int treeStage(int reached) {
   return step.clamp(1, treeStages - 1);
 }
 
+/// How many names the tree answers to. Far fewer than [treeStages] on
+/// purpose: the picture has to change often enough for the climb to be felt,
+/// but the name is the thing the learner repeats to themselves, and something
+/// renamed every other day has no name at all.
+const treeNames = 6;
+
+/// Which name a ladder of [reached] steps has earned.
+int treeName(int reached) {
+  if (reached <= 0) return 0;
+  final n = (reached * (treeNames - 1) / ladderSteps).ceil();
+  return n.clamp(1, treeNames - 1);
+}
+
 class TreeShape {
   /// Steps of the ladder ever reached. The height and girth of the trunk.
   final int reached;

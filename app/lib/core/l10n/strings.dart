@@ -216,6 +216,10 @@ class S {
     'feedbackButton', 'feedbackLockedTitle', 'feedbackLockedBody', 'sceneYourTurn',
     'sceneNextButton', 'fieldsGoneBody',
 
+    // the conversation screen, rebuilt around the ladder
+    'scenePlay', 'sceneWindowGone', 'ladderUp', 'tutRead',
+    'axis_speed', 'axis_noise', 'axis_translation', 'axis_accent', 'axis_replay',
+
   ];
 }
 
@@ -803,6 +807,15 @@ const _catalogueCore = <String, Map<String, String>>{
     'treeStage4': 'Tree',
     'treeStage5': 'Great tree',
     'treeStageUp': 'Your tree is now a {name}',
+    'scenePlay': 'Listen',
+    'sceneWindowGone': 'The moment passed — it comes back tomorrow',
+    'ladderUp': 'A step up',
+    'tutRead': 'Read the three replies first. The line is said once, and you answer from what you heard.',
+    'axis_speed': 'Speed',
+    'axis_noise': 'Noise',
+    'axis_translation': 'Without the translation',
+    'axis_accent': 'Accents',
+    'axis_replay': 'Without a second hearing',
     'fieldNoneLocked': 'Every area from your profile is open. Remake the profile to find more.',
     'fieldChooseLeft': "{n} more to choose",
     'fieldChooseButton': "Choose",
@@ -1384,6 +1397,15 @@ const _catalogueCore = <String, Map<String, String>>{
     'treeStage4': '木',
     'treeStage5': '大木',
     'treeStageUp': '{name}になりました',
+    'scenePlay': '聞く',
+    'sceneWindowGone': '間に合いませんでした。明日また出ます',
+    'ladderUp': '一段上がりました',
+    'tutRead': '先に三つの返事を読みます。相手の一言は一度だけ。聞き取った内容で選びます。',
+    'axis_speed': '速さ',
+    'axis_noise': '雑音',
+    'axis_translation': '訳なし',
+    'axis_accent': '訛り',
+    'axis_replay': '聞き直しなし',
     'fieldNoneLocked': 'プロフィールの分野はすべて開いています。新しい分野は、プロフィールを作り直すと増えます。',
     'fieldChooseLeft': "あと{n}つ選べます",
     'fieldChooseButton': "選ぶ",

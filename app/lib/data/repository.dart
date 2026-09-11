@@ -590,22 +590,22 @@ class Repository {
     ];
 
     var right = 0;
-    var kept = 0;
-    final misses = <({String topic, String line, bool gist, bool reply})>[];
+    var firstTime = 0;
+    final misses = <({String topic, String line, String? slot})>[];
     for (final r in results) {
       if (r.correct) right++;
-      if (r.correct && r.inWindow) kept++;
+      // In the window and right means it was got on one hearing, with no
+      // second saying: the only measure here that is about listening rather
+      // than about choosing.
+      if (r.correct && r.inWindow) firstTime++;
       if (r.correct) continue;
       if (misses.length >= 12) continue;
       final sc = inField[r.sceneId];
       final t = sc?.turns.elementAtOrNull(r.turn);
       if (sc == null || t == null) continue;
-      misses.add((
-        topic: sc.label,
-        line: t.line,
-        gist: r.missedSlot == null,
-        reply: r.missedSlot != null,
-      ));
+      // A named slot says which fact went by them. Nothing named means the
+      // line as a whole, or that the window closed with nothing chosen.
+      misses.add((topic: sc.label, line: t.line, slot: r.missedSlot));
     }
 
     final n = results.length;
@@ -614,8 +614,8 @@ class Repository {
       field: fieldLabel,
       level: profile?.englishLevel ?? 'A2',
       scenesDone: {for (final r in results) if (!r.review) r.sceneId}.length,
-      gistPct: n == 0 ? 0 : (right * 100 / n).round(),
-      replyPct: n == 0 ? 0 : (kept * 100 / n).round(),
+      rightPct: n == 0 ? 0 : (right * 100 / n).round(),
+      firstTimePct: n == 0 ? 0 : (firstTime * 100 / n).round(),
       misses: misses,
     );
   }
@@ -787,7 +787,10 @@ class Repository {
 
   // ------------------------------------------------------------ export/import
 
-  static const backupVersion = '1.0';
+  /// Two is the first backup of the rebuilt app. A file from before it names
+  /// tables this app no longer has and conversations it cannot play, so it is
+  /// refused rather than half-restored.
+  static const backupVersion = 2;
 
   Future<Map<String, dynamic>> exportAll() async {
     Future<List<Map<String, dynamic>>> dump(String table) async {
@@ -800,25 +803,7 @@ class Repository {
       'backup_version': backupVersion,
       'exported_at': DateTime.now().toIso8601String(),
       'data': {
-        for (final t in [
-          'realms',
-          'items',
-          'sentences',
-          'questions',
-          'srs_states',
-          'question_stats',
-          'histories',
-          'batches',
-          'meta',
-          'chunks',
-          'debates',
-          'attempts',
-          'captures',
-          'failures',
-          'scenes',
-          'scene_results',
-          'reviews',
-        ])
+        for (final t in ['realms', 'scenes', 'scene_results', 'reviews', 'meta'])
           t: await dump(t),
       },
     };
@@ -829,6 +814,20 @@ class Repository {
   Future<int> restore(Map<String, dynamic> payload) async {
     if (payload['app'] != 'kotolang') {
       throw const FormatException('not a KotoLang backup');
+    }
+    // A backup taken before the rebuild describes tables this app no longer
+    // has, and conversations in a shape it cannot play. Restoring it row by
+    // row would half-fill the new database with nothing playable in it.
+    //
+    // The old files wrote the version as the string "1.0", so it is read
+    // loosely: a field this app cannot make a number of is older than any
+    // version it can read, which is the same answer either way.
+    final stamp = payload['backup_version'];
+    final version = stamp is num
+        ? stamp.toInt()
+        : int.tryParse('$stamp'.split('.').first) ?? 0;
+    if (version < backupVersion) {
+      throw const FormatException('backup is from before the rebuild');
     }
     final data = payload['data'];
     if (data is! Map) throw const FormatException('backup has no data');

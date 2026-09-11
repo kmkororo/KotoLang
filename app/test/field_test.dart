@@ -15,8 +15,7 @@ import 'package:kotolang/domain/field.dart';
 import 'package:kotolang/domain/progress_service.dart';
 
 import 'repository_test.dart' show profileJson;
-import 'scene_test.dart' show pack, scene;
-import 'tree_test.dart' show realm;
+import 'fixtures.dart' show builtScene, pack, realm, scene;
 
 void main() {
   late AppDatabase db;
@@ -28,13 +27,28 @@ void main() {
   });
   tearDown(() => db.close());
 
-  test('built-in scenes carry their kind as their field', () {
+  test('a field keeps the samples and the learner’s own apart', () {
+    // Read from the scenes given, not from the shipped catalogue: the samples
+    // are being written again for the rebuilt shape, so the shipped one is
+    // empty on purpose and would make this pass for the wrong reason.
+    final all = [
+      builtScene('Sample travel', builtin: true, field: 'travel'),
+      builtScene('Sample work', builtin: true, field: 'work'),
+      builtScene('Their own', field: 'travel'),
+    ];
+    final travel = splitField(all, 'travel');
+    expect(travel.samples.map((s) => s.title), ['Sample travel']);
+    expect(travel.own.map((s) => s.title), ['Their own']);
+    expect(splitField(all, 'school').samples, isEmpty);
+  });
+
+  test('every sample the app ships belongs to one of the four sample fields', () {
+    // Empty today, which is the honest state. The check stands so that the
+    // first sample written for the new shape cannot land in a field that is
+    // never offered.
     for (final sc in builtinScenes('en')) {
       expect(builtinFieldIds, contains(fieldOf(sc)), reason: sc.id);
     }
-    final split = splitField(builtinScenes('ja'), 'travel');
-    expect(split.samples, hasLength(10));
-    expect(split.own, isEmpty);
   });
 
   test('imported scenes land in the field they were asked for; older ones default',
@@ -42,13 +56,11 @@ void main() {
     await repo.importScenes(pack([scene('Stay late')]), uiLanguage: 'en', field: 'work');
     await repo.importScenes(pack([scene('Old one')]), uiLanguage: 'en');
     final own = await repo.scenes();
-    final byTopic = {for (final s in own) s.topic: s};
+    final byTopic = {for (final s in own) s.title: s};
     expect(fieldOf(byTopic['Stay late']!), 'work');
     expect(fieldOf(byTopic['Old one']!), defaultFieldId);
 
-    final work = splitField([...own, ...builtinScenes('en')], 'work');
-    expect(work.own.map((s) => s.topic), ['Stay late']);
-    expect(work.samples, hasLength(10));
+    expect(splitField(own, 'work').own.map((s) => s.title), ['Stay late']);
   });
 
   test('the fields are the four built-ins and then the unlocked areas', () async {
@@ -145,19 +157,17 @@ void main() {
   test('the feedback prompt carries the field, the score and what was missed', () async {
     await repo.importScenes(pack([scene('Stay late')]), uiLanguage: 'en', field: 'work');
     final sc = (await repo.scenes()).single;
-    await repo.recordSceneExchange(
-        sceneId: sc.id, exchange: 0, gistOk: false, replyOk: true);
-    await repo.recordSceneExchange(
-        sceneId: sc.id, exchange: 1, gistOk: true, replyOk: true);
+    await repo.recordTurn(sceneId: sc.id, turn: 0, correct: false);
+    await repo.recordTurn(sceneId: sc.id, turn: 1, correct: true);
 
     final text = await repo.feedbackPromptText(
         uiLanguage: 'en', fieldId: 'work', fieldLabel: 'English at work');
     expect(text, contains('"English at work"'));
     expect(text, contains('conversations finished: 1'));
-    expect(text, contains('got the gist right: 50%'));
-    expect(text, contains('chose a fitting reply: 100%'));
-    expect(text, contains('missed: the gist of their line'));
-    expect(text, contains(sc.exchanges[0].line));
+    expect(text, contains('chose the right reply: 50%'));
+    expect(text, contains('got it on the first hearing, inside the window: 50%'));
+    expect(text, contains('missed: the line as a whole'));
+    expect(text, contains(sc.turns[0].line));
     // Nothing to import comes back, so the reply is asked for as prose.
     expect(text, contains('No JSON'));
 
@@ -174,18 +184,17 @@ void main() {
     await repo.importScenes(pack([scene('Stew')]), uiLanguage: 'en', field: mine.id);
     await repo.importScenes(pack([scene('Standup')]), uiLanguage: 'en', field: 'work');
     final here = (await repo.scenes()).firstWhere((s) => fieldOf(s) == mine.id);
-    await repo.recordSceneExchange(
-        sceneId: here.id, exchange: 0, gistOk: false, replyOk: false);
-    expect(await repo.sceneResults(), isNotEmpty);
+    await repo.recordTurn(sceneId: here.id, turn: 0, correct: false);
+    expect(await repo.turnResults(), isNotEmpty);
     expect(await repo.reviews(), isNotEmpty);
 
     // The plan says what is about to go, in the terms the app now uses.
-    expect((await repo.planRealmDeletion(mine.id)).scenes, 1);
+    expect((await repo.planFieldClear(mine.id)).scenes, 1);
 
-    await repo.deleteRealmMaterial(mine.id, removeRealm: true);
+    await repo.clearField(mine.id, closeField: true);
     final left = await repo.scenes();
     expect(left.map((s) => fieldOf(s)), everyElement('work'));
-    expect(await repo.sceneResults(), isEmpty);
+    expect(await repo.turnResults(), isEmpty);
     expect(await repo.reviews(), isEmpty);
     // The field is closed rather than destroyed: it goes back to the list it
     // came off, where it can be opened again.
@@ -198,13 +207,12 @@ void main() {
   test('deleting every conversation takes the answers to them too', () async {
     await repo.importScenes(pack([scene('Standup')]), uiLanguage: 'en', field: 'work');
     final sc = (await repo.scenes()).single;
-    await repo.recordSceneExchange(
-        sceneId: sc.id, exchange: 0, gistOk: false, replyOk: true);
+    await repo.recordTurn(sceneId: sc.id, turn: 0, correct: false);
 
-    await repo.deleteAllMaterial();
+    await repo.clearEveryField();
     expect(await repo.scenes(), isEmpty);
     // A grown tree and a full record with nothing behind them is the bug.
-    expect(await repo.sceneResults(), isEmpty);
+    expect(await repo.turnResults(), isEmpty);
     expect(await repo.reviews(), isEmpty);
   });
 
@@ -218,7 +226,7 @@ void main() {
     expect(await repo.openField('B'), isTrue);
     expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 2);
 
-    await repo.resetProgress();
+    await repo.forgetAnswers();
     // Seeds and the streak go; the two fields are still open, so the two
     // openings they cost stay spent.
     expect((await repo.loadProgress()).seeds, 0);
@@ -231,7 +239,7 @@ void main() {
     await repo.chooseFields([for (final r in await repo.realms()) r.id]);
     expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 2);
 
-    await repo.resetProfileAndRealms();
+    await repo.resetProfileAndFields();
     expect(await repo.realms(), isEmpty);
     // The next profile must not arrive with its fields already priced.
     expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
@@ -243,9 +251,9 @@ void main() {
     await repo.chooseFields(ids);
     expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 2);
 
-    await repo.deleteRealmMaterial(ids.first, removeRealm: true);
+    await repo.clearField(ids.first, closeField: true);
     expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 1);
-    await repo.deleteRealmMaterial(ids.last, removeRealm: true);
+    await repo.clearField(ids.last, closeField: true);
     // Nothing is open, so nothing has been opened: the three are owed again,
     // and both fields are still on the list to be opened with.
     expect((await repo.realms()).where((r) => r.unlocked), isEmpty);

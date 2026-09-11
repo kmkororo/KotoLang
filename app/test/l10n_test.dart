@@ -2,12 +2,16 @@
 /// every supported language must define every key, with no leftovers, no empty
 /// values, and no placeholder drift between locales.
 library;
-import 'dart:io';
 
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kotolang/core/l10n/languages.dart';
 import 'package:kotolang/core/l10n/strings.dart';
+import 'package:kotolang/domain/field.dart';
+import 'package:kotolang/domain/ladder.dart';
+import 'package:kotolang/domain/progress_service.dart';
+import 'package:kotolang/domain/tree.dart';
 
 void main() {
   test('every supported language has an entry', () {
@@ -164,5 +168,21 @@ void main() {
       }
     }
     expect(supportedLanguages.length, 10);
+  });
+
+  test('every key built from a name has an entry', () {
+    // The scan above only sees a key written out in full. These four families
+    // are put together where they are used — 'axis_$name', 'treeStage$n' — so
+    // a gap in one of them reaches the screen as a raw identifier with
+    // nothing to catch it. Each family is small and countable, so it is
+    // counted.
+    final built = <String>[
+      for (final a in LadderAxis.values) 'axis_${a.name}',
+      for (var n = 0; n <= ladderSteps; n++) 'treeStage${treeName(n)}',
+      for (final id in builtinFieldIds) 'interest_$id',
+      for (final b in ageBands) 'age_${b.replaceAll('+', 'plus')}',
+    ];
+    final unknown = built.toSet().where((k) => !S.keys.contains(k)).toList();
+    expect(unknown, isEmpty, reason: 'built keys with no entry: $unknown');
   });
 }

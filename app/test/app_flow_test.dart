@@ -28,7 +28,7 @@ import 'package:kotolang/features/scene_screen.dart';
 import 'package:kotolang/features/tree_view.dart';
 
 import 'repository_test.dart' show profileJson;
-import 'scene_test.dart' show pack, scene;
+import 'fixtures.dart' show pack, scene;
 
 /// Pumps the app over a fresh in-memory database.
 Future<(AppDatabase, Repository)> pumpApp(
@@ -171,6 +171,10 @@ void main() {
     expect((await repo.loadSettings()).tutorialDone, isFalse);
   });
 
+  // The samples that shipped before were written for a shape the app no
+  // longer has, so there are none to try until they have been written again.
+  // The path is kept here rather than deleted: it is the first thing a new
+  // learner sees, and it has to be walked again the day a sample exists.
   testWidgets('trying a sample first goes through the sample to home', (tester) async {
     _tallScreen(tester);
     final (db, repo) = await pumpApp(tester, seed: (r) => r.saveUiLanguage('en'));
@@ -191,7 +195,8 @@ void main() {
     expect(find.text(s.t('ownScenesCardTitle')), findsOneWidget);
     expect(find.text(s.t('homeSampleScenes')), findsOneWidget);
     expect(find.text(s.t('interest_work')), findsNothing);
-  });
+    // Skipped, not deleted: it comes back with the samples.
+  }, skip: true);
 
   testWidgets('a learner with a scene lands on home and can start it', (tester) async {
     _tallScreen(tester);
@@ -207,29 +212,33 @@ void main() {
     await tester.tap(find.text(s.t('todayScene')));
     await tester.pumpAndSettle();
     expect(find.byType(SceneScreen), findsOneWidget);
-    expect(find.text(s.t('sceneQ1')), findsOneWidget);
+    // The replies are on screen before a word is said; the line is not.
+    expect(find.text(s.t('sceneQ2')), findsOneWidget);
+    expect(find.text(s.t('scenePlay')), findsOneWidget);
 
     // Leaving before anything was answered needs no confirmation.
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
     expect(find.byType(SceneScreen), findsNothing);
-    expect(await repo.sceneResults(), isEmpty);
+    expect(await repo.turnResults(), isEmpty);
   });
 
-  testWidgets('with only the samples, home leads to making the first own scenes',
+  testWidgets('with nothing to play yet, home leads to making the first scenes',
       (tester) async {
     _tallScreen(tester);
     final (db, _) = await pumpApp(tester, seed: (r) => seedLearner(r, withScene: false));
     addTearDown(db.close);
     final s = S('en');
 
-    // The samples are there to play, and the card to the learner's own AI
-    // stays up until an own scene arrives.
-    expect(find.text(s.t('todaySceneSample')), findsOneWidget);
-    await tester.tap(find.text(s.t('makeOwnScenes')).first);
+    // Nothing to start, so the one button is the trip to their own AI. The
+    // fields button stays beside it, because it is also the only way to open
+    // another area from the profile.
+    expect(find.text(s.t('todayScene')), findsNothing);
+    expect(find.text(s.t('homeFieldScenes')), findsOneWidget);
+
+    await tester.tap(find.text(s.t('firstSceneMake')).first);
     await tester.pumpAndSettle();
     expect(find.byType(AiPromptScreen), findsOneWidget);
-    expect(find.text(s.t('firstSceneMake')), findsOneWidget);
     // The profile is there, so the prompt is ready to copy.
     final copy = find.widgetWithText(FilledButton, s.t('copyPrompt'));
     expect(tester.widget<FilledButton>(copy).onPressed, isNotNull);
@@ -246,7 +255,7 @@ void main() {
     addTearDown(db.close);
     final s = S('en');
 
-    await tester.tap(find.text(s.t('makeOwnScenes')).first);
+    await tester.tap(find.text(s.t('firstSceneMake')).first);
     await tester.pumpAndSettle();
     expect(find.text(s.t('scenePackNeedProfile')), findsOneWidget);
     final copy = find.widgetWithText(FilledButton, s.t('copyPrompt'));
@@ -270,11 +279,10 @@ void main() {
     expect(find.byType(RecordScreen), findsOneWidget);
     expect(find.text(s.t('skillUnderstand')), findsOneWidget);
     expect(find.text(s.t('sceneListTitle')), findsOneWidget);
-    // The own scene and the samples are listed together, samples marked.
+    // Their own conversation is listed by the name their AI gave it.
     await tester.scrollUntilVisible(find.text('Stay late（日本語）'), 200,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Stay late（日本語）'), findsOneWidget);
-    expect(find.text(s.t('sampleTag')), findsWidgets);
 
     await tester.tap(find.text(s.t('settingsTitle')).last);
     await tester.pumpAndSettle();

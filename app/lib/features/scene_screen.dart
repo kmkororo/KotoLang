@@ -26,7 +26,7 @@ import '../core/l10n/strings.dart';
 import '../core/speech.dart';
 import '../domain/ladder.dart';
 import '../domain/scene.dart';
-import '../domain/tree.dart' show treeStage;
+import '../domain/tree.dart' show treeName;
 
 /// One turn to answer, with the conversation it belongs to.
 class SceneCard {
@@ -307,7 +307,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     }
     final ok = await confirm(
       context,
-      title: s.t('sceneQuitTitle'),
+      title: s.t('quitTitle'),
       body: s.t('sceneQuitBody'),
       confirmLabel: s.t('quitConfirm'),
       cancelLabel: s.t('cancel'),
@@ -435,7 +435,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
           children: [
             Icon(Icons.history, size: 14, color: theme.colorScheme.tertiary),
             const SizedBox(width: 6),
-            Text(s.t('reviewTag'),
+            Text(s.t('sceneReviewTag'),
                 style: theme.textTheme.labelSmall
                     ?.copyWith(color: theme.colorScheme.tertiary)),
           ],
@@ -623,7 +623,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
               child: Text(
                 missed
                     ? s.t('sceneWindowGone')
-                    : (_right ? s.t('sceneRight') : s.t('sceneWrong')),
+                    : (_right ? s.t('sceneCorrect') : s.t('sceneWrong')),
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: fg, fontWeight: FontWeight.w700),
               ),
@@ -639,7 +639,8 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
 
   Widget _result(S s, ThemeData theme) {
     final scheme = theme.colorScheme;
-    final stageUp = treeStage(_ladder.reached) > treeStage(_ladder.reached - _promoted.length);
+    final stageUp =
+        treeName(_ladder.reached) > treeName(_ladder.reached - _promoted.length);
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
       child: Column(
@@ -663,7 +664,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
             const SizedBox(height: 14),
           ],
           if (stageUp)
-            Text(s.t('treeStageUp', {'name': s.t('treeStage${treeStage(_ladder.reached)}')}),
+            Text(s.t('treeStageUp', {'name': s.t('treeStage${treeName(_ladder.reached)}')}),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(fontWeight: FontWeight.w700)),
@@ -675,7 +676,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: () => _leave(again: false),
-            child: Text(s.t('sceneDone')),
+            child: Text(s.t('finishSession')),
           ),
         ],
       ),

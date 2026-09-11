@@ -19,7 +19,7 @@ Map<String, dynamic> turn({
       'line': line,
       'keyWord': 'Thursday',
       'confusable': 'Tuesday',
-      if (facts != null) 'facts': facts,
+      'facts': ?facts,
       'replies': replies ??
           [
             {'text': 'Thursday it is.', 'correct': true},
@@ -27,7 +27,7 @@ Map<String, dynamic> turn({
             {'text': 'Could it be sooner?', 'correct': false},
           ],
       'restate': 'It should reach you Thursday.',
-      if (translations != null) 'translations': translations,
+      'translations': ?translations,
     };
 
 Map<String, dynamic> pack(List<Map<String, dynamic>> scenes) => {
@@ -46,7 +46,7 @@ Map<String, dynamic> scene({
       'title_native': '締め切りをずらす',
       'situation': 'meetings',
       'setting_native': '午後のオフィスで。',
-      if (windowMs != null) 'window_ms': windowMs,
+      'window_ms': ?windowMs,
       'turns': turns ?? [turn()],
     };
 

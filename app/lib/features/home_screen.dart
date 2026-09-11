@@ -65,7 +65,7 @@ class HomeScreen extends ConsumerWidget {
     // under the finger and snaps back to the bottom. Watching here keeps the
     // data alive for as long as home is, and the wide cache keeps the panel
     // itself mounted, so scrolling up is only scrolling up.
-    ref.watch(treeDataProvider);
+    final tree = ref.watch(treeDataProvider);
     ref.watch(treeArtProvider);
 
     return ListView(
@@ -97,7 +97,7 @@ class HomeScreen extends ConsumerWidget {
         Text(
           stats.scenes == 0
               ? s.t(hasOwn ? 'treeSproutHintOwn' : 'treeSproutHint')
-              : '${s.t('treeStage${treeStage(stats.scenes)}')} · ${s.t('treeGrownScenes', {'n': stats.scenes})}',
+              : '${s.t('treeStage${treeName(tree.value?.shape.reached ?? 0)}')} · ${s.t('treeGrownScenes', {'n': stats.scenes})}',
           textAlign: TextAlign.center,
           style: muted,
         ),
@@ -127,14 +127,23 @@ class HomeScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(s.t('todayRandomNote'), textAlign: TextAlign.center, style: muted),
-          // The same family, one step narrower: a field of their own, or the
-          // samples. Both ask which field before they start.
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.local_florist, size: 18),
-            onPressed: () => showScenesFieldSheet(context, ref, own: true),
-            label: Text(s.t('homeFieldScenes')),
-          ),
+        ],
+
+        // The same family, one step narrower: a field of their own, or the
+        // samples. Both ask which field before they start.
+        //
+        // The fields button stays even with nothing to play yet, because it is
+        // also the only way to open another area from the profile; hiding it
+        // until a conversation exists would shut that door for exactly the
+        // learner who has not been through one yet. The samples button is
+        // shown only when there are samples to show.
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.local_florist, size: 18),
+          onPressed: () => showScenesFieldSheet(context, ref, own: true),
+          label: Text(s.t('homeFieldScenes')),
+        ),
+        if (scenes.any((x) => x.isBuiltin)) ...[
           const SizedBox(height: 8),
           OutlinedButton.icon(
             icon: const Icon(Icons.menu_book_outlined, size: 18),
