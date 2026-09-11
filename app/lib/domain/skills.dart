@@ -1,8 +1,8 @@
-/// The two skills the app exists for, read off the exchange results.
+/// What the record screen says, read off the answers themselves.
 ///
-/// Understanding: did the learner catch what was said — and by ear alone?
-/// Replying: did they pick the reply that answers what was actually said?
-/// Nothing here is stored; every figure is a reading of the results, so a
+/// One thing is being measured now, not two: did the reply that fits get
+/// chosen, and was it chosen while the conversation was still moving.
+/// Nothing here is stored — every figure is a reading of the results, so a
 /// restored backup shows the same numbers and no counter can drift from the
 /// record.
 library;
@@ -19,120 +19,118 @@ class Rate {
   int? get pct => of == 0 ? null : (hit * 100 / of).round();
 }
 
-/// The two skills over one span of results.
+/// How one span of answers went.
 class SkillPair {
-  final Rate gist;
-  final Rate reply;
+  /// Replies that fitted what was said.
+  final Rate right;
 
-  /// Gist answered right with the words hidden.
-  final Rate byEar;
-  const SkillPair({required this.gist, required this.reply, required this.byEar});
+  /// Of those, the ones given while the window was still open — without
+  /// waiting to be told again. This is the figure that says whether the
+  /// learner is keeping up rather than merely arriving.
+  final Rate kept;
 
-  static const empty = SkillPair(gist: Rate(0, 0), reply: Rate(0, 0), byEar: Rate(0, 0));
+  const SkillPair({required this.right, required this.kept});
+
+  static const empty = SkillPair(right: Rate(0, 0), kept: Rate(0, 0));
 }
 
 class SkillStats {
-  /// Exchanges answered in total, scenes finished (exchanges / 2, reviews
-  /// excluded), and exchanges answered today.
-  final int exchanges;
+  /// Turns answered in total, conversations finished, and turns answered
+  /// today.
+  final int turns;
   final int scenes;
   final int today;
 
   final SkillPair all;
   final SkillPair week;
 
-  /// Calendar days with at least one exchange, for the streak strip and the
-  /// heatmap.
+  /// Turns answered on each day, for the heat map.
   final Map<String, int> perDay;
 
-  /// The runs of right answers, now and at their longest.
   final Runs runs;
 
+  /// How often each fact was the one dropped. A multiFact miss names what it
+  /// lost, so the same weakness can be aimed at again.
+  final Map<String, int> missedSlots;
+
   const SkillStats({
-    required this.exchanges,
+    required this.turns,
     required this.scenes,
     required this.today,
     required this.all,
     required this.week,
     required this.perDay,
-    this.runs = Runs.none,
+    required this.runs,
+    required this.missedSlots,
   });
 
   static const empty = SkillStats(
-    exchanges: 0,
+    turns: 0,
     scenes: 0,
     today: 0,
     all: SkillPair.empty,
     week: SkillPair.empty,
     perDay: {},
+    runs: Runs.none,
+    missedSlots: {},
   );
-
-  Set<String> get days => perDay.keys.toSet();
 }
 
-SkillPair _pair(Iterable<SceneResult> rs) {
-  var n = 0, gist = 0, reply = 0, ear = 0;
-  for (final r in rs) {
-    n++;
-    if (r.gistOk) gist++;
-    if (r.replyOk) reply++;
-    if (r.gistOk && !r.peeked) ear++;
-  }
-  return SkillPair(gist: Rate(gist, n), reply: Rate(reply, n), byEar: Rate(ear, n));
-}
-
-/// Runs of right answers, read straight off the results: the run the learner
-/// is on now and the longest ever. `combo` counts every answer (gist and
-/// reply alike); `byEar` counts gists caught without looking at the words.
+/// Streaks inside the answering itself: right in a row, and kept up in a row.
 class Runs {
   final int combo;
   final int bestCombo;
-  final int byEar;
-  final int bestByEar;
-  const Runs({this.combo = 0, this.bestCombo = 0, this.byEar = 0, this.bestByEar = 0});
+  final int kept;
+  final int bestKept;
+  const Runs({this.combo = 0, this.bestCombo = 0, this.kept = 0, this.bestKept = 0});
   static const none = Runs();
 }
 
-Runs runsOf(List<SceneResult> results) {
+Runs runsOf(List<TurnResult> results) {
   final ordered = [...results]..sort((a, b) => a.at.compareTo(b.at));
-  var combo = 0, bestCombo = 0, ear = 0, bestEar = 0;
+  var combo = 0, bestCombo = 0, kept = 0, bestKept = 0;
   for (final r in ordered) {
-    for (final ok in [r.gistOk, r.replyOk]) {
-      combo = ok ? combo + 1 : 0;
-      if (combo > bestCombo) bestCombo = combo;
-    }
-    ear = r.gistOk && !r.peeked ? ear + 1 : 0;
-    if (ear > bestEar) bestEar = ear;
+    combo = r.correct ? combo + 1 : 0;
+    if (combo > bestCombo) bestCombo = combo;
+    kept = r.correct && r.inWindow ? kept + 1 : 0;
+    if (kept > bestKept) bestKept = kept;
   }
-  return Runs(combo: combo, bestCombo: bestCombo, byEar: ear, bestByEar: bestEar);
+  return Runs(combo: combo, bestCombo: bestCombo, kept: kept, bestKept: bestKept);
 }
 
-SkillStats skillStats(List<SceneResult> results, {required String today}) {
+SkillPair _pair(Iterable<TurnResult> rs) {
+  final all = rs.toList();
+  if (all.isEmpty) return SkillPair.empty;
+  final right = all.where((r) => r.correct).toList();
+  return SkillPair(
+    right: Rate(right.length, all.length),
+    kept: Rate(right.where((r) => r.inWindow).length, all.length),
+  );
+}
+
+SkillStats skillStats(List<TurnResult> results, {required String today}) {
   if (results.isEmpty) return SkillStats.empty;
   final weekStart = addDays(today, -6);
   final perDay = <String, int>{};
+  final missed = <String, int>{};
   for (final r in results) {
     perDay[r.day] = (perDay[r.day] ?? 0) + 1;
+    final slot = r.missedSlot;
+    if (!r.correct && slot != null && slot.isNotEmpty) {
+      missed[slot] = (missed[slot] ?? 0) + 1;
+    }
   }
   return SkillStats(
-    exchanges: results.length,
-    scenes: results.where((r) => !r.review).length ~/ exchangesPerScene,
+    turns: results.length,
+    // A conversation is however many turns its author gave it, so finished
+    // ones are counted by what was answered rather than divided out of the
+    // total.
+    scenes: {for (final r in results.where((r) => !r.review)) r.sceneId}.length,
     today: perDay[today] ?? 0,
     all: _pair(results),
     week: _pair(results.where((r) => r.day.compareTo(weekStart) >= 0)),
     perDay: perDay,
     runs: runsOf(results),
+    missedSlots: missed,
   );
-}
-
-/// What the next set of scenes should be pitched at, from the last week.
-/// High and plenty of them: a step harder. Low: easier. Otherwise, and for
-/// anyone new, easy — where everyone starts.
-String difficultyFor(SkillStats s) {
-  final w = s.week;
-  if (w.gist.of < 8) return 'easy';
-  final avg = ((w.gist.pct ?? 0) + (w.reply.pct ?? 0)) / 2;
-  if (avg >= 85) return 'harder';
-  if (avg < 50) return 'easier';
-  return 'easy';
 }
