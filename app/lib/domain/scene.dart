@@ -1,17 +1,15 @@
-/// A scene: two exchanges with someone, each answered by two three-way
-/// choices — what did they say, and how do you reply.
+/// A conversation: someone speaks, and you have a moment to reply.
 ///
-/// Nothing here judges. Every question carries exactly one right answer,
-/// decided by the material itself (the two wrong ones are what someone who
-/// misheard would pick), so the app only has to compare indexes. The learner's
-/// own AI writes scenes in the pack format below; the built-in scenes ship in
-/// the same shape.
+/// The three replies are read *before* the line is played, so reading them is
+/// not part of the listening. Only the sound of the line decides which one
+/// fits: all three are things a person could say here, and the right one
+/// turns on a word the ear has to catch. Nothing here judges — the material
+/// carries its own answer and the app compares indexes.
 library;
 
 import '../core/util.dart';
 
-/// Where a scene came from. Built-ins are the samples that ship with the app;
-/// only scenes the learner's own AI made make the tree bloom.
+/// Where a scene came from. Built-ins are the samples that ship with the app.
 enum SceneSource {
   builtin,
   ai;
@@ -20,154 +18,182 @@ enum SceneSource {
       '$s'.trim().toLowerCase() == 'builtin' ? SceneSource.builtin : SceneSource.ai;
 }
 
-/// "What did they say?" — three English summaries of the line, each with its
-/// translation for the moment after the answer.
-class Gist {
-  final List<String> options;
+/// What the ear has to catch for this turn. The three are mixed through a
+/// set: they are not difficulty, they are variety. Difficulty lives in the
+/// audio — speed, noise, accent — never in the shape of the question.
+enum TurnType {
+  /// One word decides, and a word that sounds like it would change the
+  /// meaning. Twelve and twenty, Tuesday and Thursday.
+  keyword,
 
-  /// Translations of [options], same order; empty when the interface language
-  /// is English or an older scene carried none.
-  final List<String> natives;
-  final int answer;
-  const Gist({required this.options, this.natives = const [], required this.answer});
+  /// A reversing word decides: not, can't, unless, without, hardly. Miss it
+  /// and the meaning flips, which is where mishearing costs the most.
+  polarity,
 
-  String get correct => options[answer];
-  String nativeOf(int i) => i < natives.length ? natives[i] : '';
+  /// Two facts have to be held at once — a time and a place, a day and a
+  /// person. Each wrong reply drops exactly one of them and says which.
+  multiFact;
 
-  Map<String, dynamic> toJson() => {
-        'options': [
-          for (var i = 0; i < options.length; i++) {'text': options[i], 'native': nativeOf(i)}
-        ],
-        'answer': answer,
+  static TurnType parse(Object? s) => switch ('$s'.trim().toLowerCase()) {
+        'polarity' => TurnType.polarity,
+        'multifact' => TurnType.multiFact,
+        _ => TurnType.keyword,
       };
-
-  /// Reads both shapes: plain strings (the 3.0 packs) and {text, native}.
-  factory Gist.fromJson(Map<String, dynamic> j) {
-    final raw = (j['options'] as List?) ?? const [];
-    final texts = <String>[];
-    final natives = <String>[];
-    for (final o in raw) {
-      if (o is Map) {
-        texts.add('${o['text'] ?? ''}');
-        natives.add('${o['native'] ?? ''}');
-      } else {
-        texts.add('$o');
-      }
-    }
-    return Gist(
-      options: texts,
-      natives: natives.length == texts.length && natives.any((n) => n.isNotEmpty)
-          ? natives
-          : const [],
-      answer: (j['answer'] as num?)?.toInt() ?? 0,
-    );
-  }
 }
 
-/// The order the three choices of one question are shown in: a small
-/// deterministic hash of where the question sits, so the right answer is
-/// spread across the positions and nobody — not the author, not the AI — has
-/// to think about where it lands. `order[k]` is the authored index shown at
-/// position k.
-List<int> optionOrder(String sceneId, int exchange, String question) {
-  const orders = [
-    [0, 1, 2],
-    [0, 2, 1],
-    [1, 0, 2],
-    [1, 2, 0],
-    [2, 0, 1],
-    [2, 1, 0],
-  ];
-  var h = 0;
-  for (final c in '$sceneId/$exchange/$question'.codeUnits) {
-    h = (h * 31 + c) & 0x7fffffff;
-  }
-  return orders[h % orders.length];
-}
+/// One of the two things a [TurnType.multiFact] line asks the listener to
+/// hold: what it was, and what someone who lost it would have heard instead.
+class Fact {
+  final String slot;
+  final String value;
+  final String confusable;
+  const Fact({required this.slot, required this.value, this.confusable = ''});
 
-List<T> arrangeBy<T>(List<int> order, List<T> authored) =>
-    authored.length == order.length ? [for (final k in order) authored[k]] : authored;
+  Map<String, dynamic> toJson() => {'slot': slot, 'value': value, 'confusable': confusable};
 
-/// One possible reply: the English, its translation, and why it is or is not
-/// the one.
-class ReplyOption {
-  final String text;
-  final String native;
-  final String why;
-  const ReplyOption({required this.text, this.native = '', this.why = ''});
-
-  Map<String, dynamic> toJson() => {'text': text, 'native': native, 'why': why};
-
-  factory ReplyOption.fromJson(Map<String, dynamic> j) => ReplyOption(
-        text: (j['text'] ?? '') as String,
-        native: (j['native'] ?? '') as String,
-        why: (j['why'] ?? '') as String,
+  factory Fact.fromJson(Map<String, dynamic> j) => Fact(
+        slot: '${j['slot'] ?? ''}',
+        value: '${j['value'] ?? ''}',
+        confusable: '${j['confusable'] ?? ''}',
       );
 }
 
-/// "How do you reply?" — three English replies, one of which answers what was
-/// actually said.
+/// One of the three things the learner can say back.
 class Reply {
-  final List<ReplyOption> options;
-  final int answer;
-  const Reply({required this.options, required this.answer});
+  final String text;
 
-  ReplyOption get correct => options[answer];
+  /// The same reply in the learner's language, shown only after answering.
+  final String native;
+  final bool correct;
 
-  Map<String, dynamic> toJson() =>
-      {'options': [for (final o in options) o.toJson()], 'answer': answer};
+  /// For [TurnType.multiFact]: which fact this reply dropped. A wrong answer
+  /// then names the weakness, and the same one can be practised again.
+  final String? missedSlot;
 
-  factory Reply.fromJson(Map<String, dynamic> j) => Reply(
-        options: [
-          for (final o in (j['options'] as List? ?? const []))
-            ReplyOption.fromJson(Map<String, dynamic>.from(o as Map))
-        ],
-        answer: (j['answer'] as num?)?.toInt() ?? 0,
-      );
-}
-
-/// One line from the other person and the two questions about it.
-class Exchange {
-  final String line;
-  final String lineNative;
-  final Gist gist;
-  final Reply reply;
-
-  const Exchange({
-    required this.line,
-    required this.lineNative,
-    required this.gist,
-    required this.reply,
+  const Reply({
+    required this.text,
+    this.native = '',
+    this.correct = false,
+    this.missedSlot,
   });
 
   Map<String, dynamic> toJson() => {
-        'line': line,
-        'line_native': lineNative,
-        'gist': gist.toJson(),
-        'reply': reply.toJson(),
+        'text': text,
+        'native': native,
+        'correct': correct,
+        if (missedSlot != null) 'missedSlot': missedSlot,
       };
 
-  factory Exchange.fromJson(Map<String, dynamic> j) => Exchange(
-        line: (j['line'] ?? '') as String,
-        lineNative: (j['line_native'] ?? '') as String,
-        gist: Gist.fromJson(Map<String, dynamic>.from((j['gist'] as Map?) ?? const {})),
-        reply: Reply.fromJson(Map<String, dynamic>.from((j['reply'] as Map?) ?? const {})),
+  factory Reply.fromJson(Map<String, dynamic> j) => Reply(
+        text: '${j['text'] ?? ''}',
+        native: '${j['native'] ?? ''}',
+        correct: j['correct'] == true,
+        missedSlot: j['missedSlot'] == null ? null : '${j['missedSlot']}',
       );
 }
 
-/// How many exchanges a scene has. The prompt asks for exactly this many and
-/// the importer refuses anything else, so a scene is always the same length.
-const exchangesPerScene = 2;
+/// One turn: their line, and the three replies that were on screen before it
+/// played.
+class Turn {
+  final TurnType type;
+  final String line;
+
+  /// The line in the learner's language, shown only after answering.
+  final String lineNative;
+
+  /// The word the turn hangs on, and the word it could be taken for. What the
+  /// material was built around, and what an import can be checked against.
+  final String keyWord;
+  final String confusable;
+
+  /// For [TurnType.multiFact] only.
+  final List<Fact> facts;
+
+  final List<Reply> replies;
+
+  /// What they say when the moment to reply goes by: the same thing in
+  /// different words, never the same sentence, so it is not a second listen.
+  final String restate;
+
+  const Turn({
+    this.type = TurnType.keyword,
+    required this.line,
+    this.lineNative = '',
+    this.keyWord = '',
+    this.confusable = '',
+    this.facts = const [],
+    required this.replies,
+    this.restate = '',
+  });
+
+  /// Where the right reply sits. Always exactly one.
+  int get answer {
+    final i = replies.indexWhere((r) => r.correct);
+    return i < 0 ? 0 : i;
+  }
+
+  Map<String, dynamic> toJson() => {
+        'type': type.name,
+        'line': line,
+        'line_native': lineNative,
+        'keyWord': keyWord,
+        'confusable': confusable,
+        if (facts.isNotEmpty) 'facts': [for (final f in facts) f.toJson()],
+        'replies': [for (final r in replies) r.toJson()],
+        'restate': restate,
+      };
+
+  factory Turn.fromJson(Map<String, dynamic> j) => Turn(
+        type: TurnType.parse(j['type']),
+        line: '${j['line'] ?? ''}',
+        lineNative: '${j['line_native'] ?? ''}',
+        keyWord: '${j['keyWord'] ?? ''}',
+        confusable: '${j['confusable'] ?? ''}',
+        facts: [
+          for (final f in (j['facts'] as List? ?? const []))
+            Fact.fromJson(Map<String, dynamic>.from(f as Map))
+        ],
+        replies: [
+          for (final r in (j['replies'] as List? ?? const []))
+            Reply.fromJson(Map<String, dynamic>.from(r as Map))
+        ],
+        restate: '${j['restate'] ?? ''}',
+      );
+}
+
+/// How many replies every turn offers. Three, always: two would make guessing
+/// cheap and four would make reading them the slow part.
+const repliesPerTurn = 3;
+
+/// The longest a conversation runs. A short one is a word in a corridor, a
+/// long one a call about a change of plan; the learner is never told which
+/// they are in.
+const maxTurnsPerScene = 5;
+
+/// How long the reply window stays open when the material does not say.
+const defaultWindowMs = 3000;
+const minWindowMs = 1200;
+const maxWindowMs = 8000;
 
 class Scene {
   final String id;
-  final String topic;
-  final String topicNative;
+  final String title;
+  final String titleNative;
+
+  /// The situation inside a field — "meetings" inside "work". The unit that
+  /// opens as the ladder is climbed.
+  final String situation;
 
   /// One line of setting in the learner's language ("at the hotel desk").
   /// Never who the other person is — that would be a hint.
   final String settingNative;
-  final List<Exchange> exchanges;
+
+  /// How long the learner has to reply once the line ends. Carried by the
+  /// scene rather than fixed, because the gap between turns is what a
+  /// conversation is made of: a hurried exchange leaves less of it.
+  final int windowMs;
+
+  final List<Turn> turns;
   final SceneSource source;
   final String? realmId;
   final int createdAt;
@@ -175,10 +201,12 @@ class Scene {
 
   const Scene({
     required this.id,
-    required this.topic,
-    required this.topicNative,
+    required this.title,
+    this.titleNative = '',
+    this.situation = '',
     this.settingNative = '',
-    required this.exchanges,
+    this.windowMs = defaultWindowMs,
+    required this.turns,
     this.source = SceneSource.ai,
     this.realmId,
     required this.createdAt,
@@ -186,16 +214,18 @@ class Scene {
   });
 
   /// The label shown to the learner: their language first.
-  String get label => topicNative.isNotEmpty ? topicNative : topic;
+  String get label => titleNative.isNotEmpty ? titleNative : title;
 
   bool get isBuiltin => source == SceneSource.builtin;
 
-  Scene copyWith({bool? disabled, String? realmId}) => Scene(
+  Scene copyWith({bool? disabled, String? realmId, String? situation}) => Scene(
         id: id,
-        topic: topic,
-        topicNative: topicNative,
+        title: title,
+        titleNative: titleNative,
+        situation: situation ?? this.situation,
         settingNative: settingNative,
-        exchanges: exchanges,
+        windowMs: windowMs,
+        turns: turns,
         source: source,
         realmId: realmId ?? this.realmId,
         createdAt: createdAt,
@@ -204,10 +234,12 @@ class Scene {
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'topic': topic,
-        'topic_native': topicNative,
+        'title': title,
+        'title_native': titleNative,
+        'situation': situation,
         'setting_native': settingNative,
-        'exchanges': [for (final e in exchanges) e.toJson()],
+        'window_ms': windowMs,
+        'turns': [for (final t in turns) t.toJson()],
         'source': source.name,
         'realm_id': realmId,
         'created_at': createdAt,
@@ -215,13 +247,15 @@ class Scene {
       };
 
   factory Scene.fromJson(Map<String, dynamic> j) => Scene(
-        id: (j['id'] ?? sceneId('${j['topic']}')) as String,
-        topic: (j['topic'] ?? '') as String,
-        topicNative: (j['topic_native'] ?? '') as String,
-        settingNative: (j['setting_native'] ?? '') as String,
-        exchanges: [
-          for (final e in (j['exchanges'] as List? ?? const []))
-            Exchange.fromJson(Map<String, dynamic>.from(e as Map))
+        id: (j['id'] ?? sceneId('${j['title']}')) as String,
+        title: '${j['title'] ?? ''}',
+        titleNative: '${j['title_native'] ?? ''}',
+        situation: '${j['situation'] ?? ''}',
+        settingNative: '${j['setting_native'] ?? ''}',
+        windowMs: (j['window_ms'] as num?)?.toInt() ?? defaultWindowMs,
+        turns: [
+          for (final t in (j['turns'] as List? ?? const []))
+            Turn.fromJson(Map<String, dynamic>.from(t as Map))
         ],
         source: SceneSource.parse(j['source']),
         realmId: j['realm_id'] as String?,
@@ -230,56 +264,83 @@ class Scene {
       );
 }
 
-/// Content-derived id, so the same scene pasted twice lands on itself — and
-/// two different scenes that happen to share a topic name do not: the first
-/// line tells them apart.
-String sceneId(String topic, [String firstLine = '']) => slugId(
-    'scn', firstLine.isEmpty ? normKey(topic) : '${normKey(topic)}|${normKey(firstLine)}');
+/// Content-derived id, so the same conversation pasted twice lands on itself
+/// — and two that happen to share a title do not: the first line tells them
+/// apart.
+String sceneId(String title, [String firstLine = '']) =>
+    slugId('scene', firstLine.isEmpty ? title : '$title|$firstLine');
 
-/// One exchange answered. The unit every number in the app is read from.
-class SceneResult {
+/// Where the right reply sits, decided by the material's own id rather than
+/// by chance, so it is the same on every device and in every language — and
+/// so an author never has to think about position.
+///
+/// The AI is told to write the right reply first. Without this it would
+/// always be first.
+List<int> optionOrder(String sceneId, int turn) {
+  final order = [for (var i = 0; i < repliesPerTurn; i++) i];
+  var h = 0;
+  for (final code in '$sceneId#$turn'.codeUnits) {
+    h = (h * 31 + code) & 0x7fffffff;
+  }
+  // Fisher-Yates, driven by the hash rather than a random source.
+  for (var i = order.length - 1; i > 0; i--) {
+    h = (h * 1103515245 + 12345) & 0x7fffffff;
+    final j = h % (i + 1);
+    final tmp = order[i];
+    order[i] = order[j];
+    order[j] = tmp;
+  }
+  return order;
+}
+
+/// Applies an [optionOrder] to what the author wrote.
+List<T> arrangeBy<T>(List<int> order, List<T> authored) =>
+    [for (final i in order) authored[i]];
+
+/// One turn answered.
+class TurnResult {
   final String sceneId;
-  final int exchange;
-  final bool gistOk;
-  final bool replyOk;
+  final int turn;
+  final bool correct;
 
-  /// The words were shown before the gist was answered. Understanding by ear
-  /// is only claimed when this is false.
-  final bool peeked;
+  /// For a missed [TurnType.multiFact]: the fact that was dropped.
+  final String? missedSlot;
 
-  /// Came up as a review, not inside its scene.
+  /// Answered inside the window, without waiting for the line to be said
+  /// again. Keeping up at conversation speed is only claimed when true.
+  final bool inWindow;
+
+  /// Came up as a review rather than inside its conversation.
   final bool review;
+
   final String day;
   final int at;
 
-  const SceneResult({
+  const TurnResult({
     required this.sceneId,
-    required this.exchange,
-    required this.gistOk,
-    required this.replyOk,
-    this.peeked = false,
+    required this.turn,
+    required this.correct,
+    this.missedSlot,
+    this.inWindow = true,
     this.review = false,
     required this.day,
     required this.at,
   });
 }
 
-/// An exchange owed another look.
+/// A turn that was missed and is owed another look: the next day, then three
+/// days on, then gone.
 class ReviewItem {
   final String sceneId;
-  final int exchange;
+  final int turn;
   final String dueDay;
-
-  /// 0 = due the next day, 1 = due three days on. Past that it is dropped.
   final int stage;
   const ReviewItem({
     required this.sceneId,
-    required this.exchange,
+    required this.turn,
     required this.dueDay,
-    required this.stage,
+    this.stage = 0,
   });
 }
 
-/// The gaps, in days, between a miss and its reviews. Two looks: the next
-/// day, then three days after that. Answer both right and it is gone.
 const reviewGaps = [1, 3];
