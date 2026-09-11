@@ -29,13 +29,22 @@ void main() {
     // identifier like "close" rather than as a crash. This is the only thing
     // that catches it.
     final asked = <String, List<String>>{};
-    final pattern = RegExp(r"""\.t\(\s*'([A-Za-z_][A-Za-z0-9_]*)'""");
+    // Everything up to the first comma of a t() call — the key argument. A
+    // key is often chosen there rather than written out, as
+    // `t(x ? 'a' : 'b')`, and one that matched only a bare `t('a')` walked
+    // straight past both arms: the screen showed "sceneListening" where a
+    // word belongs, and nothing failed. Stopping at the comma keeps the
+    // placeholder names out of it.
+    final call = RegExp(r"""\.t\(\s*([^,)]*)""");
+    final literal = RegExp(r"""'([A-Za-z_][A-Za-z0-9_]*)'""");
     for (final file in Directory('lib')
         .listSync(recursive: true)
         .whereType<File>()
         .where((f) => f.path.endsWith('.dart'))) {
-      for (final m in pattern.allMatches(file.readAsStringSync())) {
-        (asked[m.group(1)!] ??= []).add(file.path);
+      for (final m in call.allMatches(file.readAsStringSync())) {
+        for (final k in literal.allMatches(m.group(1)!)) {
+          (asked[k.group(1)!] ??= []).add(file.path);
+        }
       }
     }
     expect(asked, isNotEmpty, reason: 'the scan found nothing to check');
