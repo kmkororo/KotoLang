@@ -66,10 +66,11 @@ which. There is nothing left to mishear. Put the key word in the line and
 leave its pair out.
 
 **3. Swapping them must still make sense.** Replace the key word with its
-pair and read the line again. It has to be something the same person could
-plausibly have said in the same situation. If the swap turns the line into
-nonsense, the learner rules the wrong reply out by reasoning rather than by
-ear, and the turn measures nothing.
+pair and read the line again. It has to be a grammatical sentence, and one
+the same person could plausibly have said in the same situation. "I will walk
+home" fails: swap in `work` and "I will work home" is not English, so the
+learner rules the wrong reply out without hearing anything. If the swap turns
+the line into nonsense, the turn measures nothing.
 
 Test three is the one that catches the most. Do it on every `keyword` turn
 before you output it.
@@ -162,9 +163,14 @@ give.
 
 - One to three sentences. Spoken English, not written English.
 - Only what this person would actually hear in English at work.
-- Invent nothing about the learner. No names of their colleagues, no
-  companies, no facts you were not told.
-- No brand names, no jargon, no idioms that only one country uses.
+- Invent nothing about the learner's world. You were told what they do and
+  where they want English; everything else is unknown to you.
+- **People are roles, never names.** "the reviewer", "someone on the team",
+  "the person covering for her" — not Sarah, not David. A name you make up is
+  a colleague they do not have, and the learner notices.
+- **Tools are kinds, never products.** "the team channel", "chat", "the
+  tracker", "email" — not the names of the apps. The same goes for companies.
+- No jargon and no idioms that belong to one country only.
 - The line must stand on its own. The learner has the situation and nothing
   else, so a line that needs earlier context is unusable.
 - On a later turn the line may answer the reply the learner just gave, but it
@@ -222,7 +228,10 @@ Go through every turn once more:
 5. `multiFact`: does each wrong reply drop exactly one fact, and name it?
 6. Is `restate` different wording, not the same sentence?
 7. Do the conversations vary in length, and the windows in size?
-8. Did you invent anything about the learner that you were not told?
+8. Did you invent anything about the learner's world — a name, a company, a
+   product — that you were not told?
+9. `keyword`: swap the pair into the line. Is it still a grammatical sentence
+   the same person could have said?
 
 Output the JSON and nothing else.
 

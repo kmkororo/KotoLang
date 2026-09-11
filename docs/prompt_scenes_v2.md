@@ -111,10 +111,11 @@ which. There is nothing left to mishear. Put the key word in the line and
 leave its pair out.
 
 **3. Swapping them must still make sense.** Replace the key word with its
-pair and read the line again. It has to be something the same person could
-plausibly have said in the same situation. If the swap turns the line into
-nonsense, the learner rules the wrong reply out by reasoning rather than by
-ear, and the turn measures nothing.
+pair and read the line again. It has to be a grammatical sentence, and one
+the same person could plausibly have said in the same situation. "I will walk
+home" fails: swap in `work` and "I will work home" is not English, so the
+learner rules the wrong reply out without hearing anything. If the swap turns
+the line into nonsense, the turn measures nothing.
 
 Test three is the one that catches the most. Do it on every `keyword` turn
 before you output it.
@@ -207,9 +208,14 @@ give.
 
 - One to three sentences. Spoken English, not written English.
 - Only what this person would actually hear in {SITUATION}.
-- Invent nothing about the learner. No names of their colleagues, no
-  companies, no facts you were not told.
-- No brand names, no jargon, no idioms that only one country uses.
+- Invent nothing about the learner's world. You were told what they do and
+  where they want English; everything else is unknown to you.
+- **People are roles, never names.** "the reviewer", "someone on the team",
+  "the person covering for her" — not Sarah, not David. A name you make up is
+  a colleague they do not have, and the learner notices.
+- **Tools are kinds, never products.** "the team channel", "chat", "the
+  tracker", "email" — not the names of the apps. The same goes for companies.
+- No jargon and no idioms that belong to one country only.
 - The line must stand on its own. The learner has the situation and nothing
   else, so a line that needs earlier context is unusable.
 - On a later turn the line may answer the reply the learner just gave, but it
@@ -267,7 +273,10 @@ Go through every turn once more:
 5. `multiFact`: does each wrong reply drop exactly one fact, and name it?
 6. Is `restate` different wording, not the same sentence?
 7. Do the conversations vary in length, and the windows in size?
-8. Did you invent anything about the learner that you were not told?
+8. Did you invent anything about the learner's world — a name, a company, a
+   product — that you were not told?
+9. `keyword`: swap the pair into the line. Is it still a grammatical sentence
+   the same person could have said?
 
 Output the JSON and nothing else.
 
@@ -305,3 +314,39 @@ ChatGPT に貼って12往復を得た。結果は次のとおり。
 **三つ目が一番効く**。これを守れば残り二つもほぼ自動的に守られる。
 
 `polarity` と `multiFact` は指示を変えていない。安定しているため。
+
+---
+
+## 試作2回目で分かったこと
+
+`keyword` の三つの検査を入れて再試験。**5本中4本が正しくなった**（前回は1本）。
+
+| 台詞 | 対 | 判定 |
+|---|---|---|
+| issue thirteen | thirty | 良い |
+| about fifteen bugs | fifty | 良い |
+| last Tuesday morning | Thursday | 良い |
+| jumped by forty percent | fourteen | 良い |
+| I'll walk home | work | 入れ替えると文が壊れる |
+
+`polarity` は4本、`multiFact` は3本とも正しい。
+
+**質が上がった点。** 正解の返答が数字を口に出さなくなった。
+「Almost half? We need to restart it immediately.」「That's not too bad」のように
+反応で返している。語をなぞるのではなく意味を取らないと選べないので、
+むしろこちらの方が良い。
+
+**残った3点と、その直し方**
+
+1. `walk` / `work` は音の対としては正しいが、入れ替えると
+   「I'll work home today」となり文が壊れる。
+   検査3に**文法的に成立すること**を明記した。
+2. 同僚の名前（Sarah、David）を作っていた。禁止していたが破られた。
+   ただし禁止が強すぎた面もある。人を指す往復は必要なので、
+   **名前ではなく役割で書かせる**形に変えた（the reviewer、someone on the team）。
+   これなら学習者の世界について嘘をつかずに自然な文が書ける。
+   `multiFact` の person スロットもこれで成立する。
+3. 商品名（Slack）を使っていた。**種類で書かせる**形に変えた
+   （the team channel、chat、the tracker）。
+
+自己点検リストにも2項目を足した。
