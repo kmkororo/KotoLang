@@ -93,21 +93,44 @@ conversation too.
 
 ### `keyword` — one word decides
 
-A single word in the line carries the meaning, and a similar-sounding or
-easily-confused word would change it. Numbers, times, days, places, names.
+A single word in the line carries the meaning, and a word that **sounds like
+it** would change that meaning. The learner has to tell the two apart by ear.
+
+Three tests. A turn that fails any of them is not a `keyword` turn.
+
+**1. The pair must sound alike.** Not opposites in meaning — pairs that ears
+actually confuse: twelve and twenty, thirteen and thirty, fifteen and fifty,
+Tuesday and Thursday, fourteen and forty, Monday and Sunday, walk and work,
+can and cat. `noon` and `night` are not such a pair. Neither are `better` and
+`worse`: they mean the opposite, and sound nothing alike, so nothing is being
+heard — only understood.
+
+**2. The line must not contain the other word.** "Can we talk at three
+instead of two?" names both, so anyone who caught the sentence knows which is
+which. There is nothing left to mishear. Put the key word in the line and
+leave its pair out.
+
+**3. Swapping them must still make sense.** Replace the key word with its
+pair and read the line again. It has to be something the same person could
+plausibly have said in the same situation. If the swap turns the line into
+nonsense, the learner rules the wrong reply out by reasoning rather than by
+ear, and the turn measures nothing.
+
+Test three is the one that catches the most. Do it on every `keyword` turn
+before you output it.
 
 ```json
 {
   "type": "keyword",
-  "line": "I'll send the draft over on Thursday.",
+  "line": "The handover's on Thursday, so I'll need the file by Wednesday night.",
   "keyWord": "Thursday",
   "confusable": "Tuesday",
   "replies": [
-    { "text": "Thursday's fine — I'll watch for it in the morning.", "correct": true },
-    { "text": "Got it, Tuesday. I'll clear some time before lunch.", "correct": false },
-    { "text": "Any chance you could get it to me sooner?", "correct": false }
+    { "text": "Thursday — I'll have it ready the evening before.", "correct": true },
+    { "text": "Got it, Tuesday. I'll finish up over the weekend, then.", "correct": false },
+    { "text": "Is there any chance of another day? That week is full.", "correct": false }
   ],
-  "restate": "The draft should reach you Thursday.",
+  "restate": "It's the Thursday handover, so the file has to be in the night before.",
   "translations": { "line": "...", "replies": ["...", "...", "..."] }
 }
 ```
@@ -249,3 +272,36 @@ Go through every turn once more:
 Output the JSON and nothing else.
 
 --- END PROMPT ---
+
+---
+
+## 試作1回目で分かったこと（プロンプト修正の記録）
+
+ChatGPT に貼って12往復を得た。結果は次のとおり。
+
+- **目隠しテストは12往復すべて成立。** 読むだけで絞れる往復はなかった。
+- **双子の返答はゼロ。**
+- **`polarity` は4本とも正しい。** 誤答の一つが「反転語を聞き逃した人が選ぶもの」に
+  なっていた。`hardly` を選んでいるのは良い判断。
+- **`multiFact` は3本とも正しい。** `missedSlot` が落とした情報と一対一で対応していた。
+- 往復数（1・2・4・3・2）と窓（2000〜4000）はどちらもばらけていた。
+
+**`keyword` だけが5本中4本で外していた。**
+
+| 台詞 | 対 | 何が起きたか |
+|---|---|---|
+| room twelve | twenty | 正しい |
+| at three instead of two | two | 台詞が対の両方を含んでいる |
+| before noon | night | 音が似ていない |
+| first / second | first | 台詞が対の両方を含んでいる |
+| went better | worse | 音が似ていない |
+
+「意味を決める一語」は理解されたが、「**聞き違えうる一語**」にはなっていなかった。
+外し方は二種類ある。台詞が対の両方を並べてしまう場合と、
+意味の反対語を対にしてしまう場合。どちらも聞き分けを試していない。
+
+そこで `keyword` の節に三つの検査を足した。音が似ていること、
+台詞に対の相手を入れないこと、入れ替えても文が成立すること。
+**三つ目が一番効く**。これを守れば残り二つもほぼ自動的に守られる。
+
+`polarity` と `multiFact` は指示を変えていない。安定しているため。

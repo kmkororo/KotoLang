@@ -48,21 +48,44 @@ conversation too.
 
 ### `keyword` — one word decides
 
-A single word in the line carries the meaning, and a similar-sounding or
-easily-confused word would change it. Numbers, times, days, places, names.
+A single word in the line carries the meaning, and a word that **sounds like
+it** would change that meaning. The learner has to tell the two apart by ear.
+
+Three tests. A turn that fails any of them is not a `keyword` turn.
+
+**1. The pair must sound alike.** Not opposites in meaning — pairs that ears
+actually confuse: twelve and twenty, thirteen and thirty, fifteen and fifty,
+Tuesday and Thursday, fourteen and forty, Monday and Sunday, walk and work,
+can and cat. `noon` and `night` are not such a pair. Neither are `better` and
+`worse`: they mean the opposite, and sound nothing alike, so nothing is being
+heard — only understood.
+
+**2. The line must not contain the other word.** "Can we talk at three
+instead of two?" names both, so anyone who caught the sentence knows which is
+which. There is nothing left to mishear. Put the key word in the line and
+leave its pair out.
+
+**3. Swapping them must still make sense.** Replace the key word with its
+pair and read the line again. It has to be something the same person could
+plausibly have said in the same situation. If the swap turns the line into
+nonsense, the learner rules the wrong reply out by reasoning rather than by
+ear, and the turn measures nothing.
+
+Test three is the one that catches the most. Do it on every `keyword` turn
+before you output it.
 
 ```json
 {
   "type": "keyword",
-  "line": "I'll send the draft over on Thursday.",
+  "line": "The handover's on Thursday, so I'll need the file by Wednesday night.",
   "keyWord": "Thursday",
   "confusable": "Tuesday",
   "replies": [
-    { "text": "Thursday's fine — I'll watch for it in the morning.", "correct": true },
-    { "text": "Got it, Tuesday. I'll clear some time before lunch.", "correct": false },
-    { "text": "Any chance you could get it to me sooner?", "correct": false }
+    { "text": "Thursday — I'll have it ready the evening before.", "correct": true },
+    { "text": "Got it, Tuesday. I'll finish up over the weekend, then.", "correct": false },
+    { "text": "Is there any chance of another day? That week is full.", "correct": false }
   ],
-  "restate": "The draft should reach you Thursday.",
+  "restate": "It's the Thursday handover, so the file has to be in the night before.",
   "translations": { "line": "...", "replies": ["...", "...", "..."] }
 }
 ```
