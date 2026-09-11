@@ -94,7 +94,7 @@ class _FieldScreenState extends ConsumerState<FieldScreen> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final all = ref.watch(allScenesProvider).value ?? const <Scene>[];
-    final results = ref.watch(sceneResultsProvider).value ?? const <SceneResult>[];
+    final results = ref.watch(sceneResultsProvider).value ?? const <TurnResult>[];
     final split = splitField(all, widget.field.id);
     final scenes = widget.own ? split.own : split.samples;
     final done = {for (final r in results) if (!r.review) r.sceneId};

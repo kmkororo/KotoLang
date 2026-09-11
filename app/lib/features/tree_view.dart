@@ -24,7 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
 import '../core/util.dart';
-import '../domain/scene.dart' show exchangesPerScene;
+import '../domain/scene.dart' show TurnType;
 import '../domain/tree.dart';
 
 /// The fixed objects the tree carries. Loaded once and held: they are a
@@ -57,15 +57,12 @@ class TreeData {
 final treeDataProvider = FutureProvider.autoDispose<TreeData>((ref) async {
   final repo = ref.watch(repositoryProvider);
   final t = today();
-  final history = await repo.history();
   final results = await ref.watch(sceneResultsProvider.future);
   final scenes = await ref.watch(allScenesProvider.future);
   final fields = await ref.watch(fieldsProvider.future);
   final shape = treeFrom(
-    history: history,
-    realms: await repo.realms(),
-    items: await repo.items(),
-    states: {for (final s in await repo.srsStates()) s.itemId: s},
+    ladder: await ref.watch(ladderProvider.future),
+    due: await repo.reviewsDue(day: t, limit: 99),
     today: t,
     results: results,
     scenes: {for (final sc in scenes) sc.id: sc},
@@ -692,7 +689,7 @@ class _TreePainter extends CustomPainter {
       final len = lengthOf(b) * (own ? 1.0 : 0.55);
       final seedBase = (own ? 1000 : 0) + i * 100;
 
-      final live = Twig.values.where((x) => (b.twigs[x] ?? 0) > 0).toList();
+      final live = TurnType.values.where((x) => (b.twigs[x] ?? 0) > 0).toList();
       if (live.isEmpty) {
         // Nothing caught here yet: a bare twig with a bud on the end.
         final dir = Offset(cos(angle), sin(angle));
@@ -713,9 +710,9 @@ class _TreePainter extends CustomPainter {
         return;
       }
 
-      // Every three scenes the bough forks once more, up to three times: the
+      // Every six turns the bough forks once more, up to three times: the
       // change is visible within a week rather than a season.
-      final depth = min(3, b.answers ~/ (3 * exchangesPerScene));
+      final depth = min(3, b.answers ~/ 6);
       final leafSize = 10.5 + min(b.growing, 10) * 0.5;
       for (var j = 0; j < live.length; j++) {
         final off = live.length == 1 ? 0.0 : (j / (live.length - 1)) - 0.5;

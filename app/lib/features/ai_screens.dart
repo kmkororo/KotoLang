@@ -547,7 +547,7 @@ class _AiReplyScreenState extends ConsumerState<AiReplyScreen> {
             ? s.t('scenesImported', {'n': out.scenes})
             : '${s.t('scenesImported', {'n': out.scenes})} · ${s.t('packRejected', {
                     'n': out.rejected.length,
-                    'reasons': out.rejected.map((r) => r.topic).join(', ')
+                    'reasons': out.rejected.map((r) => r.title).join(', ')
                   })}',
       );
     }

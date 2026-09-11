@@ -10,7 +10,7 @@
 library;
 
 /// The five things that can be made harder.
-enum Axis {
+enum LadderAxis {
   /// 1.00x to 1.96x, in twenty-fifths. Cut this fine because speed is where
   /// most of the climbing happens, and a step the ear cannot feel is a step
   /// nobody is afraid of.
@@ -38,12 +38,12 @@ enum Axis {
 /// step that takes the translation away entirely, or takes away the second
 /// chance, is too large a change to earn in one promotion — and the promise
 /// of this app is many small hurdles, not a few big ones.
-const axisTop = <Axis, int>{
-  Axis.speed: 24,
-  Axis.noise: 12,
-  Axis.translation: 7,
-  Axis.accent: 5,
-  Axis.replay: 3,
+const axisTop = <LadderAxis, int>{
+  LadderAxis.speed: 24,
+  LadderAxis.noise: 12,
+  LadderAxis.translation: 7,
+  LadderAxis.accent: 5,
+  LadderAxis.replay: 3,
 };
 
 /// Every step of every axis, added up. What the tree's height is read from.
@@ -99,28 +99,28 @@ class AxisState {
 
 /// Where the learner stands on all five axes.
 class Ladder {
-  final Map<Axis, AxisState> axes;
+  final Map<LadderAxis, AxisState> axes;
   const Ladder(this.axes);
 
   static const empty = Ladder({});
 
-  AxisState of(Axis a) => axes[a] ?? const AxisState();
+  AxisState of(LadderAxis a) => axes[a] ?? const AxisState();
 
-  int currentOf(Axis a) => of(a).current;
-  int maxOf(Axis a) => of(a).max;
+  int currentOf(LadderAxis a) => of(a).current;
+  int maxOf(LadderAxis a) => of(a).max;
 
   /// The height the tree is read from: every step ever reached, added up.
-  int get reached => Axis.values.fold(0, (sum, a) => sum + maxOf(a));
+  int get reached => LadderAxis.values.fold(0, (sum, a) => sum + maxOf(a));
 
   /// How many situations this much climbing has opened.
   int get situationsOpen => 1 + reached ~/ stepsPerSituation;
 
-  Ladder withAxis(Axis a, AxisState s) => Ladder({...axes, a: s});
+  Ladder withAxis(LadderAxis a, AxisState s) => Ladder({...axes, a: s});
 
   /// Moves an axis to [step], as far as it has been reached. Going down is
   /// free and loses nothing; going above [AxisState.max] is not a thing the
   /// learner can do, since a step has to be earned before it can be used.
-  Ladder setTo(Axis a, int step) {
+  Ladder setTo(LadderAxis a, int step) {
     final s = of(a);
     final want = step < 0 ? 0 : (step > s.max ? s.max : step);
     // The buffer holds answers given at the frontier. Stepping away from the
@@ -138,11 +138,11 @@ class Ladder {
   /// An axis promoted this way carries its setting up with it. Without that,
   /// the first promotion would put every axis one step above where it is
   /// being played, and nothing would ever count again.
-  ({Ladder ladder, List<Axis> promoted}) record(bool correct) {
-    final next = <Axis, AxisState>{};
-    final promoted = <Axis>[];
+  ({Ladder ladder, List<LadderAxis> promoted}) record(bool correct) {
+    final next = <LadderAxis, AxisState>{};
+    final promoted = <LadderAxis>[];
 
-    for (final a in Axis.values) {
+    for (final a in LadderAxis.values) {
       final s = of(a);
       if (!s.atFrontier || s.max >= (axisTop[a] ?? 0)) {
         next[a] = s;
@@ -173,7 +173,7 @@ class Ladder {
       {for (final e in axes.entries) e.key.name: e.value.toJson()};
 
   factory Ladder.fromJson(Map<String, dynamic> j) => Ladder({
-        for (final a in Axis.values)
+        for (final a in LadderAxis.values)
           if (j[a.name] is Map)
             a: AxisState.fromJson(Map<String, dynamic>.from(j[a.name] as Map))
       });

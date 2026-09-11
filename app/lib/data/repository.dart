@@ -499,7 +499,7 @@ class Repository {
   /// The ladder is moved here too, since this is the only place an answer
   /// exists. What comes back says which axes went up, so the screen can say
   /// so while the learner is still looking at it.
-  Future<({TurnResult result, Ladder ladder, List<Axis> promoted})> recordTurn({
+  Future<({TurnResult result, Ladder ladder, List<LadderAxis> promoted})> recordTurn({
     required String sceneId,
     required int turn,
     required bool correct,
@@ -551,7 +551,7 @@ class Repository {
     // nothing new about whether this setting can be held.
     if (review) {
       final held = await loadLadder();
-      return (result: r, ladder: held, promoted: const <Axis>[]);
+      return (result: r, ladder: held, promoted: const <LadderAxis>[]);
     }
     final moved = (await loadLadder()).record(correct);
     await saveLadder(moved.ladder);
@@ -572,6 +572,52 @@ class Repository {
   Future<List<ReviewItem>> reviews() async {
     final rows = await db.select(db.reviews).get();
     return [for (final r in rows) r.toDomain()];
+  }
+
+  /// The results in one of the learner's own fields, as coaching to ask their
+  /// AI for. One way: what comes back is prose to read, not material to
+  /// import, so nothing here expects a reply.
+  Future<String> feedbackPromptText({
+    required String uiLanguage,
+    required String fieldId,
+    required String fieldLabel,
+  }) async {
+    final profile = await loadProfile();
+    final own = await scenes(includeDisabled: true);
+    final inField = {for (final s in splitField(own, fieldId).own) s.id: s};
+    final results = [
+      for (final r in await turnResults()) if (inField.containsKey(r.sceneId)) r
+    ];
+
+    var right = 0;
+    var kept = 0;
+    final misses = <({String topic, String line, bool gist, bool reply})>[];
+    for (final r in results) {
+      if (r.correct) right++;
+      if (r.correct && r.inWindow) kept++;
+      if (r.correct) continue;
+      if (misses.length >= 12) continue;
+      final sc = inField[r.sceneId];
+      final t = sc?.turns.elementAtOrNull(r.turn);
+      if (sc == null || t == null) continue;
+      misses.add((
+        topic: sc.label,
+        line: t.line,
+        gist: r.missedSlot == null,
+        reply: r.missedSlot != null,
+      ));
+    }
+
+    final n = results.length;
+    return pr.feedbackPrompt(
+      uiLanguage: uiLanguage,
+      field: fieldLabel,
+      level: profile?.englishLevel ?? 'A2',
+      scenesDone: {for (final r in results) if (!r.review) r.sceneId}.length,
+      gistPct: n == 0 ? 0 : (right * 100 / n).round(),
+      replyPct: n == 0 ? 0 : (kept * 100 / n).round(),
+      misses: misses,
+    );
   }
 
   /// A conversation finished: the day counted as studied. Finishing is what

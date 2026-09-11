@@ -1,19 +1,20 @@
-/// The scene: listen, choose, grow — on one screen that never scrolls.
+/// The conversation: read, listen, answer — on one screen that never scrolls.
 ///
-/// One exchange is four short steps: hear the line with the words hidden,
-/// choose the summary that says what was said, choose the reply that answers
-/// it, read why. A scene is two exchanges; a review owed from an earlier miss
-/// comes first. Above it all sit two figures — them and you — with the four
-/// arrows of the scene between them, so it is always clear whose words these
-/// are and how far along the exchange is.
+/// A turn is three replies read first, then the line once, then a window to
+/// answer in. Reading comes before the sound so that reading is not part of
+/// the listening; the window closes so that answering is not something the
+/// learner can take all evening over. Miss it and they say it again in other
+/// words, which is what happens in a room, until the ladder takes that away
+/// too.
 ///
-/// Answering is a tap and a Confirm. What follows an answer slides up from
-/// the bottom as a small panel — right or wrong, and why — and a tap anywhere
-/// moves on in place: the second question replaces the first, the second line
-/// replaces the first. Nothing here needs a voice from the learner or a
-/// keyboard, and nothing here judges: every question has one right index.
+/// Answering is one tap. What follows is a beat — right or wrong, and the
+/// words in the learner's own language for as long as the ladder still gives
+/// them — and then the next line starts over the end of it. Nothing here
+/// needs a voice from the learner or a keyboard, and nothing here judges:
+/// every turn carries one right index.
 library;
 
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -23,47 +24,65 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app.dart';
 import '../core/l10n/strings.dart';
 import '../core/speech.dart';
-import '../domain/progress_service.dart';
+import '../domain/ladder.dart';
 import '../domain/scene.dart';
 import '../domain/tree.dart' show treeStage;
 
-/// One exchange to answer, with the scene it belongs to.
+/// One turn to answer, with the conversation it belongs to.
 class SceneCard {
   final Scene scene;
-  final int exchange;
+  final int index;
 
-  /// Owed from an earlier miss rather than part of today's scene.
+  /// Owed from an earlier miss rather than part of today's conversation.
   final bool review;
-  const SceneCard(this.scene, this.exchange, {this.review = false});
+  const SceneCard(this.scene, this.index, {this.review = false});
 
-  Exchange get x => scene.exchanges[exchange];
+  Turn get turn => scene.turns[index];
 }
 
 /// What one run of the screen came to.
 class SceneRunResult {
-  final int gistRight;
-  final int replyRight;
+  final int right;
   final int answered;
-  final int seeds;
+  final List<LadderAxis> promoted;
   final bool again;
   const SceneRunResult({
-    required this.gistRight,
-    required this.replyRight,
+    required this.right,
     required this.answered,
-    required this.seeds,
+    this.promoted = const [],
     required this.again,
   });
 }
 
-enum _Phase { listen, gistAnswer, reply, replyAnswer, result }
+/// Where a turn is. The replies are on screen from [reading] onward — only
+/// what may be done with them changes.
+enum _Phase {
+  /// The replies are there to be read. Nothing has been said yet.
+  reading,
+
+  /// The line is being said. Too late to be reading, too early to answer.
+  playing,
+
+  /// The window is open.
+  open,
+
+  /// They are saying it again, in other words.
+  restating,
+
+  /// Answered, or the window closed on it.
+  done,
+
+  /// The conversation is over.
+  result,
+}
 
 class SceneScreen extends ConsumerStatefulWidget {
   final Scene scene;
 
-  /// Exchanges owed from earlier misses, asked before the scene.
+  /// Turns owed from earlier misses, taken before this conversation.
   final List<SceneCard> reviews;
 
-  /// First run: a short explanation rides on each step.
+  /// The walkthrough, which says what to do at each step the first time.
   final bool tutorial;
 
   const SceneScreen({
@@ -80,250 +99,231 @@ class SceneScreen extends ConsumerStatefulWidget {
 class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderStateMixin {
   late final SpeechService _speech;
   late final List<SceneCard> _cards;
+  late Ladder _ladder;
+
   int _index = 0;
-  _Phase _phase = _Phase.listen;
+  _Phase _phase = _Phase.reading;
 
-  bool _revealed = false;
-  bool _peeked = false;
-  bool _showNative = false;
-  bool _heardOpen = false;
+  /// Which reply was taken, once one was.
+  int? _picked;
 
-  /// The row tapped but not yet confirmed.
-  int? _pending;
-  int? _gistPick;
-  int? _replyPick;
+  /// True while the answer given is the right one.
+  bool _right = false;
 
-  /// Which reply's reason the panel is showing after an answer: the chosen
-  /// one by default, another one when tapped.
-  int? _whyOf;
+  /// The line was said a second time before this was answered.
+  bool _restated = false;
 
-  int _gistRight = 0;
-  int _replyRight = 0;
-  int _seedsEarned = 0;
-  int _seedsLive = 0;
+  int _rightCount = 0;
   bool _saving = false;
 
-  /// Right answers in a row, carried in from earlier scenes and kept going.
+  /// Right answers in a row, carried in from earlier conversations.
   int _combo = 0;
   int _bestComboHere = 0;
 
-  /// Scenes finished before this one, to notice the tree changing stage.
-  int _scenesBefore = 0;
+  /// Steps of the ladder that went up during this run.
+  final _promoted = <LadderAxis>[];
 
-  // The leaf that flies from the right answer to the figure of "you".
-  late final AnimationController _leaf;
-  Offset? _leafFrom;
-  Offset? _leafTo;
-  final _youKey = GlobalKey();
 
-  /// Where the row last tapped sits, kept so the leaf can start from it.
-  RenderBox? _pendingBox;
+  /// The window, drained as a bar so the time left is felt rather than read.
+  late final AnimationController _window;
+  Timer? _beat;
 
   SceneCard get _card => _cards[_index];
-  Exchange get _x => _card.x;
+  Turn get _turn => _card.turn;
 
   @override
   void initState() {
     super.initState();
     _speech = ref.read(speechProvider);
+    _ladder = ref.read(ladderProvider).value ?? Ladder.empty;
     _cards = [
       ...widget.reviews,
-      for (var i = 0; i < widget.scene.exchanges.length; i++) SceneCard(widget.scene, i),
+      for (var i = 0; i < widget.scene.turns.length; i++) SceneCard(widget.scene, i),
     ];
     final stats = ref.read(skillStatsProvider).value;
     _combo = stats?.runs.combo ?? 0;
-    _scenesBefore = stats?.scenes ?? 0;
-    // Without a voice the words have to be on screen from the start; that is
-    // not a peek, there was nothing else to hear.
-    _revealed = !_speech.available;
-    _leaf = AnimationController(vsync: this, duration: const Duration(milliseconds: 650))
+    _window = AnimationController(vsync: this, duration: Duration(milliseconds: _windowMs))
       ..addStatusListener((st) {
-        if (st == AnimationStatus.completed && mounted) setState(() => _leafFrom = null);
+        if (st == AnimationStatus.completed && mounted) _windowClosed();
       });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _play());
   }
 
   @override
   void dispose() {
-    _leaf.dispose();
+    _beat?.cancel();
+    _window.dispose();
     _speech.stop();
     super.dispose();
   }
 
-  void _play() {
-    if (!mounted || !_speech.available) return;
-    _speech.speak(
-      _x.line,
-      rate: ref.read(settingsProvider).rate,
-      voice: ref.read(settingsProvider).voicePerScene ? _speech.voiceFor(_card.scene.id.hashCode) : null,
-    );
+  // ------------------------------------------------------------- the ladder
+
+  int get _windowMs => _card.scene.windowMs;
+  double get _rate => speedAt(_ladder.currentOf(LadderAxis.speed));
+
+  /// Whether a missed window is given a second chance. The two hardest steps
+  /// of the replay axis take it away.
+  bool get _restateAllowed =>
+      _ladder.currentOf(LadderAxis.replay) < 2 && _turn.restate.isNotEmpty;
+
+  /// How long the translation waits after an answer. The axis runs from at
+  /// once to never, cut fine so no single step takes it all away.
+  Duration? get _translationAfter {
+    final step = _ladder.currentOf(LadderAxis.translation);
+    if (step >= axisTop[LadderAxis.translation]!) return null;
+    return Duration(milliseconds: step * 400);
   }
 
-  void _buzz(void Function() f) {
+  // ------------------------------------------------------------- the run
+
+  void _buzz(Future<void> Function() f) {
     if (ref.read(settingsProvider).haptics) f();
   }
 
-  void _toggleReveal() {
-    setState(() => _revealed = !_revealed);
-    if (_revealed && _speech.available && _phase == _Phase.listen) _peeked = true;
-  }
-
-  // ------------------------------------------------------------- answering
-
-  bool get _choosing => _phase == _Phase.listen || _phase == _Phase.reply;
-
-  void _select(int i, BuildContext rowContext) {
-    if (!_choosing) return;
-    _buzz(HapticFeedback.selectionClick);
-    _pendingBox = rowContext.findRenderObject() as RenderBox?;
-    setState(() => _pending = i);
-  }
-
-  /// The confirm button: the tapped row becomes the answer.
-  void _decide() {
-    final i = _pending;
-    if (i == null || !_choosing) return;
-    final isGist = _phase == _Phase.listen;
-    final ok = i == (isGist ? _x.gist.answer : _x.reply.answer);
-    if (ok) {
-      _combo += 1;
-      if (_combo > _bestComboHere) _bestComboHere = _combo;
-      _seedsLive += isGist ? gistSeeds : replySeeds;
-      // Stronger the longer the run: a small reward that grows.
-      _buzz(_combo >= 5 ? HapticFeedback.heavyImpact : HapticFeedback.mediumImpact);
-      _flyLeaf();
-    } else {
-      _combo = 0;
-      _buzz(HapticFeedback.heavyImpact);
+  Future<void> _play() async {
+    if (!mounted) return;
+    setState(() => _phase = _Phase.playing);
+    if (!_speech.available) {
+      // No voice on this phone: the line is shown instead, and the window
+      // opens straight away so the screen is still usable.
+      _openWindow();
+      return;
     }
-    setState(() {
-      _pending = null;
-      _whyOf = i;
-      if (isGist) {
-        _gistPick = i;
-        _revealed = true; // the words come out once the ear has been tested
-        _phase = _Phase.gistAnswer;
+    await _speech.speak(
+      _turn.line,
+      rate: _rate,
+      voice: ref.read(settingsProvider).voicePerScene
+          ? _speech.voiceFor(_card.scene.id.hashCode)
+          : null,
+    );
+    if (!mounted || _phase != _Phase.playing) return;
+    _openWindow();
+  }
+
+  void _openWindow() {
+    setState(() => _phase = _Phase.open);
+    _window
+      ..duration = Duration(milliseconds: _windowMs)
+      ..forward(from: 0);
+  }
+
+  /// The window closed with nothing chosen.
+  Future<void> _windowClosed() async {
+    if (_phase != _Phase.open) return;
+    if (_restateAllowed && !_restated) {
+      _restated = true;
+      setState(() => _phase = _Phase.restating);
+      _buzz(HapticFeedback.selectionClick);
+      if (_speech.available) {
+        await _speech.speak(_turn.restate, rate: _rate);
       } else {
-        _replyPick = i;
-        _phase = _Phase.replyAnswer;
+        await Future<void>.delayed(const Duration(milliseconds: 900));
       }
-    });
-  }
-
-  void _flyLeaf() {
-    final from = _pendingBox;
-    final to = _youKey.currentContext?.findRenderObject() as RenderBox?;
-    final root = context.findRenderObject() as RenderBox?;
-    if (from == null || !from.attached || to == null || root == null) return;
-    setState(() {
-      _leafFrom = root.globalToLocal(from.localToGlobal(from.size.center(Offset.zero)));
-      _leafTo = root.globalToLocal(to.localToGlobal(to.size.center(Offset.zero)));
-    });
-    _leaf.forward(from: 0);
-  }
-
-  /// A tap anywhere moves on from an answer.
-  Future<void> _advance() async {
-    switch (_phase) {
-      case _Phase.gistAnswer:
-        setState(() {
-          _phase = _Phase.reply;
-          _whyOf = null;
-        });
-      case _Phase.replyAnswer:
-        await _settleExchange();
-      default:
-        break;
+      if (!mounted || _phase != _Phase.restating) return;
+      _openWindow();
+      return;
     }
+    // Out of chances. Counted as missed, and the conversation moves on.
+    await _answer(null);
   }
 
-  Future<void> _settleExchange() async {
-    if (_saving) return;
-    final gistOk = _gistPick == _x.gist.answer;
-    final replyOk = _replyPick == _x.reply.answer;
-    setState(() => _saving = true);
-    await ref.read(repositoryProvider).recordSceneExchange(
+  Future<void> _answer(int? i) async {
+    if (_phase != _Phase.open && _phase != _Phase.reading) return;
+    _window.stop();
+    _speech.stop();
+    final right = i != null && i == _turn.answer;
+    _combo = right ? _combo + 1 : 0;
+    if (_combo > _bestComboHere) _bestComboHere = _combo;
+    if (right) _rightCount++;
+    _buzz(right
+        ? (_combo >= 5 ? HapticFeedback.heavyImpact : HapticFeedback.mediumImpact)
+        : HapticFeedback.heavyImpact);
+
+    setState(() {
+      _picked = i;
+      _right = right;
+      _phase = _Phase.done;
+    });
+
+    final out = await ref.read(repositoryProvider).recordTurn(
           sceneId: _card.scene.id,
-          exchange: _card.exchange,
-          gistOk: gistOk,
-          replyOk: replyOk,
-          peeked: _peeked,
+          turn: _card.index,
+          correct: right,
+          missedSlot: i == null ? null : _turn.replies[i].missedSlot,
+          inWindow: right && !_restated,
           review: _card.review,
         );
     if (!mounted) return;
-    _gistRight += gistOk ? 1 : 0;
-    _replyRight += replyOk ? 1 : 0;
+    _ladder = out.ladder;
+    _promoted.addAll(out.promoted);
 
-    if (_index + 1 < _cards.length) {
-      setState(() {
-        _saving = false;
-        _index += 1;
-        _phase = _Phase.listen;
-        _pending = null;
-        _gistPick = null;
-        _replyPick = null;
-        _whyOf = null;
-        _revealed = !_speech.available;
-        _peeked = false;
-        _showNative = false;
-        _heardOpen = false;
-      });
-      _play();
-      return;
-    }
-
-    // The scene is finished: the day counts, the Seeds are paid.
-    final res = await ref
-        .read(repositoryProvider)
-        .completeScene(gistRight: _gistRight, replyRight: _replyRight);
-    if (!mounted) return;
-    ref.read(progressProvider.notifier).state = res.progress;
-    ref.invalidate(skillStatsProvider);
-    _speech.stop();
-    setState(() {
-      _saving = false;
-      _seedsEarned = res.seeds;
-      _phase = _Phase.result;
+    // The next line starts over the end of this one rather than after it.
+    _beat = Timer(const Duration(milliseconds: 2200), () {
+      if (mounted) _advance();
     });
   }
 
+  void _advance() {
+    _beat?.cancel();
+    if (_index + 1 >= _cards.length) {
+      _finish();
+      return;
+    }
+    setState(() {
+      _index++;
+      _picked = null;
+      _restated = false;
+      _phase = _Phase.reading;
+    });
+  }
+
+  Future<void> _finish() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    await ref.read(repositoryProvider).completeScene();
+    if (!mounted) return;
+    ref.invalidate(ladderProvider);
+    setState(() {
+      _phase = _Phase.result;
+      _saving = false;
+    });
+  }
+
+  void _leave({required bool again}) => Navigator.pop(
+        context,
+        SceneRunResult(
+          right: _rightCount,
+          answered: _cards.length,
+          promoted: _promoted,
+          again: again,
+        ),
+      );
+
   Future<void> _quit() async {
     final s = ref.read(stringsProvider);
-    if (_phase == _Phase.result || _index == 0 && _phase == _Phase.listen) {
-      Navigator.pop(context);
+    if (_index == 0 && _phase == _Phase.reading) {
+      _leave(again: false);
       return;
     }
     final ok = await confirm(
       context,
-      title: s.t('quitTitle'),
+      title: s.t('sceneQuitTitle'),
       body: s.t('sceneQuitBody'),
       confirmLabel: s.t('quitConfirm'),
       cancelLabel: s.t('cancel'),
-      destructive: false,
     );
-    if (ok && mounted) Navigator.pop(context);
+    if (ok && mounted) _leave(again: false);
   }
-
-  void _finish(bool again) => Navigator.pop(
-        context,
-        SceneRunResult(
-          gistRight: _gistRight,
-          replyRight: _replyRight,
-          answered: _cards.length,
-          seeds: _seedsEarned,
-          again: again,
-        ),
-      );
 
   // ----------------------------------------------------------------- build
 
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
-    // Inside the scene everything is English — the questions, the labels, the
-    // verdict — so the head never switches language mid-exchange. The guide
-    // and the result, which are about the scene rather than in it, keep the
-    // interface language.
+    // Inside the conversation everything is English — the labels, the
+    // verdict — so the head never switches language mid-turn. The guide and
+    // the result, which are about the conversation rather than in it, keep
+    // the interface language.
     final e = S('en');
     final theme = Theme.of(context);
 
@@ -336,69 +336,26 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
         body: SafeArea(
           child: _phase == _Phase.result
               ? _result(s, theme)
-              : Stack(
+              : Column(
                   children: [
-                    // Moving on is the button in the panel below, never a tap on
-                    // the screen: after an answer the other rows are still
-                    // live, and each one has a reason to show.
-                    Column(
-                        children: [
-                          _topBar(e, theme),
-                          _dots(theme),
-                          Expanded(
-                            child: SingleChildScrollView(
-                              // A fallback for very small screens; the layout
-                              // is sized so that nothing here needs to scroll.
-                              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  if (widget.tutorial) _guide(s, theme),
-                                  if (_card.review) _reviewTag(e, theme),
-                                  _lineBubble(e, theme),
-                                  if (_phase == _Phase.reply || _phase == _Phase.replyAnswer) ...[
-                                    const SizedBox(height: 10),
-                                    _yourBubble(e, theme),
-                                  ],
-                                  const SizedBox(height: 12),
-                                  AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 220),
-                                    child: Column(
-                                      key: ValueKey('$_index/${_phase == _Phase.listen || _phase == _Phase.gistAnswer ? 'g' : 'r'}'),
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: _question(e, theme),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          _bottom(e, theme),
-                        ],
+                    _topBar(e, theme),
+                    _dots(theme),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (widget.tutorial) _guide(s, theme),
+                            if (_card.review) _reviewTag(e, theme),
+                            _them(e, theme),
+                            const SizedBox(height: 12),
+                            Expanded(child: _replies(e, theme)),
+                          ],
+                        ),
                       ),
-                    if (_leafFrom != null && _leafTo != null)
-                      AnimatedBuilder(
-                        animation: _leaf,
-                        builder: (context, _) {
-                          final t = Curves.easeInOut.transform(_leaf.value);
-                          final p = Offset.lerp(_leafFrom, _leafTo, t)!;
-                          // An arc, not a straight line: the leaf lifts as it goes.
-                          final lift = sin(t * pi) * 60;
-                          return Positioned(
-                            left: p.dx - 12,
-                            top: p.dy - lift - 12,
-                            child: IgnorePointer(
-                              child: Opacity(
-                                opacity: 1 - t * 0.6,
-                                child: Transform.rotate(
-                                  angle: t * 2.5,
-                                  child: Icon(Icons.eco, size: 24, color: theme.colorScheme.primary),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                    ),
+                    _bottom(e, theme),
                   ],
                 ),
         ),
@@ -413,9 +370,6 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
       child: Row(
         children: [
           IconButton(onPressed: _quit, icon: const Icon(Icons.close)),
-          if (_cards.length > 1)
-            Text('${_index + 1} / ${_cards.length}',
-                style: theme.textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
           const Spacer(),
           // The run: shown from two, and it grows on the spot.
           AnimatedSwitcher(
@@ -423,47 +377,36 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
             transitionBuilder: (child, anim) =>
                 ScaleTransition(scale: Tween(begin: 1.4, end: 1.0).animate(anim), child: child),
             child: _combo >= 2
-                ? _Chip(key: ValueKey('c$_combo'), text: '✦ ${s.t('comboLabel', {'n': _combo})}', color: scheme.primary)
+                ? _Chip(
+                    key: ValueKey('c$_combo'),
+                    text: '✦ ${s.t('comboLabel', {'n': _combo})}',
+                    color: scheme.primary)
                 : const SizedBox.shrink(key: ValueKey('c0')),
-          ),
-          const SizedBox(width: 8),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            transitionBuilder: (child, anim) =>
-                ScaleTransition(scale: Tween(begin: 1.3, end: 1.0).animate(anim), child: child),
-            child: _seedsLive > 0
-                ? _Chip(key: ValueKey('s$_seedsLive'), text: '🌱 +$_seedsLive', color: scheme.tertiary)
-                : const SizedBox.shrink(key: ValueKey('s0')),
           ),
         ],
       ),
     );
   }
 
-  /// How far through the conversation this is. One dot per step — their line,
-  /// your reply, their line, your reply — and the step being taken is the
-  /// larger one. A review card is a single exchange, so two dots.
+  /// How far through the conversation this is. One dot per turn, the one
+  /// being taken larger. The learner is never told how many are left — the
+  /// dots say where they are, not how far there is to go.
   Widget _dots(ThemeData theme) {
     final scheme = theme.colorScheme;
-    final steps = _card.review ? 2 : widget.scene.exchanges.length * 2;
-    final exchangeAt = _card.review ? 0 : _index - widget.reviews.length;
-    final half = _phase == _Phase.listen || _phase == _Phase.gistAnswer ? 0 : 1;
-    final now = exchangeAt * 2 + half;
-
     return Padding(
-      padding: const EdgeInsets.only(top: 2, bottom: 2),
+      padding: const EdgeInsets.only(top: 2, bottom: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          for (var i = 0; i < steps; i++)
+          for (var i = 0; i < _cards.length; i++)
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               margin: const EdgeInsets.symmetric(horizontal: 3),
-              width: i == now ? 9 : 7,
-              height: i == now ? 9 : 7,
+              width: i == _index ? 9 : 7,
+              height: i == _index ? 9 : 7,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: i <= now ? scheme.primary : scheme.outlineVariant,
+                color: i <= _index ? scheme.primary : scheme.outlineVariant,
               ),
             ),
         ],
@@ -471,183 +414,41 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     );
   }
 
-  /// Your side of the conversation: an empty bubble while the reply is being
-  /// chosen, the words you picked once it is answered. It appears only when
-  /// it is your turn — the first question is about their line, not yours.
-  Widget _yourBubble(S s, ThemeData theme) {
-    final scheme = theme.colorScheme;
-    final answered = _phase == _Phase.replyAnswer;
-    final pick = _replyPick;
-    final words = answered && pick != null ? _x.reply.options[pick].text : s.t('sceneYourTurn');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(right: 32, bottom: 2),
-          child: Text(s.t('speakerYou'),
-              style: theme.textTheme.labelSmall?.copyWith(color: scheme.primary)),
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Flexible(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                child: Container(
-                  key: ValueKey('you$_index$answered'),
-                  padding: const EdgeInsets.fromLTRB(14, 9, 14, 10),
-                  decoration: BoxDecoration(
-                    color: answered ? scheme.primaryContainer : Colors.transparent,
-                    border: answered
-                        ? null
-                        : Border.all(color: scheme.primary.withValues(alpha: 0.45), width: 1.4),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(16),
-                      topRight: Radius.circular(4),
-                      bottomLeft: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
-                    ),
-                  ),
-                  child: Text(
-                    words,
-                    style: answered
-                        ? theme.textTheme.bodyMedium
-                            ?.copyWith(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w600)
-                        : theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            _Figure.small(other: false),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _reviewTag(S s, ThemeData theme) => Padding(
+  Widget _guide(S s, ThemeData theme) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Chip(label: Text(s.t('sceneReviewTag')), visualDensity: VisualDensity.compact),
+        child: Text(
+          switch (_phase) {
+            _Phase.reading => s.t('tutRead'),
+            _Phase.playing || _Phase.restating => s.t('tutListen'),
+            _Phase.open => s.t('tutReply'),
+            _ => s.t('tutResult'),
+          },
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
         ),
       );
 
-  Widget _guide(S s, ThemeData theme) {
-    final key = switch (_phase) {
-      _Phase.listen => 'tutListen',
-      _Phase.gistAnswer || _Phase.replyAnswer => 'tutNext',
-      _Phase.reply => 'tutReply',
-      _Phase.result => 'tutResult',
-    };
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.inverseSurface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(s.t(key),
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onInverseSurface)),
-    );
-  }
+  Widget _reviewTag(S s, ThemeData theme) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.history, size: 14, color: theme.colorScheme.tertiary),
+            const SizedBox(width: 6),
+            Text(s.t('reviewTag'),
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: theme.colorScheme.tertiary)),
+          ],
+        ),
+      );
 
-  /// Their line: a bubble from the figure on the left. Hidden until the ear
-  /// has been tested; the translation stays behind a button after that. The
-  /// second line of a scene says it follows the learner's own reply. Once the
-  /// reply question is up the bubble folds to one row, so the three replies
-  /// and the panel all fit without scrolling.
-  Widget _lineBubble(S s, ThemeData theme) {
+  /// Their side: the setting while nothing has been said, then the line once
+  /// it has been answered. What was actually said is never shown before the
+  /// answer — that is the whole exercise.
+  Widget _them(S s, ThemeData theme) {
     final scheme = theme.colorScheme;
-    final showWords = _revealed || _phase != _Phase.listen;
-    final followsReply = !_card.review && _card.exchange > 0;
-    final canTranslate = showWords && _phase != _Phase.listen && _x.lineNative.isNotEmpty;
-    final folded = _phase != _Phase.listen;
-    final muted = theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
-
-    Widget words() => showWords
-        ? Text(_x.line,
-            style: folded
-                ? theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)
-                : theme.textTheme.titleMedium)
-        : Text('· · · · · ·',
-            style: theme.textTheme.titleMedium?.copyWith(color: scheme.onSurfaceVariant));
-
-    final translateButton = canTranslate
-        ? IconButton(
-            tooltip: s.t(_showNative ? 'sceneHideTranslation' : 'sceneShowTranslation'),
-            visualDensity: VisualDensity.compact,
-            onPressed: () => setState(() => _showNative = !_showNative),
-            icon: Icon(_showNative ? Icons.translate : Icons.translate_outlined,
-                size: 18, color: _showNative ? scheme.primary : scheme.onSurfaceVariant),
-          )
-        : null;
-
-    final body = folded
-        // One row: speaker, the words, the translation toggle.
-        ? Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (followsReply) Text(s.t('afterYourReply'), style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_speech.available)
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _play,
-                      icon: Icon(Icons.volume_up, size: 20, color: scheme.primary),
-                    ),
-                  Expanded(child: Padding(padding: const EdgeInsets.only(top: 8), child: words())),
-                  ?translateButton,
-                ],
-              ),
-              if (canTranslate && _showNative)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
-                  child: Text(_x.lineNative, style: muted),
-                ),
-            ],
-          )
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (followsReply) Text(s.t('afterYourReply'), style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-              Row(
-                children: [
-                  if (_speech.available)
-                    FilledButton.tonalIcon(
-                      // The app theme gives FilledButton an infinite minimum
-                      // width, which a Row cannot lay out.
-                      style: FilledButton.styleFrom(
-                          minimumSize: const Size(0, 36),
-                          padding: const EdgeInsets.symmetric(horizontal: 12)),
-                      onPressed: _play,
-                      icon: const Icon(Icons.volume_up, size: 18),
-                      label: Text(s.t('debateReplay')),
-                    ),
-                  const Spacer(),
-                  if (_phase == _Phase.listen && _speech.available)
-                    IconButton(
-                      tooltip: s.t(_revealed ? 'debateHideText' : 'debateShowText'),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _toggleReveal,
-                      icon: Icon(_revealed ? Icons.visibility_off : Icons.visibility, size: 20),
-                    ),
-                  ?translateButton,
-                ],
-              ),
-              const SizedBox(height: 4),
-              words(),
-              if (canTranslate && _showNative) ...[
-                const SizedBox(height: 4),
-                Text(_x.lineNative, style: muted),
-              ],
-            ],
-          );
+    final said = _phase == _Phase.done;
+    final showing = said || !_speech.available;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -655,243 +456,181 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
         Padding(
           padding: const EdgeInsets.only(left: 32, bottom: 2),
           child: Text(s.t('speakerOther'),
-              style: theme.textTheme.labelSmall?.copyWith(color: _otherColor(theme))),
+              style: theme.textTheme.labelSmall?.copyWith(color: scheme.tertiary)),
         ),
         Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _Figure.small(other: true),
-        const SizedBox(width: 8),
-        Expanded(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            child: Card(
-              key: ValueKey('line$_index${folded ? 'f' : ''}'),
-              color: scheme.surfaceContainerHigh,
-              margin: EdgeInsets.zero,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(4),
-                  topRight: Radius.circular(16),
-                  bottomLeft: Radius.circular(16),
-                  bottomRight: Radius.circular(16),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _Figure.small(other: true),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(16),
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_card.scene.settingNative.isNotEmpty && !said)
+                      Text(_card.scene.settingNative,
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: scheme.onSurfaceVariant)),
+                    if (showing) ...[
+                      if (_card.scene.settingNative.isNotEmpty && !said)
+                        const SizedBox(height: 6),
+                      Text(_turn.line, style: theme.textTheme.titleSmall),
+                    ] else
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Text(
+                          _phase == _Phase.playing || _phase == _Phase.restating
+                              ? '· · · · · ·'
+                              : '',
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                    if (said) _native(theme),
+                  ],
                 ),
               ),
-              child: Padding(
-                padding: folded
-                    ? const EdgeInsets.fromLTRB(4, 2, 4, 2)
-                    : const EdgeInsets.fromLTRB(14, 8, 8, 10),
-                child: body,
-              ),
             ),
-          ),
-        ),
-      ],
+          ],
         ),
       ],
     );
   }
 
-  /// What was heard, folded to a mark so the reply question is not answered
-  /// by reading it; open on a tap, and open once the reply is in.
-  Widget _heard(S s, ThemeData theme) {
-    final scheme = theme.colorScheme;
-    final ok = _gistPick == _x.gist.answer;
-    final color = ok ? scheme.primary : scheme.error;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        onTap: () => setState(() => _heardOpen = !_heardOpen),
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(ok ? Icons.check : Icons.close, size: 16, color: color),
-                  const SizedBox(width: 6),
-                  Text(s.t(ok ? 'heardOk' : 'heardMiss'),
-                      style: theme.textTheme.labelMedium?.copyWith(color: color, fontWeight: FontWeight.w700)),
-                  const Spacer(),
-                  Icon(_heardOpen ? Icons.expand_less : Icons.expand_more, size: 18, color: scheme.onSurfaceVariant),
-                ],
-              ),
-              if (_heardOpen) ...[
-                const SizedBox(height: 4),
-                Text(_x.gist.correct, style: theme.textTheme.bodySmall),
-                if (_x.gist.nativeOf(_x.gist.answer).isNotEmpty)
-                  Text(_x.gist.nativeOf(_x.gist.answer),
-                      style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-              ],
-            ],
-          ),
+  /// The line in the learner's own language, once the ladder still allows it.
+  /// At the top of that axis it never comes.
+  Widget _native(ThemeData theme) {
+    final wait = _translationAfter;
+    if (wait == null || _turn.lineNative.isEmpty) return const SizedBox.shrink();
+    return FutureBuilder<void>(
+      future: Future<void>.delayed(wait),
+      builder: (context, snap) => AnimatedOpacity(
+        duration: const Duration(milliseconds: 250),
+        opacity: snap.connectionState == ConnectionState.done ? 1 : 0,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(_turn.lineNative,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         ),
       ),
     );
   }
 
-  Widget _questionTitle(S s, ThemeData theme, String key) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
+  Widget _replies(S s, ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final live = _phase == _Phase.open;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
           children: [
             _Figure.small(other: false),
             const SizedBox(width: 8),
-            Text(s.t(key), style: theme.textTheme.titleSmall),
+            Text(s.t('sceneQ2'), style: theme.textTheme.titleSmall),
           ],
         ),
-      );
-
-  _OptionState _stateOf(int i, {required bool answered, required int answer, required int? pick}) {
-    if (!answered) return _pending == i ? _OptionState.selected : _OptionState.idle;
-    if (i == answer) return _OptionState.correct;
-    if (i == pick) return _OptionState.wrong;
-    return _OptionState.dim;
+        const SizedBox(height: 8),
+        for (var i = 0; i < _turn.replies.length; i++) ...[
+          _Option(
+            text: _turn.replies[i].text,
+            sub: _phase == _Phase.done && _translationAfter != null
+                ? _turn.replies[i].native
+                : '',
+            // Dimmed while the line is being said: reading is over by then.
+            dim: _phase == _Phase.playing || _phase == _Phase.restating,
+            right: _phase == _Phase.done && i == _turn.answer,
+            wrong: _phase == _Phase.done && i == _picked && !_right,
+            onTap: live ? () => _answer(i) : null,
+          ),
+          const SizedBox(height: 8),
+        ],
+        const Spacer(),
+        // The window, draining. Only while it is open — a bar that is always
+        // there would be one more thing to watch instead of listen to.
+        SizedBox(
+          height: 4,
+          child: live
+              ? AnimatedBuilder(
+                  animation: _window,
+                  builder: (context, _) => LinearProgressIndicator(
+                    value: 1 - _window.value,
+                    backgroundColor: scheme.surfaceContainerHighest,
+                    color: scheme.primary,
+                  ),
+                )
+              : null,
+        ),
+      ],
+    );
   }
 
-  List<Widget> _question(S s, ThemeData theme) {
-    switch (_phase) {
-      case _Phase.listen:
-      case _Phase.gistAnswer:
-        final answered = _phase == _Phase.gistAnswer;
-        return [
-          _questionTitle(s, theme, 'sceneQ1'),
-          for (var i = 0; i < _x.gist.options.length; i++)
-            _Option(
-              key: ValueKey('g$_index-$i'),
-              text: _x.gist.options[i],
-              // The right answer shows its translation once answered; the rest
-              // stay short so the three rows still fit above the panel.
-              sub: answered ? _x.gist.nativeOf(i) : '',
-              state: _stateOf(i, answered: answered, answer: _x.gist.answer, pick: _gistPick),
-              onTap: answered ? null : (c) => _select(i, c),
-            ),
-        ];
-      case _Phase.reply:
-      case _Phase.replyAnswer:
-        final answered = _phase == _Phase.replyAnswer;
-        return [
-          _heard(s, theme),
-          _questionTitle(s, theme, 'sceneQ2'),
-          for (var i = 0; i < _x.reply.options.length; i++)
-            _Option(
-              key: ValueKey('r$_index-$i'),
-              text: _x.reply.options[i].text,
-              sub: answered ? _x.reply.options[i].native : '',
-              state: _stateOf(i, answered: answered, answer: _x.reply.answer, pick: _replyPick),
-              // Tapping another reply after the answer shows its reason.
-              onTap: answered ? (_) => setState(() => _whyOf = i) : (c) => _select(i, c),
-              quiet: answered,
-            ),
-        ];
-      case _Phase.result:
-        return const [];
-    }
-  }
-
-  /// The strip at the bottom: Confirm while choosing, the panel once answered.
   Widget _bottom(S s, ThemeData theme) {
     final scheme = theme.colorScheme;
-    if (_choosing) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FilledButton(
-              onPressed: _pending == null ? null : _decide,
-              child: Text(s.t('sceneDecide')),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+      child: switch (_phase) {
+        _Phase.reading => FilledButton.icon(
+            onPressed: _play,
+            icon: const Icon(Icons.volume_up),
+            label: Text(s.t('scenePlay')),
+          ),
+        _Phase.playing || _Phase.restating => Center(
+            child: Text(
+              s.t(_phase == _Phase.restating ? 'sceneAgain' : 'sceneListening'),
+              style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
-            const SizedBox(height: 4),
-            Text(s.t('sceneTapHint'),
-                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-          ],
-        ),
-      );
-    }
+          ),
+        _Phase.open => Center(
+            child: Text(s.t('sceneYourTurn'),
+                style: theme.textTheme.bodyMedium?.copyWith(color: scheme.primary)),
+          ),
+        _ => _verdict(s, theme),
+      },
+    );
+  }
 
-    final isGist = _phase == _Phase.gistAnswer;
-    final pick = isGist ? _gistPick : _replyPick;
-    final answer = isGist ? _x.gist.answer : _x.reply.answer;
-    final ok = pick == answer;
-    final shown = _whyOf ?? pick ?? answer;
-    // The reason: for a reply, the why of the row being looked at; for a
-    // gist, the right summary's translation is reason enough.
-    final why = isGist
-        ? ''
-        : (_x.reply.options[shown].why.isNotEmpty
-            ? _x.reply.options[shown].why
-            : _x.reply.options[shown].native);
-    final headline = ok
-        ? '${s.t('sceneCorrect')} · +${isGist ? gistSeeds : replySeeds}'
-        : (_card.review ? s.t('sceneWrongAgain') : s.t('sceneWrong'));
-
-    return TweenAnimationBuilder<double>(
-      key: ValueKey('panel$_index${_phase.name}'),
-      tween: Tween(begin: 1, end: 0),
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-      builder: (context, dy, child) =>
-          FractionalTranslation(translation: Offset(0, dy), child: child),
+  Widget _verdict(S s, ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final missed = _picked == null;
+    final bg = _right ? scheme.primaryContainer : scheme.errorContainer;
+    final fg = _right ? scheme.onPrimaryContainer : scheme.onErrorContainer;
+    return GestureDetector(
+      // Moving on early is allowed, but nothing has to be pressed: the next
+      // line comes over the end of this on its own.
+      onTap: _advance,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
-        decoration: BoxDecoration(
-          color: ok ? scheme.primaryContainer : scheme.errorContainer,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+        child: Row(
           children: [
-            Row(
-              children: [
-                Icon(ok ? Icons.check_circle : Icons.cancel,
-                    color: ok ? scheme.onPrimaryContainer : scheme.onErrorContainer),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(headline,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                          color: ok ? scheme.onPrimaryContainer : scheme.onErrorContainer)),
-                ),
-              ],
+            Icon(missed ? Icons.timer_off_outlined : (_right ? Icons.check : Icons.close),
+                size: 18, color: fg),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                missed
+                    ? s.t('sceneWindowGone')
+                    : (_right ? s.t('sceneRight') : s.t('sceneWrong')),
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: fg, fontWeight: FontWeight.w700),
+              ),
             ),
-            if (why.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                shown == answer ? why : '${_x.reply.options[shown].text}\n$why',
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                    color: ok ? scheme.onPrimaryContainer : scheme.onErrorContainer),
-              ),
-            ],
-            if (!isGist) ...[
-              const SizedBox(height: 6),
-              Text(
-                s.t('tapOtherWhy'),
-                style: theme.textTheme.labelSmall?.copyWith(
-                    color: (ok ? scheme.onPrimaryContainer : scheme.onErrorContainer)
-                        .withValues(alpha: 0.75)),
-              ),
-            ],
-            const SizedBox(height: 10),
-            // Moving on is deliberate: the rows above stay live for their
-            // reasons until this is pressed.
-            FilledButton(
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(double.infinity, 44),
-                backgroundColor: ok ? scheme.onPrimaryContainer : scheme.onErrorContainer,
-                foregroundColor: ok ? scheme.primaryContainer : scheme.errorContainer,
-              ),
-              onPressed: _saving ? null : _advance,
-              child: Text(s.t('sceneNextButton')),
-            ),
+            if (_promoted.isNotEmpty)
+              Text(s.t('ladderUp'),
+                  style: theme.textTheme.labelSmall?.copyWith(color: fg)),
           ],
         ),
       ),
@@ -900,77 +639,51 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
 
   Widget _result(S s, ThemeData theme) {
     final scheme = theme.colorScheme;
-    final total = _cards.length;
-    final right = _gistRight + _replyRight;
-    final perfect = right == total * 2;
-    // The tree's reading of this scene: leaves for what was caught, flowers
-    // for what was answered — and flowers only on the learner's own scenes.
-    final bloom = !widget.scene.isBuiltin;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-      children: [
-        if (widget.tutorial) _guide(s, theme),
-        Text('$right / ${total * 2}',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w700)),
-        const SizedBox(height: 4),
-        Text(s.t('sceneResultBreakdown', {'g': _gistRight, 'r': _replyRight, 'n': total}),
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
-        const SizedBox(height: 12),
-        Text('+$_seedsEarned Seeds',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.titleLarge?.copyWith(color: scheme.primary)),
-        if (_bestComboHere >= 3) ...[
-          const SizedBox(height: 4),
-          Text('✦ ${s.t('comboLabel', {'n': _bestComboHere})}',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(color: scheme.primary)),
-        ],
-        const SizedBox(height: 16),
-        Text(
-          [
-            s.t('sceneTwig'),
-            if (_gistRight > 0) s.t('sceneLeaves', {'n': _gistRight}),
-            if (bloom && _replyRight > 0) s.t('sceneFlowers', {'n': _replyRight}),
-          ].join(' · '),
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium,
-        ),
-        if (treeStage(_scenesBefore + 1) > treeStage(_scenesBefore)) ...[
+    final stageUp = treeStage(_ladder.reached) > treeStage(_ladder.reached - _promoted.length);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+      child: Column(
+        children: [
+          Text('$_rightCount / ${_cards.length}', style: theme.textTheme.displaySmall),
           const SizedBox(height: 10),
-          Text(
-            s.t('treeStageUp', {'name': s.t('treeStage${treeStage(_scenesBefore + 1)}')}),
-            textAlign: TextAlign.center,
-            style: theme.textTheme.titleMedium
-                ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700),
+          if (_bestComboHere >= 3)
+            Text('✦ ${s.t('comboLabel', {'n': _bestComboHere})}',
+                style: theme.textTheme.titleSmall?.copyWith(color: scheme.primary)),
+          const SizedBox(height: 18),
+          if (_promoted.isNotEmpty) ...[
+            Text(s.t('ladderUp'),
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text(
+              [for (final a in _promoted) s.t('axis_${a.name}')].join(' · '),
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 14),
+          ],
+          if (stageUp)
+            Text(s.t('treeStageUp', {'name': s.t('treeStage${treeStage(_ladder.reached)}')}),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+          const Spacer(),
+          FilledButton(
+            onPressed: () => _leave(again: true),
+            child: Text(s.t('sceneNext')),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: () => _leave(again: false),
+            child: Text(s.t('sceneDone')),
           ),
         ],
-        if (perfect && bloom) ...[
-          const SizedBox(height: 6),
-          Text(s.t('scenePerfect'),
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
-        ],
-        if (widget.scene.isBuiltin) ...[
-          const SizedBox(height: 6),
-          Text(s.t('sceneSampleNote'),
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-        ],
-        const SizedBox(height: 32),
-        FilledButton(onPressed: () => _finish(true), child: Text(s.t('sceneNext'))),
-        const SizedBox(height: 10),
-        OutlinedButton(onPressed: () => _finish(false), child: Text(s.t('debateDone'))),
-      ],
+      ),
     );
   }
 }
 
-/// The other side's colour: warm, against the app's own blue for "you", so
-/// the two sides read apart at a glance in both themes.
-Color _otherColor(ThemeData theme) =>
-    theme.brightness == Brightness.dark ? const Color(0xFFD9A06C) : const Color(0xFFB9773A);
+// ------------------------------------------------------------------ pieces
 
 class _Chip extends StatelessWidget {
   final String text;
@@ -981,146 +694,98 @@ class _Chip extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(999),
+          color: color.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Text(text,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+            style: Theme.of(context)
+                .textTheme
+                .labelMedium
+                ?.copyWith(color: color, fontWeight: FontWeight.w700)),
       );
 }
 
-/// A person, faceless: them or you. No names, no titles — those would be
-/// hints, and the scene is about listening.
+/// Who is speaking, as a small figure. Two of them, facing each other.
 class _Figure extends StatelessWidget {
-  final String? label;
   final bool other;
-  final bool lit;
   final double size;
-  const _Figure({required this.label, required this.other, required this.lit}) : size = 32;
-  const _Figure.small({required this.other})
-      : label = null,
-        lit = true,
-        size = 24;
+  const _Figure.small({required this.other}) : size = 24;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = other ? scheme.tertiary : scheme.primary;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(Icons.person, size: size * 0.62, color: color),
+    );
+  }
+}
+
+/// One reply, as a row that can be tapped.
+class _Option extends StatelessWidget {
+  final String text;
+  final String sub;
+  final bool dim;
+  final bool right;
+  final bool wrong;
+  final VoidCallback? onTap;
+  const _Option({
+    required this.text,
+    this.sub = '',
+    this.dim = false,
+    this.right = false,
+    this.wrong = false,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final color = other ? _otherColor(theme) : scheme.primary;
-    final figure = AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color.withValues(alpha: lit ? 0.18 : 0.08),
-        border: lit ? Border.all(color: color, width: 1.5) : null,
-      ),
-      child: Icon(Icons.person, size: size * 0.62, color: color.withValues(alpha: lit ? 1 : 0.5)),
-    );
-    if (label == null) return figure;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        figure,
-        const SizedBox(height: 2),
-        Text(label!,
-            style: theme.textTheme.labelSmall?.copyWith(
-                color: lit ? color : scheme.onSurfaceVariant,
-                fontWeight: lit ? FontWeight.w700 : FontWeight.w400)),
-      ],
-    );
-  }
-}
+    final border = right
+        ? scheme.primary
+        : wrong
+            ? scheme.error
+            : scheme.outlineVariant;
+    final fill = right
+        ? scheme.primaryContainer.withValues(alpha: 0.5)
+        : wrong
+            ? scheme.errorContainer.withValues(alpha: 0.5)
+            : Colors.transparent;
 
-// ----------------------------------------------------------------- options
-
-enum _OptionState { idle, selected, correct, wrong, dim }
-
-/// One choice: tap to select, confirm below. Two steps, so a knock on a
-/// moving train does not answer for you. After the answer the row shows its
-/// translation, and a dimmed row can be tapped for its reason.
-class _Option extends StatelessWidget {
-  final String text;
-  final String sub;
-  final _OptionState state;
-  final void Function(BuildContext)? onTap;
-
-  /// After the answer: no radio mark, a tap only asks for the reason.
-  final bool quiet;
-  const _Option({
-    super.key,
-    required this.text,
-    required this.state,
-    this.sub = '',
-    this.onTap,
-    this.quiet = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final (bg, border, fg, width) = switch (state) {
-      _OptionState.idle => (scheme.surface, scheme.outlineVariant, scheme.onSurface, 1.5),
-      _OptionState.selected => (
-          scheme.primaryContainer.withValues(alpha: 0.5),
-          scheme.primary,
-          scheme.onSurface,
-          2.0
-        ),
-      _OptionState.correct => (scheme.primaryContainer, scheme.primary, scheme.onPrimaryContainer, 2.0),
-      _OptionState.wrong => (scheme.errorContainer, scheme.error, scheme.onErrorContainer, 2.0),
-      _OptionState.dim => (scheme.surface, scheme.outlineVariant, scheme.onSurfaceVariant, 1.5),
-    };
-    final pop = state == _OptionState.correct;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: AnimatedScale(
-        // The right row lifts for a beat when it is revealed.
-        scale: pop ? 1.02 : 1.0,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutBack,
-        child: Material(
-          color: bg,
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 200),
+      opacity: dim ? 0.45 : 1,
+      child: Material(
+        color: fill,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(14),
-          child: InkWell(
-            onTap: onTap == null ? null : () => onTap!(context),
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              width: double.infinity,
-              constraints: const BoxConstraints(minHeight: 48),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: border, width: width),
-              ),
-              child: Opacity(
-                opacity: state == _OptionState.dim ? 0.6 : 1,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(text, style: TextStyle(fontSize: 15, color: fg)),
-                          if (sub.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: Text(sub, style: TextStyle(fontSize: 11.5, color: fg.withValues(alpha: 0.75))),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (state == _OptionState.selected)
-                      Icon(Icons.radio_button_checked, color: scheme.primary),
-                    if (state == _OptionState.idle && !quiet)
-                      Icon(Icons.radio_button_unchecked, color: scheme.outlineVariant),
-                    if (state == _OptionState.correct) Icon(Icons.check_circle, color: scheme.primary),
-                    if (state == _OptionState.wrong) Icon(Icons.cancel, color: scheme.error),
-                  ],
-                ),
-              ),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: border, width: right || wrong ? 1.8 : 1),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(text, style: theme.textTheme.bodyLarge),
+                if (sub.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(sub,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: scheme.onSurfaceVariant)),
+                ],
+              ],
             ),
           ),
         ),
@@ -1131,12 +796,12 @@ class _Option extends StatelessWidget {
 
 // ---------------------------------------------------------------- launcher
 
-/// Which scene to open now: one never done, drawn at random, before any that
-/// has been; among those done, the one done longest ago. Built-ins and the
-/// learner's own are treated alike here; who made a scene decides what
+/// Which conversation to open now: one never done, drawn at random, before
+/// any that has been; among those done, the one done longest ago. Built-ins
+/// and the learner's own are treated alike here; who wrote one decides what
 /// blooms, not when it comes up.
-Scene? pickScene(List<Scene> scenes, List<SceneResult> results, {Random? rng}) {
-  final open = scenes.where((s) => !s.disabled && s.exchanges.isNotEmpty).toList();
+Scene? pickScene(List<Scene> scenes, List<TurnResult> results, {Random? rng}) {
+  final open = scenes.where((s) => !s.disabled && s.turns.isNotEmpty).toList();
   if (open.isEmpty) return null;
   final last = <String, int>{};
   for (final r in results) {
@@ -1149,13 +814,13 @@ Scene? pickScene(List<Scene> scenes, List<SceneResult> results, {Random? rng}) {
   return open.first;
 }
 
-/// Opens today's scene, with any reviews owed in front of it, and the next
-/// one if asked. Loops rather than recurses so a run of "next scene" does not
+/// Opens today's conversation, with any turns owed in front of it, and the
+/// next one if asked. Loops rather than recurses so a run of "next" does not
 /// stack finished screens.
 ///
 /// [all] is the set the caller wants to draw from — everything, one field,
-/// one half of a field — so the caller decides what counts; this only
-/// chooses among them.
+/// one half of a field — so the caller decides what counts; this only chooses
+/// among them.
 Future<void> startScene(
   BuildContext context,
   WidgetRef ref, {
@@ -1169,7 +834,7 @@ Future<void> startScene(
   final byId = {for (final x in everything) x.id: x, for (final x in all) x.id: x};
   if (!context.mounted) return;
   while (true) {
-    final results = await repo.sceneResults();
+    final results = await repo.turnResults();
     final scene = pickScene(all, results);
     if (!context.mounted) return;
     if (scene == null) {
@@ -1178,8 +843,8 @@ Future<void> startScene(
     }
     final reviews = [
       for (final r in await repo.reviewsDue())
-        if (byId[r.sceneId] case final sc? when r.exchange < sc.exchanges.length)
-          SceneCard(sc, r.exchange, review: true)
+        if (byId[r.sceneId] case final sc? when r.turn < sc.turns.length)
+          SceneCard(sc, r.turn, review: true)
     ];
     if (!context.mounted) return;
     final run = await Navigator.push<SceneRunResult>(

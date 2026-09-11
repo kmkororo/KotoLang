@@ -259,7 +259,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             OutlinedButton(
               onPressed: () => _confirmed(
                 title: s.t('deleteAllMaterial'),
-                action: () => ref.read(repositoryProvider).deleteAllMaterial(),
+                action: () => ref.read(repositoryProvider).clearEveryField(),
               ),
               child: Text(s.t('deleteAllMaterial')),
             ),
@@ -267,7 +267,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             OutlinedButton(
               onPressed: () => _confirmed(
                 title: s.t('resetProgressOnly'),
-                action: () => ref.read(repositoryProvider).resetProgress(),
+                action: () => ref.read(repositoryProvider).forgetAnswers(),
               ),
               child: Text(s.t('resetProgressOnly')),
             ),
@@ -275,7 +275,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             OutlinedButton(
               onPressed: () => _confirmed(
                 title: s.t('resetProfile'),
-                action: () => ref.read(repositoryProvider).resetProfileAndRealms(),
+                action: () => ref.read(repositoryProvider).resetProfileAndFields(),
               ),
               child: Text(s.t('resetProfile')),
             ),
@@ -368,7 +368,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final s = ref.read(stringsProvider);
     final id = _resetRealmId ?? fields.first.id;
     final repo = ref.read(repositoryProvider);
-    final plan = await repo.planRealmDeletion(id);
+    final plan = await repo.planFieldClear(id);
 
     if (!mounted) return;
     final ok = await confirm(
@@ -380,7 +380,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
     if (!ok) return;
 
-    await repo.deleteRealmMaterial(id, removeRealm: removeRealm);
+    await repo.clearField(id, closeField: removeRealm);
     if (!mounted) return;
     showToast(context, s.t('deletedLabel'));
     setState(() => _resetRealmId = null);

@@ -14,7 +14,6 @@ library;
 import 'dart:convert';
 
 import '../core/l10n/languages.dart';
-import 'scene.dart';
 
 const schemaVersion = '1.0';
 
@@ -838,11 +837,9 @@ any of them — "Code review timing" after "Code review submission" is a repeat)
 ${list(existingTopics, '(none yet)')}
 
 WHAT TO WRITE
-$scenes scenes. A scene is $exchangesPerScene exchanges: the other person says a line, the
-learner replies, the other person says one more line, the learner replies. It
-runs straight; there are no branches. The second line follows on from the
-learner having given the RIGHT reply to the first.
-
+$scenes conversations. A conversation runs from one turn to five, and the
+lengths vary across the set. Each turn is: the other person says one line,
+and the learner picks one of three replies.
 Each exchange has two questions, both answered in English:
 1. gist — "What did they say?": three short English summaries of the line,
    in different words from the line itself. Exactly one is right.

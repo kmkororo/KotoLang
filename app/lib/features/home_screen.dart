@@ -47,7 +47,7 @@ class HomeScreen extends ConsumerWidget {
     final scheme = theme.colorScheme;
     final progress = ref.watch(progressProvider);
     final scenes = ref.watch(allScenesProvider).value ?? const <Scene>[];
-    final results = ref.watch(sceneResultsProvider).value ?? const <SceneResult>[];
+    final results = ref.watch(sceneResultsProvider).value ?? const <TurnResult>[];
     final stats = ref.watch(skillStatsProvider).value ?? SkillStats.empty;
 
     final ownScenes = [for (final x in scenes) if (!x.isBuiltin) x];
@@ -160,11 +160,11 @@ class HomeScreen extends ConsumerWidget {
         // -------- the one line of numbers --------
         const SizedBox(height: 12),
         Text(
-          stats.exchanges == 0
+          stats.turns == 0
               ? s.t('axisEmpty')
               : s.t('axisLine', {
-                  'g': stats.all.gist.pct ?? 0,
-                  'r': stats.all.reply.pct ?? 0,
+                  'g': stats.all.right.pct ?? 0,
+                  'r': stats.all.kept.pct ?? 0,
                 }),
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),

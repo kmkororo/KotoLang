@@ -21,6 +21,7 @@ import 'domain/field.dart';
 import 'domain/importer.dart' as imp;
 import 'domain/models.dart';
 import 'domain/progress_service.dart';
+import 'domain/ladder.dart';
 import 'domain/scene.dart';
 import 'domain/skills.dart';
 import 'features/ai_screens.dart';
@@ -85,7 +86,7 @@ final bootProvider = FutureProvider<Boot>((ref) async {
     await repo.loadProfile(),
     counts.realms,
     unlocked,
-    counts.questions,
+    counts.scenes,
   );
 });
 
@@ -110,13 +111,6 @@ final realmFilterProvider = StateProvider<String?>((ref) => null);
 /// choice for one session — someone who wanted to drill listening on Tuesday
 /// should not find the app still refusing to say anything on Friday.
 final formatFilterProvider = StateProvider<String>((ref) => 'all');
-
-/// What the home screen counts, and the areas it lists. Here rather than on
-/// the screen itself because the quiz has to refresh both when it ends.
-final homeCountsProvider = FutureProvider.autoDispose<HomeCounts>((ref) async {
-  final realm = ref.watch(realmFilterProvider);
-  return ref.watch(repositoryProvider).homeCounts(realm ?? 'all');
-});
 
 final realmsProvider = FutureProvider.autoDispose<List<Realm>>(
     (ref) => ref.watch(repositoryProvider).realms());
@@ -146,8 +140,14 @@ final allScenesProvider = FutureProvider.autoDispose<List<Scene>>((ref) async {
   return [...own, ...builtinScenes(lang, interests: interests)];
 });
 
-final sceneResultsProvider = FutureProvider.autoDispose<List<SceneResult>>(
-    (ref) => ref.watch(repositoryProvider).sceneResults());
+
+/// Where the learner stands on the five axes. Everything that shows progress
+/// reads this: the tree's height, the record, and the settings that let a
+/// step be stepped back from.
+final ladderProvider = FutureProvider.autoDispose<Ladder>(
+    (ref) => ref.watch(repositoryProvider).loadLadder());
+final sceneResultsProvider = FutureProvider.autoDispose<List<TurnResult>>(
+    (ref) => ref.watch(repositoryProvider).turnResults());
 
 /// The two skills, read off the results. Refreshed with them.
 final skillStatsProvider = FutureProvider.autoDispose<SkillStats>((ref) async {

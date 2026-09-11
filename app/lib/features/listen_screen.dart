@@ -15,29 +15,37 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app.dart';
 import '../core/speech.dart';
 import '../core/util.dart';
-import '../domain/models.dart';
 
-final _feedProvider = FutureProvider.autoDispose<List<Sentence>>((ref) async {
-  final repo = ref.watch(repositoryProvider);
-  final all = await repo.sentences();
-  // The opponents' lines join the feed. Hearing them again with the meaning a
-  // tap away is the understanding skill practised without the argument
-  // attached — and it keeps the feed alive for a learner whose material was
-  // only ever debate packs.
+/// One line to hear, with its meaning a tap away.
+class FeedLine {
+  final String id;
+  final String text;
+  final String native;
+  final String setting;
+  const FeedLine({
+    required this.id,
+    required this.text,
+    this.native = '',
+    this.setting = '',
+  });
+}
+
+/// Every line of every conversation, shuffled. Nothing is graded and nothing
+/// is scheduled: this is for the minutes when answering is too much effort
+/// but listening is not, which is otherwise time the app cannot use at all.
+final _feedProvider = FutureProvider.autoDispose<List<FeedLine>>((ref) async {
   final scenes = await ref.watch(allScenesProvider.future);
-  final lines = [
+  return shuffled([
     for (final sc in scenes)
-      for (var i = 0; i < sc.exchanges.length; i++)
-        Sentence(
-          id: 'scene:${sc.id}:$i',
-          text: sc.exchanges[i].line,
-          normKeyValue: normKey(sc.exchanges[i].line),
-          translationNative: sc.exchanges[i].lineNative,
-          context: sc.settingNative,
-          realmId: sc.realmId ?? '',
-        ),
-  ];
-  return shuffled([...all.where((x) => !x.disabled), ...lines]);
+      if (!sc.disabled)
+        for (var i = 0; i < sc.turns.length; i++)
+          FeedLine(
+            id: 'scene:${sc.id}:$i',
+            text: sc.turns[i].line,
+            native: sc.turns[i].lineNative,
+            setting: sc.settingNative,
+          ),
+  ]);
 });
 
 class ListenScreen extends ConsumerStatefulWidget {
@@ -89,7 +97,7 @@ class _ListenScreenState extends ConsumerState<ListenScreen> {
   /// floor the feed then flicks through the whole library in seconds.
   static const _minDwell = Duration(milliseconds: 2600);
 
-  Future<void> _playCurrent(List<Sentence> feed) async {
+  Future<void> _playCurrent(List<FeedLine> feed) async {
     if (feed.isEmpty) return;
     final at = _index;
     _speaking = at;
@@ -116,13 +124,13 @@ class _ListenScreenState extends ConsumerState<ListenScreen> {
     });
   }
 
-  void _onPage(int i, List<Sentence> feed) {
+  void _onPage(int i, List<FeedLine> feed) {
     _gap?.cancel();
     setState(() => _index = i);
     if (_auto) _playCurrent(feed);
   }
 
-  void _toggleAuto(List<Sentence> feed) {
+  void _toggleAuto(List<FeedLine> feed) {
     _gap?.cancel();
     setState(() => _auto = !_auto);
     if (_auto) {
@@ -202,7 +210,7 @@ class _ListenScreenState extends ConsumerState<ListenScreen> {
     );
   }
 
-  Widget _card(Sentence x, int i, dynamic s, ThemeData theme) {
+  Widget _card(FeedLine x, int i, dynamic s, ThemeData theme) {
     final shown = _revealed.contains(i);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -214,8 +222,8 @@ class _ListenScreenState extends ConsumerState<ListenScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (x.context.isNotEmpty) ...[
-              Text(x.context.toUpperCase(),
+            if (x.setting.isNotEmpty) ...[
+              Text(x.setting.toUpperCase(),
                   style: theme.textTheme.labelSmall?.copyWith(
                       letterSpacing: 1.2,
                       color: theme.colorScheme.onSurfaceVariant)),
@@ -228,7 +236,7 @@ class _ListenScreenState extends ConsumerState<ListenScreen> {
             // The reading waits for a tap. Reading along instead of listening
             // is the one thing that would make this exercise pointless.
             if (shown)
-              Text(x.translationNative,
+              Text(x.native,
                   style: theme.textTheme.bodyMedium
                       ?.copyWith(color: theme.colorScheme.onSurfaceVariant))
             else

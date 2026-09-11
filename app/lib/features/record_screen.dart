@@ -25,14 +25,14 @@ class RecordScreen extends ConsumerWidget {
     final progress = ref.watch(progressProvider);
     final stats = ref.watch(skillStatsProvider).value ?? SkillStats.empty;
     final scenes = ref.watch(allScenesProvider).value ?? const <Scene>[];
-    final results = ref.watch(sceneResultsProvider).value ?? const <SceneResult>[];
+    final results = ref.watch(sceneResultsProvider).value ?? const <TurnResult>[];
     final realms = ref.watch(realmsProvider).value ?? const <Realm>[];
     final t = today();
 
     // How often each scene has been finished (reviews are not runs).
     final runs = <String, int>{};
     for (final r in results) {
-      if (r.review || r.exchange != 0) continue;
+      if (r.review || r.turn != 0) continue;
       runs[r.sceneId] = (runs[r.sceneId] ?? 0) + 1;
     }
 
@@ -58,15 +58,15 @@ class RecordScreen extends ConsumerWidget {
         _Block(title: s.t('skillsSection'), children: [
           _SkillRow(
             label: s.t('skillUnderstand'),
-            all: pct(stats.all.gist),
-            week: pct(stats.week.gist),
-            sub: '${s.t('byEarLabel')} ${pct(stats.all.byEar)}',
+            all: pct(stats.all.right),
+            week: pct(stats.week.right),
+            sub: '${s.t("byEarLabel")} ${pct(stats.all.kept)}',
           ),
           const SizedBox(height: 10),
           _SkillRow(
             label: s.t('skillReply'),
-            all: pct(stats.all.reply),
-            week: pct(stats.week.reply),
+            all: pct(stats.all.kept),
+            week: pct(stats.week.kept),
           ),
           const SizedBox(height: 8),
           Text('${s.t('allTimeLabel')} · ${s.t('last7Label')}',
@@ -83,8 +83,8 @@ class RecordScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           // Runs of right answers: the one going now by ear, and the longest.
           Row(children: [
-            _Cell('${stats.runs.byEar}', s.t('byEarRunNow')),
-            _Cell('${stats.runs.bestByEar}', s.t('bestByEarLabel')),
+            _Cell('${stats.runs.kept}', s.t('byEarRunNow')),
+            _Cell('${stats.runs.bestKept}', s.t('bestByEarLabel')),
             _Cell('${stats.runs.bestCombo}', s.t('bestComboLabel')),
           ]),
           const SizedBox(height: 12),
