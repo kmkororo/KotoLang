@@ -28,6 +28,15 @@ import '../domain/ladder.dart';
 import '../domain/scene.dart';
 import '../domain/tree.dart' show treeName;
 
+/// A turn that has been answered, kept so it can stay in the conversation
+/// above the one being taken. [picked] is null when the window closed on it.
+class _Answered {
+  final SceneCard card;
+  final int? picked;
+  final bool right;
+  const _Answered(this.card, this.picked, this.right);
+}
+
 /// One turn to answer, with the conversation it belongs to.
 class SceneCard {
   final Scene scene;
@@ -123,6 +132,14 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   /// Steps of the ladder that went up during this run.
   final _promoted = <LadderAxis>[];
 
+  /// The turns already answered, oldest first. They stay on screen above the
+  /// one being taken, so what has been said so far reads as one conversation
+  /// rather than as a row of questions that happen to follow each other.
+  final _thread = <_Answered>[];
+
+  /// The thread is the only part that scrolls, and it is kept at the bottom:
+  /// the line being answered is the one that has to be in front of them.
+  final _scroll = ScrollController();
 
   /// The window, drained as a bar so the time left is felt rather than read.
   late final AnimationController _window;
@@ -152,8 +169,22 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   void dispose() {
     _beat?.cancel();
     _window.dispose();
+    _scroll.dispose();
     _speech.stop();
     super.dispose();
+  }
+
+  /// Keeps the newest turn in view. Called after the thread grows and after a
+  /// line is revealed, both of which make it taller.
+  void _toBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients) return;
+      _scroll.animateTo(
+        _scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   // ------------------------------------------------------------- the ladder
@@ -244,6 +275,8 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
       _right = right;
       _phase = _Phase.done;
     });
+    // The line has just been revealed, so the bubble grew.
+    _toBottom();
 
     final out = await ref.read(repositoryProvider).recordTurn(
           sceneId: _card.scene.id,
@@ -265,6 +298,10 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
 
   void _advance() {
     _beat?.cancel();
+    // The turn just answered joins the conversation above, whether or not
+    // there is another one after it: the result is read over the top of the
+    // thread, and leaving early should not rub out what was said.
+    _thread.add(_Answered(_card, _picked, _right));
     if (_index + 1 >= _cards.length) {
       _finish();
       return;
@@ -275,6 +312,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
       _restated = false;
       _phase = _Phase.reading;
     });
+    _toBottom();
   }
 
   Future<void> _finish() async {
@@ -320,10 +358,11 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
-    // Inside the conversation everything is English — the labels, the
-    // verdict — so the head never switches language mid-turn. The guide and
-    // the result, which are about the conversation rather than in it, keep
-    // the interface language.
+    // What is said in the conversation stays English — the replies, the
+    // verdict, the button — so the head is not switched mid-turn. What is
+    // said *about* it keeps the interface language: the guide, the result,
+    // and the two names beside the figures, which are labels on the screen
+    // rather than anybody's words.
     final e = S('en');
     final theme = Theme.of(context);
 
@@ -339,20 +378,46 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
               : Column(
                   children: [
                     _topBar(e, theme),
-                    _dots(theme),
+                    // The conversation so far, and the line being answered at
+                    // the foot of it. This is the only part that scrolls; the
+                    // replies below must not be pushed off a small screen by
+                    // a conversation that has been going a while.
+                    //
+                    // It grows upward from the bottom: the line being
+                    // answered stays next to the replies it is answered
+                    // with, rather than drifting to the top of an empty
+                    // space on the first turn.
                     Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (widget.tutorial) _guide(s, theme),
-                            if (_card.review) _reviewTag(e, theme),
-                            _them(e, theme),
-                            const SizedBox(height: 12),
-                            Expanded(child: _replies(e, theme)),
-                          ],
+                      child: LayoutBuilder(
+                        builder: (context, box) => SingleChildScrollView(
+                          controller: _scroll,
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(minHeight: box.maxHeight - 12),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                for (final past in _thread) ...[
+                                  _pastTurn(s, theme, past),
+                                  const SizedBox(height: 10),
+                                ],
+                                if (_card.review) _reviewTag(s, theme),
+                                _them(s, theme),
+                              ],
+                            ),
+                          ),
                         ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (widget.tutorial) _guide(s, theme),
+                          _replies(s, e, theme),
+                        ],
                       ),
                     ),
                     _bottom(e, theme),
@@ -388,29 +453,159 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     );
   }
 
-  /// How far through the conversation this is. One dot per turn, the one
-  /// being taken larger. The learner is never told how many are left — the
-  /// dots say where they are, not how far there is to go.
-  Widget _dots(ThemeData theme) {
-    final scheme = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(top: 2, bottom: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+  /// A turn already answered, as the two things that were said: their line,
+  /// and the reply that went back. Dimmed, because it is over.
+  ///
+  /// There were dots here once, one per turn. The thread says where they are
+  /// better than a row of dots could, and says it with the conversation
+  /// rather than beside it.
+  Widget _pastTurn(S s, ThemeData theme, _Answered past) {
+    final turn = past.card.turn;
+    final chosen = past.picked;
+    return Opacity(
+      // Dimmed, because it is over — there, but not competing with the line
+      // being answered for the eye.
+      opacity: 0.62,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (var i = 0; i < _cards.length; i++)
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              width: i == _index ? 9 : 7,
-              height: i == _index ? 9 : 7,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: i <= _index ? scheme.primary : scheme.outlineVariant,
-              ),
+          _speakerLabel(s, theme, other: true),
+          _bubble(
+            theme,
+            other: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(turn.line, style: theme.textTheme.bodyMedium),
+                // What they said, in the learner's own language. The band is
+                // the "so this is what I heard" that the next line answers.
+                // It follows the same rung as the translation itself: at the
+                // top of that axis nobody gets it back by scrolling up.
+                if (turn.lineNative.isNotEmpty && _translationAfter != null) ...[
+                  const SizedBox(height: 6),
+                  _heardBand(s, theme, turn.lineNative),
+                ],
+              ],
             ),
+          ),
+          const SizedBox(height: 6),
+          _speakerLabel(s, theme, other: false),
+          _bubble(
+            theme,
+            other: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // What they actually chose, when they chose anything.
+                if (chosen != null)
+                  _saidLine(theme, turn.replies[chosen].text, right: past.right),
+                if (chosen == null)
+                  _saidLine(theme, s.t('sceneWindowGone'), missed: true),
+                // And the one that fitted, whenever that was not it, so the
+                // conversation above still reads as English that works.
+                if (!past.right) ...[
+                  const SizedBox(height: 4),
+                  _saidLine(theme, turn.replies[turn.answer].text, right: true),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  /// One line inside a bubble, marked by how it went.
+  Widget _saidLine(ThemeData theme, String text,
+      {bool right = false, bool missed = false}) {
+    final scheme = theme.colorScheme;
+    final color = missed
+        ? scheme.onSurfaceVariant
+        : (right ? scheme.primary : scheme.error);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          missed
+              ? Icons.timer_off_outlined
+              : (right ? Icons.check : Icons.close),
+          size: 14,
+          color: color,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: missed ? color : null,
+              fontStyle: missed ? FontStyle.italic : null,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// "You heard: …" — their own language, on the green.
+  Widget _heardBand(S s, ThemeData theme, String text) {
+    final scheme = theme.colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(8, 5, 8, 6),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        s.t('heardBand', {'text': text}),
+        style: theme.textTheme.bodySmall?.copyWith(color: scheme.onPrimaryContainer),
+      ),
+    );
+  }
+
+  /// The name over a bubble. In the interface language: it names a figure on
+  /// the screen, not something anybody said.
+  Widget _speakerLabel(S s, ThemeData theme, {required bool other}) => Padding(
+        padding: EdgeInsets.only(left: other ? 4 : 0, bottom: 2),
+        child: Row(
+          mainAxisAlignment:
+              other ? MainAxisAlignment.start : MainAxisAlignment.end,
+          children: [
+            Text(
+              s.t(other ? 'speakerOther' : 'speakerYou'),
+              style: theme.textTheme.labelSmall?.copyWith(
+                  color: other
+                      ? theme.colorScheme.tertiary
+                      : theme.colorScheme.primary),
+            ),
+          ],
+        ),
+      );
+
+  /// A bubble, with the figure beside it on the side it belongs to.
+  Widget _bubble(ThemeData theme, {required bool other, required Widget child}) {
+    final scheme = theme.colorScheme;
+    final body = Flexible(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 9, 12, 11),
+        decoration: BoxDecoration(
+          color: other ? scheme.surfaceContainerHigh : scheme.primaryContainer
+              .withValues(alpha: 0.28),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(other ? 4 : 16),
+            topRight: Radius.circular(other ? 16 : 4),
+            bottomLeft: const Radius.circular(16),
+            bottomRight: const Radius.circular(16),
+          ),
+        ),
+        child: child,
+      ),
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: other
+          ? [_Figure.small(other: true), const SizedBox(width: 8), body]
+          : [body, const SizedBox(width: 8), _Figure.small(other: false)],
     );
   }
 
@@ -442,67 +637,53 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
         ),
       );
 
-  /// Their side: the setting while nothing has been said, then the line once
-  /// it has been answered. What was actually said is never shown before the
-  /// answer — that is the whole exercise.
+  /// The line being answered: the setting while nothing has been said, then
+  /// the line itself once it has been answered. What was actually said is
+  /// never shown before the answer — that is the whole exercise.
+  ///
+  /// Only the first turn carries the setting. After that the conversation
+  /// above is the setting, and the line says instead that it is picking up
+  /// what the learner just replied.
   Widget _them(S s, ThemeData theme) {
     final scheme = theme.colorScheme;
     final said = _phase == _Phase.done;
     final showing = said || !_speech.available;
+    final opening = _thread.isEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 32, bottom: 2),
-          child: Text(s.t('speakerOther'),
-              style: theme.textTheme.labelSmall?.copyWith(color: scheme.tertiary)),
-        ),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Figure.small(other: true),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHigh,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4),
-                    topRight: Radius.circular(16),
-                    bottomLeft: Radius.circular(16),
-                    bottomRight: Radius.circular(16),
+        _speakerLabel(s, theme, other: true),
+        _bubble(
+          theme,
+          other: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!said && (!opening || _card.scene.settingNative.isNotEmpty)) ...[
+                Text(
+                  opening ? _card.scene.settingNative : s.t('afterYourReply'),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 6),
+              ],
+              if (showing)
+                Text(_turn.line, style: theme.textTheme.titleSmall)
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    _phase == _Phase.playing || _phase == _Phase.restating
+                        ? '· · · · · ·'
+                        : '',
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(color: scheme.onSurfaceVariant),
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_card.scene.settingNative.isNotEmpty && !said)
-                      Text(_card.scene.settingNative,
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: scheme.onSurfaceVariant)),
-                    if (showing) ...[
-                      if (_card.scene.settingNative.isNotEmpty && !said)
-                        const SizedBox(height: 6),
-                      Text(_turn.line, style: theme.textTheme.titleSmall),
-                    ] else
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Text(
-                          _phase == _Phase.playing || _phase == _Phase.restating
-                              ? '· · · · · ·'
-                              : '',
-                          style: theme.textTheme.titleMedium
-                              ?.copyWith(color: scheme.onSurfaceVariant),
-                        ),
-                      ),
-                    if (said) _native(theme),
-                  ],
-                ),
-              ),
-            ),
-          ],
+              if (said) _native(s, theme),
+            ],
+          ),
         ),
       ],
     );
@@ -510,7 +691,11 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
 
   /// The line in the learner's own language, once the ladder still allows it.
   /// At the top of that axis it never comes.
-  Widget _native(ThemeData theme) {
+  ///
+  /// It arrives as the band it will keep: what appears the moment they answer
+  /// is the same thing that stays above the next line, so nothing is
+  /// re-styled under them as the conversation moves on.
+  Widget _native(S s, ThemeData theme) {
     final wait = _translationAfter;
     if (wait == null || _turn.lineNative.isEmpty) return const SizedBox.shrink();
     return FutureBuilder<void>(
@@ -520,15 +705,16 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
         opacity: snap.connectionState == ConnectionState.done ? 1 : 0,
         child: Padding(
           padding: const EdgeInsets.only(top: 6),
-          child: Text(_turn.lineNative,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          child: _heardBand(s, theme, _turn.lineNative),
         ),
       ),
     );
   }
 
-  Widget _replies(S s, ThemeData theme) {
+  /// The three replies, fixed below the conversation. [s] names the figure,
+  /// [e] asks the question — the label is about the screen, the question is
+  /// part of the conversation.
+  Widget _replies(S s, S e, ThemeData theme) {
     final scheme = theme.colorScheme;
     final live = _phase == _Phase.open;
     return Column(
@@ -538,7 +724,11 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
           children: [
             _Figure.small(other: false),
             const SizedBox(width: 8),
-            Text(s.t('sceneQ2'), style: theme.textTheme.titleSmall),
+            Text(e.t('sceneQ2'), style: theme.textTheme.titleSmall),
+            const Spacer(),
+            Text(s.t('speakerYou'),
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: scheme.onSurfaceVariant)),
           ],
         ),
         const SizedBox(height: 8),
@@ -556,7 +746,6 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
           ),
           const SizedBox(height: 8),
         ],
-        const Spacer(),
         // The window, draining. Only while it is open — a bar that is always
         // there would be one more thing to watch instead of listen to.
         SizedBox(
