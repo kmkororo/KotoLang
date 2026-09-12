@@ -174,7 +174,7 @@ class SpeechService {
       // whole turn turns on. A beat of silence in front of the line is what
       // reliably lands: waiting before calling speak does not help, because
       // the route opens when speech starts, not before.
-      await _tts.speak('$_leadIn$text');
+      await _tts.speak('$_leadIn${forSpeech(text)}');
     } catch (e) {
       debugPrint('[KotoLang] speak failed: $e');
     }
@@ -184,6 +184,20 @@ class SpeechService {
   /// rather than pronounces. Long enough to cover the audio route opening,
   /// short enough not to be a wait.
   static const _leadIn = ', , ';
+
+  /// What the engine is given, which is not quite what is on the page.
+  ///
+  /// A comma is a clause break, and the rise that makes a question sound
+  /// like one is put on the last clause only: "Is that just today, or all
+  /// week?" came out flat in front of the comma and flat after it, and a
+  /// question heard as a statement is a turn with nothing to answer. So a
+  /// question is said in one breath, with its commas taken out. A statement
+  /// keeps them, where the pause is worth more than the contour.
+  static String forSpeech(String text) {
+    final t = text.trim();
+    if (!t.endsWith('?')) return t;
+    return t.replaceAll(RegExp(r'\s*,\s*'), ' ');
+  }
 
   Future<void> stop() async {
     try {

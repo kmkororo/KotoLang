@@ -24,6 +24,7 @@ import 'package:kotolang/app.dart';
 import 'package:kotolang/core/l10n/strings.dart';
 import 'package:kotolang/data/database.dart';
 import 'package:kotolang/data/repository.dart';
+import 'package:kotolang/domain/progress_service.dart';
 import 'package:kotolang/domain/scene.dart';
 import 'package:kotolang/features/scene_screen.dart';
 
@@ -180,7 +181,7 @@ void main() {
     // Let the window run out rather than answering.
     await tester.tap(find.text(en.t('scenePlay')));
     await tester.pump();
-    await tester.pump(Duration(milliseconds: s.windowMs + 100));
+    await tester.pump(const Duration(milliseconds: answerWindowMs + 100));
 
     // Nothing starts on its own. A voice arriving while the learner is still
     // working out what happened is heard as a new line they have already
@@ -212,18 +213,23 @@ void main() {
     final (repo, s) = await open(tester, turns: 1);
     final first = s.turns.first;
 
-    // Nothing earned yet, so there is no counter to look at.
-    expect(find.textContaining('🌱'), findsNothing);
+    // The counter is there from the start, at nothing. It is what the seeds
+    // are flown at, so it has to be somewhere to aim before the first one is
+    // earned.
+    expect(find.text('0'), findsOneWidget);
 
     await answer(tester, first, first.answer);
+    // The grains land over the flight, and the balance counts up with them.
+    await tester.pump(const Duration(milliseconds: 1600));
 
     // The payment arrives after an await, so it needs a rebuild of its own.
-    // Without one the counter kept its old total and the seed never flew —
+    // Without one the counter kept its old total and the seeds never flew —
     // the screen was simply never told.
     final paid = (await repo.loadProgress()).seeds;
     expect(paid, greaterThan(0));
-    expect(find.text('$paid'), findsOneWidget, reason: 'the counter');
-    expect(find.text('+$paid'), findsOneWidget, reason: 'and the verdict');
+    expect(find.text('$paid'), findsOneWidget, reason: 'the balance');
+    expect(find.text('+$paid'), findsNWidgets(2),
+        reason: 'beside the balance, and on the verdict');
   });
 
   testWidgets('a wrong answer pays nothing, and nothing is shown',

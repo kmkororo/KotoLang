@@ -158,6 +158,47 @@ void main() {
       // It was right, and it was still not caught the first time.
       expect(seedsForTurn(correct: true, clean: false, windowLeft: 1), seedFloor);
     });
+
+    test('it pays in the bands the gauge is marked in', () {
+      // The marks are the whole point: a value that slid with the clock
+      // could only be worked out afterwards, and a reply is chosen before.
+      expect(seedBandOf(1.0), seedBands);
+      expect(seedBandOf(0.81), seedBands);
+      expect(seedBandOf(0.80), seedBands - 1, reason: 'on a mark is below it');
+      expect(seedBandOf(0.0), 1);
+      expect(seedBandOf(-1), 1, reason: 'the window can only be so gone');
+
+      // Every step of the gauge is the same size, and the ends are the ends.
+      final paid = [
+        for (final left in [0.0, 0.3, 0.5, 0.7, 0.9])
+          seedsForTurn(correct: true, clean: true, windowLeft: left)
+      ];
+      expect(paid, [seedFloor, 30, 40, 50, seedTop]);
+    });
+  });
+
+  group('what the ladder will take', () {
+    test('only an answer caught in the window', () {
+      expect(countsToLadder(inWindow: false, windowLeft: 1), isFalse);
+    });
+
+    test('and only one fast enough to say something', () {
+      // At ten seconds nearly every answer lands inside the window, so the
+      // window alone no longer distinguishes anything. The mark on the gauge
+      // does — and it is the same mark the seeds are counted from, so there
+      // is one thing to learn rather than two.
+      expect(countsToLadder(inWindow: true, windowLeft: 1.0), isTrue);
+      expect(countsToLadder(inWindow: true, windowLeft: 0.45), isTrue);
+      expect(countsToLadder(inWindow: true, windowLeft: 0.39), isFalse);
+      expect(countsToLadder(inWindow: true, windowLeft: 0.0), isFalse);
+    });
+
+    test('a slow answer is still paid for', () {
+      // Not counted is not punished: it was right, and it earns the floor.
+      expect(seedsForTurn(correct: true, clean: true, windowLeft: 0.1),
+          greaterThan(0));
+      expect(countsToLadder(inWindow: true, windowLeft: 0.1), isFalse);
+    });
   });
 
   group('combo', () {

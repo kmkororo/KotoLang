@@ -72,12 +72,9 @@ final treeDataProvider = FutureProvider.autoDispose<TreeData>((ref) async {
 });
 
 class TreePanel extends ConsumerStatefulWidget {
-  /// Show one bough alone, by its id — the field screen's view.
-  final String? focus;
-
-  /// No legend and no share button: the small tree on a field screen.
+  /// No share button: the small tree on a field screen.
   final bool compact;
-  const TreePanel({super.key, this.focus, this.compact = false});
+  const TreePanel({super.key, this.compact = false});
 
   @override
   ConsumerState<TreePanel> createState() => _TreePanelState();
@@ -92,9 +89,6 @@ class _TreePanelState extends ConsumerState<TreePanel>
   /// stopped would burn battery behind a locked phone and hang every
   /// `pumpAndSettle` in the suite.
   final _breeze = _Breeze();
-
-  /// The bough picked on the legend, shown alone until picked again.
-  String? _focus;
 
   /// The picture of the tree, as it stands, for the share sheet. Nothing but
   /// the image and one line of text leaves the phone, and only where the
@@ -185,12 +179,13 @@ class _TreePanelState extends ConsumerState<TreePanel>
       // one thing this screen must never do.
       height: widget.compact
           ? 140
-          : min(150 + 130 * trunkGrowth(shape.answers), MediaQuery.sizeOf(context).height * 0.28),
+          : min(150 + 130 * trunkGrowth(shape.reached), MediaQuery.sizeOf(context).height * 0.28),
       width: double.infinity,
       child: TweenAnimationBuilder<double>(
-        // Grows into place rather than appearing at full size. The tween
-        // runs off the answer count, so an answer visibly adds to it.
-        tween: Tween(begin: 0, end: trunkGrowth(shape.answers)),
+        // Grows into place rather than appearing at full size. Height is the
+        // ladder: the trunk rises when a step is held, and the answers that
+        // did not raise one go into the girth and the boughs instead.
+        tween: Tween(begin: 0, end: trunkGrowth(shape.reached)),
         duration: const Duration(milliseconds: 900),
         curve: Curves.easeOutCubic,
         builder: (context, grown, _) => CustomPaint(
@@ -204,7 +199,6 @@ class _TreePanelState extends ConsumerState<TreePanel>
             girth: trunkGirth(shape.answers),
             dark: theme.brightness == Brightness.dark,
             breeze: _breeze,
-            focus: widget.focus ?? _focus,
           ),
         ),
       ),
@@ -233,33 +227,7 @@ class _TreePanelState extends ConsumerState<TreePanel>
           ),
       ],
     );
-    if (widget.compact) return stack;
-    return Column(mainAxisSize: MainAxisSize.min, children: [stack, _legend(shape)]);
-  }
-
-  /// The boughs by name: the samples with a book, the learner's own with a
-  /// flower. A tap shows that bough alone; another tap brings the tree back.
-  Widget _legend(TreeShape shape) {
-    if (shape.branches.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 6,
-        runSpacing: 4,
-        children: [
-          for (final b in shape.branches)
-            ChoiceChip(
-              avatar: Icon(b.own ? Icons.local_florist : Icons.menu_book_outlined, size: 14),
-              label: Text(b.label, style: const TextStyle(fontSize: 12)),
-              selected: _focus == b.realmId,
-              visualDensity: VisualDensity.compact,
-              onSelected: (_) =>
-                  setState(() => _focus = _focus == b.realmId ? null : b.realmId),
-            ),
-        ],
-      ),
-    );
+    return stack;
   }
 }
 
@@ -291,16 +259,12 @@ class _TreePainter extends CustomPainter {
   /// Bark the colour of real bark disappears against a near-black screen.
   final bool dark;
 
-  /// One bough to draw alone, or null for the whole tree.
-  final String? focus;
-
   _TreePainter({
     required this.data,
     required this.art,
     required this.grown,
     required this.girth,
     required this.breeze,
-    this.focus,
     required this.dark,
   }) : super(repaint: breeze);
 
@@ -580,7 +544,10 @@ class _TreePainter extends CustomPainter {
 
   /// How many boughs a trunk of this height can carry. One to begin with,
   /// and one more at each of these fractions of full growth.
-  static const _boughAt = <double>[0.06, 0.16, 0.30, 0.46, 0.64, 0.84];
+  /// The heights at which the trunk can carry another bough. The first three
+  /// come almost at once — three fields are what everyone starts with, and a
+  /// tree that would not show them is not showing the learner.
+  static const _boughAt = <double>[0.00, 0.05, 0.16, 0.38, 0.60, 0.84];
 
   int _boughsAt(double grown) {
     var n = 1;
@@ -629,24 +596,16 @@ class _TreePainter extends CustomPainter {
       // The trunk leans and straightens rather than standing to attention.
       ..trunkCtrl = Offset(cx + w0 * 0.55, base.dy - trunkH * 0.45);
 
-    // With a bough in focus the others are left out: the field screen shows
-    // one field alone, and a tap on the legend does the same on home.
-    final chosen = focus == null
-        ? shape.branches
-        : [for (final b in shape.branches) if (b.realmId == focus) b];
-
-    // How many boughs the trunk is tall enough to carry.
+    // One bough per field, as many as the trunk is tall enough to carry.
     //
-    // The count used to be the number of fields with anything in them, which
-    // on the first day is four — four green boughs, each leafy from the
-    // bottom, all the same height on a stem of thirty pixels. That is not a
-    // seedling; that is a clump of grass, and it is what somebody looking at
-    // it said. A tree puts out one bough, then another, as it gets tall
-    // enough to hold them, so the fields wait their turn: which fields are
-    // there decides what the tree becomes, the ladder decides when.
-    final branches = focus == null
-        ? chosen.take(_boughsAt(grown)).toList()
-        : chosen;
+    // The count used to be simply the number of fields with anything in
+    // them, which on the first day is four — four green boughs, each leafy
+    // from the bottom, all the same height on a stem of thirty pixels. That
+    // is not a seedling; that is a clump of grass, and it is what somebody
+    // looking at it said. So the first few come cheap and the rest wait for
+    // height: widening out is what opening a field does, and a tree still
+    // cannot hold a bough where it has no wood.
+    final branches = shape.branches.take(_boughsAt(grown)).toList();
     if (branches.isEmpty) return plan;
 
 
@@ -947,7 +906,6 @@ class _TreePainter extends CustomPainter {
       old.grown != grown ||
       old.girth != girth ||
       old.data != data ||
-      old.focus != focus ||
       old.dark != dark;
 }
 
@@ -1026,5 +984,39 @@ class _Breeze extends ChangeNotifier {
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+}
+
+/// A breeze that never blows. The still trees share one: it exists only
+/// because the painter repaints off a notifier, and this one never notifies.
+final _stillAir = _Breeze();
+
+/// One tree, drawn at a size of your choosing and held still.
+///
+/// For showing what the tree *becomes* rather than what it is: the growing
+/// screen draws the same tree at six heights, so the thing being climbed
+/// towards is a picture and not a promise.
+class TreeStill extends ConsumerWidget {
+  final TreeShape shape;
+  final double height;
+  const TreeStill({super.key, required this.shape, required this.height});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final art = ref.watch(treeArtProvider).value;
+    if (art == null) return SizedBox(height: height);
+    return SizedBox(
+      height: height,
+      child: CustomPaint(
+        painter: _TreePainter(
+          data: TreeData(shape: shape),
+          art: art,
+          grown: trunkGrowth(shape.reached),
+          girth: trunkGirth(shape.answers),
+          dark: Theme.of(context).brightness == Brightness.dark,
+          breeze: _stillAir,
+        ),
+      ),
+    );
   }
 }

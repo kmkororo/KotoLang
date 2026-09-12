@@ -965,10 +965,16 @@ confirmations.
 
 - One to three sentences, ending in the question. Spoken English, not
   written English.
-- **No dashes in the line.** Use a comma. A phone's voice reads a dash as
-  the end of a sentence: the half in front of it comes out flat and the
-  question never rises, so the learner hears a statement and has nothing to
-  answer. Commas, full stops and question marks only.
+- **The question itself is one breath, with no punctuation inside it.** A
+  phone's voice breaks at every dash and every comma and puts the rise only
+  on what comes after the last one, so a question carrying either comes out
+  flat and is heard as a statement, leaving the learner nothing to answer.
+  Write the question short enough to be said in one go: "Does that still
+  suit you?", not "The review call's moved back, does that still suit you?".
+  Anything the question needs by way of setting goes in a sentence of its
+  own in front of it, ending in a full stop.
+- Full stops and question marks only. No dashes, no semicolons, no commas
+  inside the question.
 - Only what this person would actually be asked.
 - Invent nothing about the learner's world. You were told what they do and
   where they want English; everything else is unknown to you.
@@ -1041,7 +1047,9 @@ Go through every turn once more:
    product — that you were not told?
 9. `keyword`: swap the pair into the line. Is it still a grammatical sentence
    the same person could have said?
-10. Is there a dash anywhere in a line? Replace it with a comma.
+10. Does any line's question carry a dash or a comma? Cut the question
+    down until it needs neither, and move what it was carrying into a
+    sentence of its own in front of it.
 
 Output the JSON and nothing else.
 ''';

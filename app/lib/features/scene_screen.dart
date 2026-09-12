@@ -27,6 +27,7 @@ import '../app.dart';
 import '../core/l10n/strings.dart';
 import '../core/speech.dart';
 import '../domain/ladder.dart';
+import '../domain/progress_service.dart';
 import '../domain/scene.dart';
 import '../domain/tree.dart' show treeName;
 
@@ -162,13 +163,15 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   /// The window, drained as a bar so the time left is felt rather than read.
   late final AnimationController _window;
 
-  /// The seed's flight from the reply that was taken to the counter.
+  /// The flight of the seeds from the reply that was taken to the counter.
   late final AnimationController _seedFlight;
 
-  /// Where it flies from and to, in the coordinates of the whole screen.
-  /// Worked out at the moment of the answer, because the reply it starts from
-  /// is whichever one was tapped.
-  Offset? _seedFrom;
+  /// One grain per seed paid, up to [seedGrainCap]. Worked out at the moment
+  /// of the answer, in the coordinates of the whole screen, because the reply
+  /// they scatter from is whichever one was tapped.
+  List<_Grain> _grains = const [];
+
+  /// Where they all land.
   Offset? _seedTo;
 
   final _bodyKey = GlobalKey();
@@ -195,7 +198,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
         if (st == AnimationStatus.completed && mounted) _windowClosed();
       });
     _seedFlight =
-        AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
+        AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
   }
 
   @override
@@ -208,28 +211,55 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     super.dispose();
   }
 
-  /// Works out where the seed flies from and to.
+  /// Works out where the seeds fly from and to.
   ///
   /// From the reply that was actually tapped, because that is the thing the
-  /// learner just did; to the counter, because that is where it lands. Both
+  /// learner just did; to the counter, because that is where they land. Both
   /// are read off the widgets rather than guessed, so the flight still points
   /// at the right row when the replies are different lengths or the list has
   /// been scrolled.
-  void _aimSeed(int? picked) {
+  ///
+  /// One grain per seed, so twenty seeds is a handful and two is two â the
+  /// size of what was earned is in the sight of it, not only in the number.
+  /// Past [seedGrainCap] the handful stops growing and the number carries the
+  /// rest; a hundred grains is a cloud, not a payment.
+  void _aimSeeds(int? picked, int paid) {
     final body = _bodyKey.currentContext?.findRenderObject();
     final counter = _counterKey.currentContext?.findRenderObject();
     final reply = picked == null
         ? null
         : _replyKeys[picked].currentContext?.findRenderObject();
     if (body is! RenderBox || counter is! RenderBox || reply is! RenderBox) {
-      _seedFrom = null;
+      _grains = const [];
       _seedTo = null;
       return;
     }
     Offset centreIn(RenderBox b) =>
         body.globalToLocal(b.localToGlobal(b.size.center(Offset.zero)));
-    _seedFrom = centreIn(reply);
+    final start = centreIn(reply);
     _seedTo = centreIn(counter);
+
+    // Seeded off the answer so a grain keeps its own path for the whole
+    // flight rather than being rescattered on every frame.
+    final rnd = Random(_index * 31 + (picked ?? 0) * 7 + paid);
+    final n = min(paid, seedGrainCap);
+    final w = reply.size.width * 0.38;
+    final h = reply.size.height * 0.30;
+    _grains = [
+      for (var i = 0; i < n; i++)
+        _Grain(
+          // Scattered across the reply rather than stacked on its middle, so
+          // they leave as a handful and not as one thing seen many times.
+          from: start +
+              Offset((rnd.nextDouble() * 2 - 1) * w, (rnd.nextDouble() * 2 - 1) * h),
+          // Spread out along the way: the last to leave goes while the first
+          // is already landing, which is what makes it a stream.
+          delay: n == 1 ? 0 : (i / (n - 1)) * 0.42 + rnd.nextDouble() * 0.05,
+          lift: 0.22 + rnd.nextDouble() * 0.30,
+          sway: (rnd.nextDouble() * 2 - 1) * 40,
+          size: 15 + rnd.nextDouble() * 9,
+        ),
+    ];
   }
 
   /// Keeps the newest turn in view. Called after the thread grows and after a
@@ -248,10 +278,12 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
 
   // ------------------------------------------------------------- the ladder
 
-  /// How long there is to answer: what this conversation asks for, stretched
-  /// or shortened by the learner's own setting.
+  /// How long there is to answer, stretched or shortened by the learner's
+  /// own setting. One length for every turn: the gauge is marked in seed
+  /// bands, and a mark that meant a different number of seconds from one turn
+  /// to the next would be a mark nobody could learn.
   int get _windowMs =>
-      (_card.scene.windowMs * ref.read(settingsProvider).windowScale).round();
+      (answerWindowMs * ref.read(settingsProvider).windowScale).round();
   double get _rate => speedAt(_ladder.currentOf(LadderAxis.speed));
 
   /// Whether a missed window is given a second hearing. The hardest steps of
@@ -340,6 +372,9 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     // How much of the window was left, read before it is stopped. Speed is
     // what the seeds are for, so this is the number they are worked out from.
     final left = _phase == _Phase.open ? (1 - _window.value) : 0.0;
+    // And whether the moment was caught at all, read here for the same
+    // reason: by the time the answer is recorded the phase has moved on.
+    final caught = _phase == _Phase.open && !_windowGone;
     _window.stop();
     _speech.stop();
     final right = i != null && i == _turn.answer;
@@ -364,7 +399,11 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
           turn: _card.index,
           correct: right,
           missedSlot: i == null ? null : _turn.replies[i].missedSlot,
-          inWindow: right && !_windowGone,
+          // A fact about the clock, not about the answer. A wrong reply given
+          // inside the window is exactly what the ladder's pass rate is there
+          // to weigh; left out of the record, the buffer filled with nothing
+          // but right answers and every window passed.
+          inWindow: caught,
           review: _card.review,
           windowLeft: left,
         );
@@ -382,7 +421,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     if (out.seeds > 0) {
       ref.read(progressProvider.notifier).state = await repo.loadProgress();
       if (mounted) {
-        _aimSeed(i);
+        _aimSeeds(i, out.seeds);
         _seedFlight.forward(from: 0);
       }
     }
@@ -537,12 +576,12 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
                   ],
                 ),
 
-              // The seed, crossing the screen. It needs a layer of its own:
-              // it leaves a reply near the bottom and lands on a counter in
-              // the corner, and nothing both of those sit inside is big
-              // enough to fly it across.
-              if (_seedFrom != null && _seedTo != null)
-                _SeedInFlight(from: _seedFrom!, to: _seedTo!, flight: _seedFlight),
+              // The seeds, crossing the screen. They need a layer of their
+              // own: they leave a reply near the bottom and land on a counter
+              // in the corner, and nothing both of those sit inside is big
+              // enough to fly them across.
+              if (_seedTo != null && _grains.isNotEmpty)
+                _SeedShower(grains: _grains, to: _seedTo!, flight: _seedFlight),
             ],
           ),
         ),
@@ -562,7 +601,12 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
           // seeds fly to, and a number that is flown at has to be somewhere
           // the eye can find without leaving the conversation.
           _SeedCounter(
-              key: _counterKey, total: _seedRun, flight: _seedFlight, paid: _paid),
+            key: _counterKey,
+            balance: ref.watch(progressProvider).seeds,
+            paid: _paid,
+            grains: _grains,
+            flight: _seedFlight,
+          ),
           const SizedBox(width: 10),
           // The run: shown from two, and it grows on the spot.
           AnimatedSwitcher(
@@ -915,17 +959,19 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
           ),
           const SizedBox(height: 8),
         ],
-        // The window, draining. Only while it is open — a bar that is always
-        // there would be one more thing to watch instead of listen to.
+        // The window, draining, marked off in the bands it pays in. Only
+        // while it is open — a bar that is always there would be one more
+        // thing to watch instead of listen to.
         SizedBox(
-          height: 4,
+          height: 18,
           child: ticking
               ? AnimatedBuilder(
                   animation: _window,
-                  builder: (context, _) => LinearProgressIndicator(
-                    value: 1 - _window.value,
-                    backgroundColor: scheme.surfaceContainerHighest,
-                    color: scheme.primary,
+                  builder: (context, _) => _WindowGauge(
+                    left: 1 - _window.value,
+                    dark: theme.brightness == Brightness.dark,
+                    ground: scheme.surfaceContainerHighest,
+                    ink: scheme.onSurfaceVariant,
                   ),
                 )
               : null,
@@ -1334,63 +1380,134 @@ Future<void> startScene(
 
 
 /// The seeds earned in this run. It swells for a moment as one lands on it.
+/// What they have, in the corner, with what the turn just paid arriving on
+/// it.
+///
+/// The number is the balance rather than the run, because the balance is
+/// what the seeds are for: a field costs five hundred of them, and a total
+/// that resets every conversation never gets near one. It counts up with the
+/// grains as they land, so the number is seen to be made of them.
 class _SeedCounter extends StatelessWidget {
-  final int total;
+  /// The balance after the payment, which is what the grains are adding up
+  /// to.
+  final int balance;
   final int paid;
+  final List<_Grain> grains;
   final Animation<double> flight;
-  const _SeedCounter(
-      {super.key, required this.total, required this.paid, required this.flight});
+  const _SeedCounter({
+    super.key,
+    required this.balance,
+    required this.paid,
+    required this.grains,
+    required this.flight,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    if (total <= 0) return const SizedBox.shrink();
 
     return AnimatedBuilder(
       animation: flight,
       builder: (context, _) {
-        // The swell begins as the seed arrives and settles just after it.
-        final landing = ((flight.value - 0.75) / 0.25).clamp(0.0, 1.0);
-        final swell = paid > 0 ? sin(landing * pi) : 0.0;
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: scheme.primary.withValues(alpha: 0.12 + 0.10 * swell),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('🌱', style: TextStyle(fontSize: 12)),
+        final t = flight.value;
+        final flying = paid > 0 && t > 0 && t < 1;
+        // The grains are the payment: what has landed is on the number, and
+        // what is still in the air is not.
+        final landed = flying ? _landed(grains, t) : 1.0;
+        final shown = balance - paid + (paid * landed).round();
+        // Each arrival swells it a little; together they read as one swell
+        // that rises with the stream and settles after the last grain.
+        final swell = flying ? sin(landed * pi) * 0.9 : 0.0;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: 0.12 + 0.10 * swell),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🌱', style: TextStyle(fontSize: 12)),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$shown',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13 + 4 * swell,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // What this turn paid, beside the balance for as long as the
+            // verdict is up: the number moved, and this is by how much.
+            if (paid > 0) ...[
               const SizedBox(width: 4),
               Text(
-                '$total',
-                style: theme.textTheme.labelMedium?.copyWith(
+                '+$paid',
+                style: theme.textTheme.labelSmall?.copyWith(
                   color: scheme.primary,
                   fontWeight: FontWeight.w800,
-                  fontSize: 13 + 4 * swell,
                 ),
               ),
             ],
-          ),
+          ],
         );
       },
     );
   }
 }
 
-/// One seed, on its way from the reply that earned it to the counter.
-///
-/// In an arc rather than a straight line, bowed towards the top of the
-/// screen: a straight line between two points that are nearly one above the
-/// other reads as a jump rather than as something thrown.
-class _SeedInFlight extends StatelessWidget {
+/// At most this many grains fly, however much was paid. Past it the handful
+/// stops growing and the number carries the rest.
+const seedGrainCap = 24;
+
+/// How long one grain is in the air, as a share of the whole flight. The
+/// grains start spread out over the rest of it, so the last leaves while the
+/// first is already landing.
+const _grainSpan = 0.53;
+
+/// One seed on its way to the counter: where it left from, when it left, and
+/// the arc it takes. Each grain keeps its own so the handful arrives as a
+/// scatter rather than as one thing seen many times.
+class _Grain {
   final Offset from;
+  final double delay;
+  final double lift;
+  final double sway;
+  final double size;
+  const _Grain({
+    required this.from,
+    required this.delay,
+    required this.lift,
+    required this.sway,
+    required this.size,
+  });
+
+  /// How far along its own flight this grain is, at [t] of the whole.
+  double at(double t) => ((t - delay) / _grainSpan).clamp(0.0, 1.0);
+}
+
+/// How many of [grains] have landed by [t]. The counter counts up with them.
+double _landed(List<_Grain> grains, double t) {
+  if (grains.isEmpty) return 1;
+  var n = 0;
+  for (final g in grains) {
+    if (g.at(t) >= 1) n++;
+  }
+  return n / grains.length;
+}
+
+class _SeedShower extends StatelessWidget {
+  final List<_Grain> grains;
   final Offset to;
   final Animation<double> flight;
-  const _SeedInFlight(
-      {required this.from, required this.to, required this.flight});
+  const _SeedShower({required this.grains, required this.to, required this.flight});
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -1398,28 +1515,149 @@ class _SeedInFlight extends StatelessWidget {
         builder: (context, _) {
           final t = flight.value;
           if (t <= 0 || t >= 1) return const SizedBox.shrink();
-          final e = Curves.easeInOut.transform(t);
-          // The control point: between the two, lifted by a third of the
-          // distance there is to cover.
-          final lift = (from - to).distance * 0.33;
-          final ctrl = Offset((from.dx + to.dx) / 2, min(from.dy, to.dy) - lift);
-          final a = from + (ctrl - from) * e;
-          final b = ctrl + (to - ctrl) * e;
-          final at = a + (b - a) * e;
-          // Shrinks as it goes, the way something thrown away from you does,
-          // and fades only at the very end so it is seen to arrive.
-          final size = 26 - 12 * e;
-          final fade = 1 - ((t - 0.85) / 0.15).clamp(0.0, 1.0);
-          return Positioned(
-            left: at.dx - size / 2,
-            top: at.dy - size / 2,
-            child: IgnorePointer(
-              child: Opacity(
-                opacity: fade,
-                child: Text('🌱', style: TextStyle(fontSize: size)),
+          final out = <Widget>[];
+          for (final g in grains) {
+            final p = g.at(t);
+            if (p <= 0 || p >= 1) continue;
+            final e = Curves.easeInOut.transform(p);
+            // The control point: between the two, lifted by a share of the
+            // distance there is to cover and pushed sideways, so no two
+            // grains take quite the same line.
+            final lift = (g.from - to).distance * g.lift;
+            final ctrl = Offset(
+                (g.from.dx + to.dx) / 2 + g.sway, min(g.from.dy, to.dy) - lift);
+            final a = g.from + (ctrl - g.from) * e;
+            final b = ctrl + (to - ctrl) * e;
+            final at = a + (b - a) * e;
+            // Shrinks as it goes, the way something thrown away from you
+            // does, and fades only at the very end so it is seen to arrive.
+            final size = g.size * (1 - 0.35 * e);
+            final fade = 1 - ((p - 0.85) / 0.15).clamp(0.0, 1.0);
+            out.add(Positioned(
+              left: at.dx - size / 2,
+              top: at.dy - size / 2,
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: fade,
+                  child: Text('🌱', style: TextStyle(fontSize: size)),
+                ),
               ),
-            ),
-          );
+            ));
+          }
+          return out.isEmpty ? const SizedBox.shrink() : Stack(children: out);
         },
       );
+}
+
+/// The window, drawn as a bar marked off in the bands it pays in.
+///
+/// A bar that drains smoothly says how long is left and nothing else; the
+/// marks say what the next second costs. The band the bar is still in gives
+/// it its colour and its number, so the choice on offer — take another
+/// moment, or answer now for ten more — is on the screen rather than in the
+/// learner's head. The mark at the ladder's line is drawn heavier: above it
+/// an answer counts towards the climb, below it only towards the balance.
+class _WindowGauge extends StatelessWidget {
+  /// How much of the window is left, 1 down to 0.
+  final double left;
+  final bool dark;
+  final Color ground;
+  final Color ink;
+  const _WindowGauge({
+    required this.left,
+    required this.dark,
+    required this.ground,
+    required this.ink,
+  });
+
+  /// Fastest band first. Green while there is room, amber at the line the
+  /// ladder draws, and the last band the colour of a moment nearly gone.
+  static const _light = <Color>[
+    Color(0xFF9E9E9E),
+    Color(0xFFEF6C00),
+    Color(0xFFF9A825),
+    Color(0xFF7CB342),
+    Color(0xFF2E7D32),
+  ];
+  static const _onDark = <Color>[
+    Color(0xFF9E9E9E),
+    Color(0xFFFFA726),
+    Color(0xFFFFCA28),
+    Color(0xFF9CCC65),
+    Color(0xFF66BB6A),
+  ];
+
+  static Color colourOf(int band, bool dark) =>
+      (dark ? _onDark : _light)[(band - 1).clamp(0, seedBands - 1)];
+
+  @override
+  Widget build(BuildContext context) {
+    final band = seedBandOf(left);
+    final colour = colourOf(band, dark);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 10,
+            child: CustomPaint(
+              painter: _GaugePainter(left: left, colour: colour, ground: ground, ink: ink),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // What answering now is worth. It steps rather than slides, because a
+        // number that changes every frame cannot be aimed at.
+        Text('🌱${seedFloor + (band - 1) * seedPerBand}',
+            style: Theme.of(context)
+                .textTheme
+                .labelSmall
+                ?.copyWith(color: colour, fontWeight: FontWeight.w800)),
+      ],
+    );
+  }
+}
+
+class _GaugePainter extends CustomPainter {
+  final double left;
+  final Color colour;
+  final Color ground;
+  final Color ink;
+  const _GaugePainter(
+      {required this.left, required this.colour, required this.ground, required this.ink});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = Radius.circular(size.height / 2);
+    final whole = RRect.fromRectAndRadius(Offset.zero & size, r);
+    canvas.drawRRect(whole, Paint()..color = ground);
+
+    if (left > 0) {
+      canvas.save();
+      canvas.clipRRect(whole);
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, size.width * left.clamp(0.0, 1.0), size.height),
+        Paint()..color = colour,
+      );
+      canvas.restore();
+    }
+
+    // The marks, cut through both the filled part and the empty part so the
+    // bands stay countable however much is left.
+    for (var i = 1; i < seedBands; i++) {
+      final x = size.width * i / seedBands;
+      final onLadderLine = i == ladderBand - 1;
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        Paint()
+          ..color = ink.withValues(alpha: onLadderLine ? 0.85 : 0.35)
+          ..strokeWidth = onLadderLine ? 2.4 : 1.2,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GaugePainter old) =>
+      old.left != left || old.colour != colour || old.ground != ground || old.ink != ink;
 }

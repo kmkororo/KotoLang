@@ -243,6 +243,38 @@ const sceneAddCost = 500;
 const seedFloor = 20;
 const seedTop = 60;
 
+/// How long there is to answer, before the learner's own multiplier.
+///
+/// One length for every turn, rather than one the conversation asks for. Ten
+/// seconds sounds generous and is not: the line has to be heard, the three
+/// replies read, and the one that answers it picked, and the whole of that is
+/// what is being timed.
+const answerWindowMs = 10000;
+
+/// The bands the window is cut into. They are marked on the gauge, and each
+/// one is worth ten seeds more than the one below it, so what a reply is
+/// worth can be seen while there is still time to earn it — a number worked
+/// out afterwards from a bar that drained smoothly is a number nobody aims
+/// at.
+const seedBands = 5;
+
+/// Which band [windowLeft] falls in: [seedBands] is the fastest, 1 the last
+/// moment before the window shuts.
+int seedBandOf(double windowLeft) =>
+    (windowLeft.clamp(0.0, 1.0) * seedBands).ceil().clamp(1, seedBands);
+
+/// What one band is worth.
+int get seedPerBand => (seedTop - seedFloor) ~/ (seedBands - 1);
+
+/// The slowest band the ladder will take an answer from.
+///
+/// The ladder measures whether a setting can be *held*, which is a claim
+/// about the ear rather than about the reading. At ten seconds almost any
+/// answer lands inside the window, so the window on its own no longer says
+/// anything — the mark on the gauge does. Above this line the answer counts;
+/// below it, it is paid for and nothing more.
+const ladderBand = 3;
+
 int seedsForTurn({
   required bool correct,
   required bool clean,
@@ -250,13 +282,17 @@ int seedsForTurn({
 }) {
   if (!correct) return 0;
   if (!clean) return seedFloor;
-  final left = windowLeft.clamp(0.0, 1.0);
-  return seedFloor + ((seedTop - seedFloor) * left).round();
+  return seedFloor + (seedBandOf(windowLeft) - 1) * seedPerBand;
 }
 
-/// The window lengths the settings screen offers, as multipliers on what the
-/// conversation itself asks for. Named in the interface by what they feel
-/// like rather than by the number: nobody chooses "1.5".
+/// Whether an answer is worth putting to the ladder: caught while the window
+/// was open, on one hearing, and fast enough to mean it.
+bool countsToLadder({required bool inWindow, required double windowLeft}) =>
+    inWindow && seedBandOf(windowLeft) >= ladderBand;
+
+/// The window lengths the settings screen offers, as multipliers on
+/// [answerWindowMs]. Named in the interface by what they feel like rather
+/// than by the number: nobody chooses "1.5".
 const windowScales = <double>[0.75, 1.0, 1.5, 2.0];
 
 /// The nearest offered scale to one that was stored. A value from a build

@@ -162,9 +162,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
 
           // How long there is to answer. A multiplier rather than a number of
-          // seconds: the conversations already vary — someone on their way out
-          // gives you two seconds, someone thinking aloud four — and a flat
-          // setting would take that away.
+          // seconds, because the number is the same for every turn and the
+          // gauge is marked in it: what this setting changes is how much room
+          // each of those marks stands for.
           const SizedBox(height: 14),
           Text(s.t('windowLabel'), style: theme.textTheme.titleSmall),
           const SizedBox(height: 6),
@@ -179,7 +179,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 updateSettings(ref, settings.copyWith(windowScale: v.first)),
           ),
           const SizedBox(height: 4),
-          Text(s.t('windowHint', {'n': (3 * settings.windowScale).toStringAsFixed(1)}),
+          Text(
+              s.t('windowHint', {
+                'n': (answerWindowMs / 1000 * settings.windowScale).toStringAsFixed(1)
+              }),
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         ]),
@@ -202,7 +205,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           OutlinedButton(
             onPressed: () => Navigator.push(
                 context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
-            child: Text(s.t('profileTitle')),
+            child: Text(s.t('profileMakeButton')),
           ),
           const SizedBox(height: 8),
           // Every area the AI ever suggested, lock state and unlock cost

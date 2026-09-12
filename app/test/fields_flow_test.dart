@@ -271,9 +271,9 @@ void main() {
 
     await tester.tap(find.text(s.t('settingsTitle')).last);
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text(s.t('profileTitle')), 200,
+    await tester.scrollUntilVisible(find.text(s.t('profileMakeButton')), 200,
         scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text(s.t('profileTitle')));
+    await tester.tap(find.text(s.t('profileMakeButton')));
     await tester.pumpAndSettle();
     expect(find.byType(ProfileScreen), findsOneWidget);
 

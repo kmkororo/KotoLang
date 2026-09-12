@@ -547,9 +547,11 @@ class Repository {
       return (result: r, ladder: held, promoted: const <LadderAxis>[], seeds: 0);
     }
 
-    // Clean means inside the window, on one hearing. The ladder counts only
-    // those, and the seeds pay in full only for those.
-    final moved = (await loadLadder()).record(correct, clean: inWindow);
+    // Clean means inside the window, on one hearing. The seeds pay in full
+    // only for those; the ladder asks for one thing more, that the answer
+    // came fast enough to say something about the ear.
+    final moved = (await loadLadder())
+        .record(correct, clean: countsToLadder(inWindow: inWindow, windowLeft: windowLeft));
     await saveLadder(moved.ladder);
 
     final paid = seedsForTurn(correct: correct, clean: inWindow, windowLeft: windowLeft);

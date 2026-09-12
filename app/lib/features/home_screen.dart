@@ -21,6 +21,7 @@ import 'field_screen.dart';
 import 'listen_screen.dart';
 import 'ai_screens.dart';
 import 'scene_screen.dart';
+import 'tree_growth_screen.dart';
 import 'tree_view.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -92,14 +93,29 @@ class HomeScreen extends ConsumerWidget {
         _Banner(progress: progress),
 
         // -------- the tree --------
-        const TreePanel(),
-        const SizedBox(height: 4),
-        Text(
-          stats.scenes == 0
-              ? s.t(hasOwn ? 'treeSproutHintOwn' : 'treeSproutHint')
-              : '${s.t('treeStage${treeName(tree.value?.shape.reached ?? 0)}')} · ${s.t('treeGrownScenes', {'n': stats.scenes})}',
-          textAlign: TextAlign.center,
-          style: muted,
+        //
+        // A tap on it asks what it is: the tree is the only reward here, and
+        // a reward nobody can read is decoration.
+        InkWell(
+          onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const TreeGrowthScreen())),
+          child: Column(
+            children: [
+              const TreePanel(),
+              const SizedBox(height: 4),
+              Text(
+                stats.scenes == 0
+                    ? s.t(hasOwn ? 'treeSproutHintOwn' : 'treeSproutHint')
+                    : '${s.t('treeStage${treeName(tree.value?.shape.reached ?? 0)}')} · ${s.t('treeGrownScenes', {'n': stats.scenes})}',
+                textAlign: TextAlign.center,
+                style: muted,
+              ),
+              const SizedBox(height: 2),
+              Text(s.t('treeHowTitle'),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.labelSmall?.copyWith(color: scheme.primary)),
+            ],
+          ),
         ),
         const SizedBox(height: 16),
 

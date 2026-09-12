@@ -191,7 +191,7 @@ void main() {
     test('an answer moves the ladder, and a second look does not', () async {
       final id = await oneScene();
       for (var i = 0; i < ladderWindow; i++) {
-        await repo.recordTurn(sceneId: id, turn: 0, correct: true);
+        await repo.recordTurn(sceneId: id, turn: 0, correct: true, windowLeft: 1);
       }
       expect((await repo.loadLadder()).maxOf(LadderAxis.speed), 1);
 
@@ -202,12 +202,37 @@ void main() {
           reason: 'a second look says nothing about holding a setting');
     });
 
+    test('a wrong answer given in time is weighed with the rest', () async {
+      // The pass rate only means something if the misses reach the buffer.
+      // They did not: the screen sent "in the window" only for answers that
+      // were also right, so the buffer filled with nothing but successes and
+      // every window passed.
+      final id = await oneScene();
+      for (var i = 0; i < ladderWindow; i++) {
+        await repo.recordTurn(
+            sceneId: id, turn: 0, correct: i.isEven, windowLeft: 1);
+      }
+      expect((await repo.loadLadder()).maxOf(LadderAxis.speed), 0,
+          reason: 'half right is not holding a setting');
+    });
+
+    test('an answer too slow for the gauge says nothing to the ladder', () async {
+      final id = await oneScene();
+      for (var i = 0; i < ladderWindow * 2; i++) {
+        await repo.recordTurn(sceneId: id, turn: 0, correct: true, windowLeft: 0.1);
+      }
+      expect((await repo.loadLadder()).maxOf(LadderAxis.speed), 0);
+      expect((await repo.loadProgress()).seeds, greaterThan(0),
+          reason: 'it was right, so it was paid for');
+    });
+
     test('what comes back names the axes that went up', () async {
       final id = await oneScene();
       var promoted = <LadderAxis>[];
       for (var i = 0; i < ladderWindow; i++) {
         promoted =
-            (await repo.recordTurn(sceneId: id, turn: 0, correct: true)).promoted;
+            (await repo.recordTurn(sceneId: id, turn: 0, correct: true, windowLeft: 1))
+                .promoted;
       }
       expect(promoted, isNotEmpty, reason: 'the screen can say so on the spot');
     });
@@ -306,7 +331,7 @@ void main() {
     test('forgetting the answers forgets the ladder with them', () async {
       final id = await seeded();
       for (var i = 0; i < ladderWindow; i++) {
-        await repo.recordTurn(sceneId: id, turn: 0, correct: true);
+        await repo.recordTurn(sceneId: id, turn: 0, correct: true, windowLeft: 1);
       }
       expect((await repo.loadLadder()).reached, greaterThan(0));
 
@@ -347,7 +372,7 @@ void main() {
       await repo.importProfile(profileJson(['Nursing']), uiLanguage: 'en');
       await repo.importScenes(pack([scene('Talk')]), uiLanguage: 'en', field: 'work');
       final id = (await repo.scenes()).single.id;
-      await repo.recordTurn(sceneId: id, turn: 0, correct: true);
+      await repo.recordTurn(sceneId: id, turn: 0, correct: true, windowLeft: 1);
       final file = await repo.exportAll();
 
       final fresh = AppDatabase(NativeDatabase.memory());

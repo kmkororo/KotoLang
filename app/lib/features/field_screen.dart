@@ -14,7 +14,6 @@ import '../app.dart';
 import '../domain/field.dart';
 import '../domain/progress_service.dart';
 import '../domain/scene.dart';
-import '../domain/tree.dart';
 import 'ai_screens.dart';
 import 'scene_screen.dart';
 import 'tree_view.dart';
@@ -93,13 +92,10 @@ class _FieldScreenState extends ConsumerState<FieldScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // This field's bough alone, the way it stands on the tree.
+              // The tree, small. It is the same tree as on home: one picture
+              // of the learner, not a readout of this field.
               if (hasBough) ...[
-                TreePanel(
-                    focus: widget.own
-                        ? ownBranch(widget.field.id)
-                        : sampleBranch(widget.field.id),
-                    compact: true),
+                const TreePanel(compact: true),
                 const SizedBox(height: 8),
               ] else
                 const Spacer(),
