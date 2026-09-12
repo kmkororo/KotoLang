@@ -16,9 +16,29 @@ import '../domain/scene.dart' show TurnType;
 import '../domain/tree.dart';
 import 'tree_view.dart';
 
-/// The six the tree answers to, as ladder steps.
-List<int> get _stageSteps =>
-    [for (var i = 0; i < treeNames; i++) (ladderSteps * i / (treeNames - 1)).round()];
+/// One row per name the tree answers to: the step it is earned at, and the
+/// step it is drawn at.
+///
+/// Read off [treeName] rather than divided out of the ladder, which put two
+/// rows on the same name and skipped another: the names are not spaced
+/// evenly along the ladder, and the only thing that knows where they fall is
+/// the function that names them.
+List<({int entry, int draw})> get _stages {
+  final entry = <int>[];
+  var last = -1;
+  for (var r = 0; r <= ladderSteps; r++) {
+    final n = treeName(r);
+    if (n != last) {
+      entry.add(r);
+      last = n;
+    }
+  }
+  return [
+    // Drawn at the top of its band, where it is most itself.
+    for (var i = 0; i < entry.length; i++)
+      (entry: entry[i], draw: i + 1 < entry.length ? entry[i + 1] - 1 : ladderSteps)
+  ];
+}
 
 /// A tree made up for the picture: enough work behind it to look like it
 /// belongs at that height, and three fields, which is what everyone starts
@@ -86,14 +106,14 @@ class TreeGrowthScreen extends ConsumerWidget {
             const SizedBox(height: 8),
 
             // -------- what it becomes --------
-            for (final steps in _stageSteps) ...[
+            for (final stage in _stages) ...[
               _Stage(
-                shape: _imagined(steps),
-                name: s.t('treeStage${treeName(steps)}'),
-                need: s.t('treeStageNeed', {'n': steps}),
+                shape: _imagined(stage.draw),
+                name: s.t('treeStage${treeName(stage.draw)}'),
+                need: s.t('treeStageNeed', {'n': stage.entry}),
                 // The one the learner is standing in, marked rather than
                 // written about: they can count the rest themselves.
-                now: here != null && treeName(here.reached) == treeName(steps),
+                now: here != null && treeName(here.reached) == treeName(stage.draw),
                 nowLabel: s.t('treeStageNow'),
               ),
               const SizedBox(height: 6),
@@ -182,7 +202,12 @@ class _Stage extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(8, 8, 14, 8),
         child: Row(
           children: [
-            SizedBox(width: 96, child: TreeStill(shape: shape, height: 104)),
+            // Clipped: the ground is drawn wider than the canvas so that a
+            // full tree stands on soil rather than on a saucer, which on a
+            // preview this narrow means it reaches out over the words.
+            ClipRect(
+              child: SizedBox(width: 104, child: TreeStill(shape: shape, height: 108)),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(

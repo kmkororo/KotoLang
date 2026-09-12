@@ -1423,7 +1423,7 @@ const _catalogueCore = <String, Map<String, String>>{
     'windowLabel': '答える時間',
     'windowHint': 'どの問題も{n}秒です。ゲージの目盛りは Seeds の段で、早く答えるほど多くもらえます。',
     'window_short': '短め',
-    'window_normal': 'ふつう',
+    'window_normal': '標準',
     'window_long': '長め',
     'window_longest': '最長',
     'ladderUp': '一段上がりました',

@@ -175,6 +175,20 @@ void main() {
     expect(watered.branches.single.thirsty, isFalse);
   });
 
+  test('every name the tree answers to is reachable, and only once', () {
+    // The growing screen draws one row per name. Dividing the ladder into
+    // six even parts to find them put two rows on the same name and skipped
+    // another, because the names are not spaced evenly along it — so the
+    // screen walks the ladder and asks. This is what it relies on.
+    final seen = <int>[];
+    for (var r = 0; r <= ladderSteps; r++) {
+      final n = treeName(r);
+      if (seen.isEmpty || seen.last != n) seen.add(n);
+    }
+    expect(seen, [for (var i = 0; i < treeNames; i++) i],
+        reason: 'each name once, in order, from the seed to the last');
+  });
+
   test('the same record always draws the same tree', () {
     final scenes = {for (final s in [make('a'), make('b', field: 'travel')]) s.id: s};
     final results = [answered('a', 0), answered('b', 0, correct: false)];

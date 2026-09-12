@@ -943,7 +943,27 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
                     ?.copyWith(color: scheme.onSurfaceVariant)),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
+        // The window, draining, marked off in the bands it pays in. Above the
+        // replies rather than below them: the replies scroll on a short
+        // screen, and a gauge that scrolls off is a gauge nobody uses. Only
+        // while the window is open — a bar that is always there would be one
+        // more thing to watch instead of listen to.
+        SizedBox(
+          height: 18,
+          child: ticking
+              ? AnimatedBuilder(
+                  animation: _window,
+                  builder: (context, _) => _WindowGauge(
+                    left: 1 - _window.value,
+                    dark: theme.brightness == Brightness.dark,
+                    ground: scheme.surfaceContainerHighest,
+                    ink: scheme.onSurfaceVariant,
+                  ),
+                )
+              : null,
+        ),
+        const SizedBox(height: 6),
         for (var i = 0; i < _turn.replies.length; i++) ...[
           _Option(
             key: _replyKeys[i],
@@ -959,23 +979,6 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
           ),
           const SizedBox(height: 8),
         ],
-        // The window, draining, marked off in the bands it pays in. Only
-        // while it is open — a bar that is always there would be one more
-        // thing to watch instead of listen to.
-        SizedBox(
-          height: 18,
-          child: ticking
-              ? AnimatedBuilder(
-                  animation: _window,
-                  builder: (context, _) => _WindowGauge(
-                    left: 1 - _window.value,
-                    dark: theme.brightness == Brightness.dark,
-                    ground: scheme.surfaceContainerHighest,
-                    ink: scheme.onSurfaceVariant,
-                  ),
-                )
-              : null,
-        ),
       ],
     );
   }
