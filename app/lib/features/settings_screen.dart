@@ -295,6 +295,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             OutlinedButton(
               onPressed: () => _confirmed(
                 title: s.t('deleteAllMaterial'),
+                body: s.t('resetBodyAll'),
                 action: () => ref.read(repositoryProvider).clearEveryField(),
               ),
               child: Text(s.t('deleteAllMaterial')),
@@ -303,6 +304,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             OutlinedButton(
               onPressed: () => _confirmed(
                 title: s.t('resetProgressOnly'),
+                body: s.t('resetBodyProgress'),
                 action: () => ref.read(repositoryProvider).forgetAnswers(),
               ),
               child: Text(s.t('resetProgressOnly')),
@@ -311,6 +313,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             OutlinedButton(
               onPressed: () => _confirmed(
                 title: s.t('resetProfile'),
+                body: s.t('resetBodyProfile'),
                 action: () => ref.read(repositoryProvider).resetProfileAndFields(),
               ),
               child: Text(s.t('resetProfile')),
@@ -323,6 +326,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               onPressed: () => _confirmed(
                 title: s.t('factoryReset'),
+                body: s.t('resetBodyFactory'),
                 action: () => ref.read(repositoryProvider).factoryReset(),
               ),
               child: Text(s.t('factoryReset')),
@@ -371,13 +375,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _confirmed({
     required String title,
+    required String body,
     required Future<void> Function() action,
   }) async {
     final s = ref.read(stringsProvider);
     final ok = await confirm(
       context,
       title: title,
-      body: s.t('resetIntro'),
+      body: body,
       confirmLabel: s.t('confirmLabel'),
       cancelLabel: s.t('cancel'),
     );

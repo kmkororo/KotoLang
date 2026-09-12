@@ -403,7 +403,9 @@ Future<void> showOpenFieldSheet(BuildContext context, WidgetRef ref) async {
           Text(s.t('fieldAdd'), style: Theme.of(ctx).textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            left > 0 ? s.t('fieldChooseLeft', {'n': left}) : s.t('fieldAddLadder'),
+            left > 0
+                ? s.t('fieldChooseLeft', {'n': left})
+                : s.t('fieldAddLadder', {'n': realmUnlockCost}),
             style: Theme.of(ctx).textTheme.bodySmall,
           ),
           const SizedBox(height: 10),

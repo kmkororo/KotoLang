@@ -37,7 +37,7 @@ Future<void> explainSeedGate(BuildContext context, WidgetRef ref) {
               // The loop, as three steps rather than a paragraph.
               for (final step in [
                 ('📚', s.t('capStepStudy')),
-                ('🪜', s.t('capStepClimb')),
+                ('🌱', s.t('capStepClimb')),
                 ('🌎', s.t('capStepOpen')),
               ])
                 Padding(
