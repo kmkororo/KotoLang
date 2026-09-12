@@ -683,109 +683,105 @@ class _TreePainter extends CustomPainter {
     }
   }
 
-  /// What hangs under a floating island: the earth narrowing to a point, and
-  /// the roots that hold it together going down with it.
-  void _underside(Canvas canvas, _Plan plan) {
-    if (plan.globeR <= 0) return;
-    final g = plan.globe;
-    final r = plan.globeR;
-    final deep = _round;
-    // How far the point hangs below the island. It grows as the ground closes,
-    // so the world does not sprout a tail the moment it starts rounding.
-    final tail = r * (0.30 + 0.62 * deep);
-    final rim = Paint()..color = dark ? const Color(0xFF2F2218) : const Color(0xFF3D2A1C);
-    final earth = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: dark
-            ? const [Color(0xFF6E4629), Color(0xFF2F2218)]
-            : const [Color(0xFF8F5E36), Color(0xFF3D2A1C)],
-      ).createShader(Rect.fromLTWH(g.dx - r, g.dy, r * 2, tail));
-
-    // A teardrop: off the island's sides, down to a point below it.
-    // It leaves the rim near the equator, so what hangs under the island is
-    // a broad cone rather than a spike: an island with a root mass under it,
-    // not a spinning top.
-    const side = 0.94;
-    final left = g + Offset(cos(pi - pi / 2 * side), sin(pi / 2 * side)) * r;
-    final right = g + Offset(cos(pi / 2 * side), sin(pi / 2 * side)) * r;
-    final tip = g + Offset(0, r + tail);
-    final path = Path()
-      ..moveTo(left.dx, left.dy)
-      ..quadraticBezierTo(g.dx - r * 0.62, g.dy + r * 0.82, tip.dx, tip.dy)
-      ..quadraticBezierTo(g.dx + r * 0.62, g.dy + r * 0.82, right.dx, right.dy)
-      ..close();
-    canvas.drawPath(path, rim);
-    canvas.drawPath(path, earth);
-
-    // The roots, coming off the trunk's own foot, round the island and down
-    // into the point. What holds the whole thing up.
-    final root = Paint()
-      ..color = Color.lerp(dark ? _barkOnDark : _barkLit, const Color(0xFFD9A870), 0.25)!
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    const strands = 9;
-    for (var k = 0; k < strands; k++) {
-      final spread = strands == 1 ? 0.0 : k / (strands - 1) * 2 - 1;
-      final a0 = -pi / 2 + spread * (0.55 + 0.35 * _wobble(k * 13).abs());
-      final a1 = pi / 2 - spread * 0.30;
-      final mid = (a0 + a1) / 2 + _wobble(k * 29) * 0.10;
-      Offset on(double a, double m) => g + Offset(cos(a), sin(a)) * (r * m);
-      final path = Path()..moveTo(on(a0, 1.0).dx, on(a0, 1.0).dy);
-      // Round the side, hugging the surface, then in under it.
-      path.quadraticBezierTo(
-          on(mid, 1.03).dx, on(mid, 1.03).dy, on(a1, 0.98).dx, on(a1, 0.98).dy);
-      // And on down into the tail, thinning as it goes.
-      final end = Offset(g.dx + spread * r * 0.16, g.dy + r + tail * 0.88);
-      path.quadraticBezierTo(g.dx + spread * r * 0.62, g.dy + r * 0.92, end.dx, end.dy);
-      canvas.drawPath(
-          path, root..strokeWidth = max(1.0, plan.w0 * (0.34 - 0.14 * spread.abs())));
-    }
-  }
-
-  /// The roots on the near face of the world, spreading from the trunk's foot
-  /// and reaching for the rim. Drawn over the world rather than under it,
-  /// because what is wanted is a world held in a hand.
+  /// The roots on the face of the world, spreading from the trunk's foot and
+  /// going round it. Drawn over the world rather than under it, because what
+  /// is wanted is a world held in a hand.
+  ///
+  /// Each one is laid out on the sphere rather than on the picture of it: how
+  /// far down from the pole it has got, and how far round. A root drawn as a
+  /// curve on the flat disc looks painted on; one drawn in the sphere's own
+  /// two angles crowds towards the rim the way a line on a ball does, and
+  /// goes out of sight round the back when it gets there.
+  ///
+  /// Three thick ones that wander a long way, a dozen fine ones between them,
+  /// and whiskers off the thick ones — which is what a root system does: a
+  /// few that go somewhere and a great many that hold on.
   void _surfaceRoots(Canvas canvas, _Plan plan) {
     if (plan.globeR <= 0 || _round <= 0.02) return;
     final g = plan.globe;
     final r = plan.globeR;
-    final root = Paint()
-      ..color = Color.lerp(dark ? _barkOnDark : _barkLit, const Color(0xFFD9A870), 0.35)!
-          .withValues(alpha: 0.95 * _round)
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
+    canvas.save();
+    canvas.clipPath(Path()..addOval(Rect.fromCircle(center: g, radius: r)));
 
-    Offset on(double a, double m) => g + Offset(cos(a), sin(a)) * (r * m);
-    const top = -pi / 2;
-    const strands = 13;
-    for (var k = 0; k < strands; k++) {
-      final spread = k / (strands - 1) * 2 - 1;
-      // How far round the face this one reaches. The outer ones go nearly to
-      // the rim, where they meet the ones coming up from underneath.
-      final far = (1.35 + 0.34 * _wobble(k * 17)) * spread;
-      final end = top + far;
-      final mid = top + far * 0.52 + _wobble(k * 37) * 0.10;
-      // Leaving the foot a little to one side already, so thirteen of them do
-      // not all start from the same point and read as one lump.
-      final start = top + far * 0.14;
-      final path = Path()..moveTo(on(start, 0.995).dx, on(start, 0.995).dy);
-      path.quadraticBezierTo(
-          on(mid, 0.995).dx, on(mid, 0.995).dy, on(end, 0.99).dx, on(end, 0.99).dy);
-      canvas.drawPath(
-          path, root..strokeWidth = max(1.2, plan.w0 * (0.17 - 0.09 * spread.abs())));
+    // [u] is the angle down from the pole the trunk stands on; [v] is the
+    // angle round. Orthographic, so the pole is the top of the circle.
+    Offset at(double u, double v) =>
+        Offset(g.dx + r * sin(u) * sin(v), g.dy - r * cos(u));
 
-      // One fork off the back half of each, so the face is netted rather than
-      // combed.
-      final f0 = top + far * 0.55;
-      final f1 = f0 + far * 0.36 + _wobble(k * 91) * 0.18;
-      final fork = Path()..moveTo(on(f0, 0.995).dx, on(f0, 0.995).dy);
-      fork.quadraticBezierTo(on((f0 + f1) / 2, 1.0).dx, on((f0 + f1) / 2, 1.0).dy,
-          on(f1, 0.985).dx, on(f1, 0.985).dy);
-      canvas.drawPath(fork, root..strokeWidth = max(1.0, plan.w0 * 0.13));
+    final bark = Color.lerp(
+        dark ? _barkOnDark : _barkLit, const Color(0xFFD9A870), 0.30)!;
+
+    void root({
+      required double v0,
+      required double amp,
+      required double waves,
+      required double phase,
+      required double uFrom,
+      required double uTo,
+      required double w,
+      double fade = 1,
+    }) {
+      const steps = 30;
+      final paint = Paint()
+        ..color = bark.withValues(alpha: fade * _round)
+        ..strokeCap = StrokeCap.round;
+      var prev = at(uFrom, v0 + amp * sin(uFrom * waves + phase));
+      for (var i = 1; i <= steps; i++) {
+        final t = i / steps;
+        final u = uFrom + (uTo - uFrom) * t;
+        final v = v0 + amp * sin(u * waves + phase);
+        final p = at(u, v);
+        // Round the back: stop drawing rather than let it come out the far
+        // side, which is what makes the ball read as a ball.
+        if (cos(v) > 0.03) {
+          canvas.drawLine(prev, p, paint..strokeWidth = max(0.7, w * (1 - 0.60 * t)));
+        }
+        prev = p;
+      }
     }
+
+    final w0 = plan.w0;
+    // Three that go somewhere.
+    for (var k = 0; k < 3; k++) {
+      final v0 = (k - 1) * 0.78;
+      root(
+        v0: v0,
+        amp: 0.40,
+        waves: 2.05 + 0.3 * _wobble(k * 11),
+        phase: _wobble(k * 23) * pi,
+        uFrom: 0.05,
+        uTo: 2.55,
+        w: w0 * 0.30,
+      );
+      // Whiskers off it, three each, leaving at different heights.
+      for (var j = 0; j < 3; j++) {
+        final start = 0.55 + j * 0.62;
+        root(
+          v0: v0 + (j.isEven ? 0.26 : -0.26),
+          amp: 0.20,
+          waves: 3.6,
+          phase: _wobble(k * 31 + j * 7) * pi,
+          uFrom: start,
+          uTo: start + 0.85,
+          w: w0 * 0.075,
+          fade: 0.88,
+        );
+      }
+    }
+    // And a dozen fine ones through the gaps.
+    for (var k = 0; k < 12; k++) {
+      root(
+        v0: -1.30 + k * (2.60 / 11),
+        amp: 0.24,
+        waves: 3.1 + 0.5 * _wobble(k * 17),
+        phase: _wobble(k * 41) * pi,
+        uFrom: 0.05,
+        uTo: 2.40,
+        w: w0 * 0.105,
+        fade: 0.9,
+      );
+    }
+    canvas.restore();
   }
 
   @override
@@ -897,7 +893,7 @@ class _TreePainter extends CustomPainter {
       // against the panel comes out a wire however generous it looked. The
       // boughs keep the unmeasured one: a bough as thick as that trunk, laid
       // across a world, is a plank.
-      ..w0 = _round > 0 ? max(w0, plan.globeR * 0.52) : w0
+      ..w0 = _round > 0 ? max(w0, plan.globeR * 0.30) : w0
       // The trunk leans and straightens rather than standing to attention.
       ..trunkCtrl = Offset(cx + w0 * 0.55, base.dy - trunkH * 0.45);
 
@@ -1149,7 +1145,7 @@ class _TreePainter extends CustomPainter {
     // be seen at all.
     var minY = plan.top.dy;
     var maxY = plan.globeR > 0
-        ? plan.globe.dy + plan.globeR * (1 + 0.30 + 0.62 * _round)
+        ? plan.globe.dy + plan.globeR
         : plan.groundY + _groundH / 2;
     if (plan.globeR > 0) {
       minX = min(minX, plan.globe.dx - plan.globeR);
@@ -1183,7 +1179,6 @@ class _TreePainter extends CustomPainter {
   void _draw(Canvas canvas, _Plan plan) {
     final shape = data.shape;
 
-    _underside(canvas, plan);
     _mound(canvas, Offset(plan.cx, plan.groundY), _groundH,
         world: plan.globeR > 0 ? (at: plan.globe, r: plan.globeR) : null);
     _surfaceRoots(canvas, plan);
