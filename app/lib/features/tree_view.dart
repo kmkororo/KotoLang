@@ -346,17 +346,24 @@ class _TreePainter extends CustomPainter {
   /// The mound the tree stands in, drawn rather than pasted: a low ellipse of
   /// earth with a darker rim, in the app's own cartoon line. No grass — the
   /// leaves are the only green, and they belong to the tree.
-  void _mound(Canvas canvas, Offset centre, double h) {
+  /// [world] is the globe the ground has closed into, or null while it is
+  /// still flat.
+  void _mound(Canvas canvas, Offset centre, double h,
+      {({Offset at, double r})? world}) {
     // Past a full-grown tree the mound widens and then, as the crown comes
     // round it, closes: a flat ellipse at the start, a horizon in the middle
-    // of the climb, and by the end a world with the tree standing on it. It
-    // is drawn lower as it rounds, so the whole of it is in the picture.
-    final round = ((beyond - 0.45) / 0.55).clamp(0.0, 1.0);
-    final w = h * (3.4 + 4.0 * beyond) * (1 - 0.42 * round);
-    final tall = h * (1 + 5.6 * round);
-    final drop = (tall - h) * 0.42;
-    final rect =
-        Rect.fromCenter(center: centre.translate(0, drop), width: w, height: tall);
+    // of the climb, and by the end a world with the tree standing on it.
+    final round = _round;
+    final flatW = h * (3.4 + 4.0 * beyond);
+    final rect = world == null
+        ? Rect.fromCenter(center: centre, width: flatW, height: h)
+        : Rect.fromCenter(
+            center: world.at,
+            // Round at the end, and on the way there still wider than it is
+            // tall, so the horizon closes rather than inflating.
+            width: world.r * 2 + (flatW - world.r * 2) * (1 - round),
+            height: world.r * 2,
+          );
     final rim = Paint()..color = dark ? const Color(0xFF3A2A1E) : const Color(0xFF4A3323);
     final earth = Paint()
       ..shader = LinearGradient(
@@ -376,8 +383,8 @@ class _TreePainter extends CustomPainter {
     if (round < 0.98) {
       canvas.drawOval(
           Rect.fromCenter(
-              center: centre.translate(-w * 0.06, -h * 0.12),
-              width: w * 0.62,
+              center: rect.center.translate(-rect.width * 0.06, -h * 0.12),
+              width: rect.width * 0.62,
               height: h * 0.30),
           band);
     }
@@ -638,6 +645,10 @@ class _TreePainter extends CustomPainter {
   /// so a full-grown tree is not standing on a seedling's patch of soil.
   double get _groundH => 44 + 9 * girth;
 
+  /// How far the ground has closed into a world: nothing for most of the
+  /// climb, then rounding over the last stretch of it.
+  double get _round => ((beyond - 0.45) / 0.55).clamp(0.0, 1.0);
+
   /// Works out where every limb goes, and how much of the panel that needs.
   _Plan _layout(TreeShape shape, Size size) {
     final groundY = size.height - 22;
@@ -662,7 +673,11 @@ class _TreePainter extends CustomPainter {
     // wider than its own ground reads as a stump, not as an old tree. It also
     // has to start as a stem rather than as a thin trunk — a seedling with a
     // woody bole is the thing that made the early stages look wrong.
-    final w0 = min(1.7 + 13 * girth, size.width * 0.075);
+    // Thicker than it was. The cap is what did it: at a fifteenth of the
+    // panel a grown tree came out a wand, and on a preview a hundred pixels
+    // wide it was a wire. A trunk is the one part of a tree that is allowed
+    // to look heavy.
+    final w0 = min(2.6 + 21 * girth, size.width * 0.14);
     // A crown wider than it is tall: the shape of a tree left to spread. How
     // far it actually reaches is the work done, so a young tree has short
     // boughs rather than a full crown on a short stem.
@@ -673,6 +688,16 @@ class _TreePainter extends CustomPainter {
         (0.16 + 0.36 * grown) *
         (0.35 + 0.65 * branchReach(shape.answers)) *
         (1 + 1.1 * beyond);
+
+    // The world, sized against the crown rather than against the soil. A
+    // little smaller than the crown's reach, so that boughs of that length
+    // come round more than a quarter of it each: wide enough that a full
+    // crown meets itself underneath, small enough that the tree on top of it
+    // is still a tree and not a sprig on a planet.
+    if (_round > 0) {
+      plan.globeR = max(reach * 0.80, _groundH * 0.7);
+      plan.globe = Offset(cx, soil + plan.globeR);
+    }
 
     plan
       ..base = base
@@ -846,8 +871,12 @@ class _TreePainter extends CustomPainter {
     // the ground rather than standing on it. Lifting the tip and its control
     // point together keeps the curve, so a bough that wanted to droop simply
     // levels out at the ground instead of going through it.
-    Offset above(Offset p) =>
-        p.dy > plan.soil - _clearance ? Offset(p.dx, plan.soil - _clearance) : p;
+    // On a world there is no soil line to stay above — the surface is under
+    // the boughs wherever they have got to — so this only applies while the
+    // ground is still flat.
+    Offset above(Offset p) => _round <= 0 && p.dy > plan.soil - _clearance
+        ? Offset(p.dx, plan.soil - _clearance)
+        : p;
     _Limb lift(_Limb l) => (
           from: l.from,
           ctrl: above(l.ctrl),
@@ -869,10 +898,68 @@ class _TreePainter extends CustomPainter {
       plan.buds[i] = (above(at), tilt);
     }
 
+    // Round the world.
+    //
+    // Everything above is laid out flat, as though the ground went on for
+    // ever sideways. Once it has closed into a world that is a lie the eye
+    // catches at once: a bough reaching out horizontally leaves the surface
+    // behind and hangs in the sky. So every point is carried round instead —
+    // how far out from the trunk it went becomes how far round the world it
+    // goes, at the same height above the surface it had. A crown wide enough
+    // meets itself underneath.
+    if (_round > 0) {
+      final g = (centre: plan.globe, radius: plan.globeR);
+      Offset round(Offset p) {
+        final r = (p - g.centre).distance;
+        if (r < 0.5) return p;
+        // Straight up from the centre is where the trunk stands; the angle is
+        // the arc that this point's distance from the trunk subtends.
+        final a = -pi / 2 + ((p.dx - plan.cx) / g.radius) * _round;
+        return g.centre + Offset(cos(a), sin(a)) * r;
+      }
+
+      _Limb bend(_Limb l) => (
+            from: round(l.from),
+            ctrl: round(l.ctrl),
+            to: round(l.to),
+            seed: l.seed,
+            tip: l.tip,
+            own: l.own,
+          );
+      for (var i = 0; i < plan.wood.length; i++) {
+        final (l, wa, wb) = plan.wood[i];
+        plan.wood[i] = (bend(l), wa, wb);
+      }
+      for (var i = 0; i < plan.leafy.length; i++) {
+        final (l, size, dry) = plan.leafy[i];
+        plan.leafy[i] = (bend(l), size, dry);
+      }
+      for (var i = 0; i < plan.buds.length; i++) {
+        final (at, tilt) = plan.buds[i];
+        plan.buds[i] = (round(at), tilt);
+      }
+      for (var i = 0; i < plan.collars.length; i++) {
+        final (at, w) = plan.collars[i];
+        plan.collars[i] = (round(at), w);
+      }
+      plan.top = round(plan.top);
+    }
+
     // What all of that needs, leaf tips included, against what there is.
 
     var minX = plan.base.dx, maxX = plan.base.dx;
-    var minY = plan.top.dy, maxY = plan.groundY + _groundH / 2;
+    // The ground counts towards what has to fit, and once it has closed into
+    // a world that is most of the picture: left out, the world ran off the
+    // bottom of the panel and the thing the boughs had gone round could not
+    // be seen at all.
+    var minY = plan.top.dy;
+    var maxY = plan.globeR > 0
+        ? plan.globe.dy + plan.globeR
+        : plan.groundY + _groundH / 2;
+    if (plan.globeR > 0) {
+      minX = min(minX, plan.globe.dx - plan.globeR);
+      maxX = max(maxX, plan.globe.dx + plan.globeR);
+    }
     for (final (l, leafSize, _) in plan.leafy) {
       for (final p in [l.from, l.ctrl, l.to]) {
         minX = min(minX, p.dx - leafSize * 1.6);
@@ -901,7 +988,8 @@ class _TreePainter extends CustomPainter {
   void _draw(Canvas canvas, _Plan plan) {
     final shape = data.shape;
 
-    _mound(canvas, Offset(plan.cx, plan.groundY), _groundH);
+    _mound(canvas, Offset(plan.cx, plan.groundY), _groundH,
+        world: plan.globeR > 0 ? (at: plan.globe, r: plan.globeR) : null);
 
     // Nothing answered yet: the seed art on its own, sitting in the soil.
     if (shape.isSeed) {
@@ -1001,7 +1089,8 @@ class _TreePainter extends CustomPainter {
     canvas.save();
     canvas.clipRect(Rect.fromLTRB(plan.cx - lip, plan.soil + 2,
         plan.cx + lip, plan.groundY + _groundH));
-    _mound(canvas, Offset(plan.cx, plan.groundY), _groundH);
+    _mound(canvas, Offset(plan.cx, plan.groundY), _groundH,
+        world: plan.globeR > 0 ? (at: plan.globe, r: plan.globeR) : null);
     canvas.restore();
   }
 
@@ -1025,6 +1114,13 @@ class _Plan {
   Offset top = Offset.zero;
   Offset trunkCtrl = Offset.zero;
   double w0 = 0;
+
+  /// The world under the tree, once the ground has closed into one. Its size
+  /// is set against the crown rather than against the soil: a world the crown
+  /// cannot get round is not a world the tree has gone round.
+  Offset globe = Offset.zero;
+  double globeR = 0;
+
   double scale = 1;
   Offset offset = Offset.zero;
 
