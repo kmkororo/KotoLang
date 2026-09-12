@@ -599,10 +599,100 @@ class _TreePainter extends CustomPainter {
     }
   }
 
+  /// Cloud, below the island and drifting under it. A world with cloud
+  /// beneath it is not a planet: it is something floating, which is the whole
+  /// of the difference.
+  void _clouds(Canvas canvas, Size size) {
+    final show = _round;
+    if (show <= 0.01) return;
+    final paint = Paint()
+      ..color = (dark ? const Color(0xFFB9C6E8) : Colors.white)
+          .withValues(alpha: 0.30 * show);
+    for (var i = 0; i < 7; i++) {
+      final t = _wobble(i * 41) * 0.5 + 0.5;
+      final x = ((t + phase * 0.012 + i * 0.14) % 1.2 - 0.1) * size.width;
+      final y = size.height * (0.58 + (_wobble(i * 67 + 5) * 0.5 + 0.5) * 0.40);
+      final w = size.width * (0.22 + (_wobble(i * 23 + 2) * 0.5 + 0.5) * 0.26);
+      final h = w * 0.30;
+      // Three overlapping lumps, which is a cloud and not a pill.
+      for (var k = -1; k <= 1; k++) {
+        canvas.drawOval(
+            Rect.fromCenter(
+                center: Offset(x + k * w * 0.26, y - (k == 0 ? h * 0.22 : 0)),
+                width: w * (k == 0 ? 0.62 : 0.54),
+                height: h * (k == 0 ? 1.25 : 1.0)),
+            paint);
+      }
+    }
+  }
+
+  /// What hangs under a floating island: the earth narrowing to a point, and
+  /// the roots that hold it together going down with it.
+  void _underside(Canvas canvas, _Plan plan) {
+    if (plan.globeR <= 0) return;
+    final g = plan.globe;
+    final r = plan.globeR;
+    final deep = _round;
+    // How far the point hangs below the island. It grows as the ground closes,
+    // so the world does not sprout a tail the moment it starts rounding.
+    final tail = r * (0.30 + 0.62 * deep);
+    final rim = Paint()..color = dark ? const Color(0xFF2F2218) : const Color(0xFF3D2A1C);
+    final earth = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: dark
+            ? const [Color(0xFF6E4629), Color(0xFF2F2218)]
+            : const [Color(0xFF8F5E36), Color(0xFF3D2A1C)],
+      ).createShader(Rect.fromLTWH(g.dx - r, g.dy, r * 2, tail));
+
+    // A teardrop: off the island's sides, down to a point below it.
+    // It leaves the rim near the equator, so what hangs under the island is
+    // a broad cone rather than a spike: an island with a root mass under it,
+    // not a spinning top.
+    const side = 0.94;
+    final left = g + Offset(cos(pi - pi / 2 * side), sin(pi / 2 * side)) * r;
+    final right = g + Offset(cos(pi / 2 * side), sin(pi / 2 * side)) * r;
+    final tip = g + Offset(0, r + tail);
+    final path = Path()
+      ..moveTo(left.dx, left.dy)
+      ..quadraticBezierTo(g.dx - r * 0.62, g.dy + r * 0.82, tip.dx, tip.dy)
+      ..quadraticBezierTo(g.dx + r * 0.62, g.dy + r * 0.82, right.dx, right.dy)
+      ..close();
+    canvas.drawPath(path, rim);
+    canvas.drawPath(path, earth);
+
+    // The roots, coming off the trunk's own foot, round the island and down
+    // into the point. What holds the whole thing up.
+    final stem = _stemColour;
+    final root = Paint()
+      ..color = Color.lerp(stem, dark ? _barkOnDark : _bark, 0.7)!
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    const strands = 9;
+    for (var k = 0; k < strands; k++) {
+      final spread = strands == 1 ? 0.0 : k / (strands - 1) * 2 - 1;
+      final a0 = -pi / 2 + spread * (0.55 + 0.35 * _wobble(k * 13).abs());
+      final a1 = pi / 2 - spread * 0.30;
+      final mid = (a0 + a1) / 2 + _wobble(k * 29) * 0.10;
+      Offset on(double a, double m) => g + Offset(cos(a), sin(a)) * (r * m);
+      final path = Path()..moveTo(on(a0, 1.0).dx, on(a0, 1.0).dy);
+      // Round the side, hugging the surface, then in under it.
+      path.quadraticBezierTo(
+          on(mid, 1.03).dx, on(mid, 1.03).dy, on(a1, 0.98).dx, on(a1, 0.98).dy);
+      // And on down into the tail, thinning as it goes.
+      final end = Offset(g.dx + spread * r * 0.16, g.dy + r + tail * 0.88);
+      path.quadraticBezierTo(g.dx + spread * r * 0.62, g.dy + r * 0.92, end.dx, end.dy);
+      canvas.drawPath(
+          path, root..strokeWidth = max(1.0, plan.w0 * (0.34 - 0.14 * spread.abs())));
+    }
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final shape = data.shape;
     _sky(canvas, size);
+    _clouds(canvas, size);
 
     // Laid out once without drawing, so the extent is known before anything is
     // committed, then scaled to fit. The tree used to be clipped to the panel,
@@ -954,7 +1044,7 @@ class _TreePainter extends CustomPainter {
     // be seen at all.
     var minY = plan.top.dy;
     var maxY = plan.globeR > 0
-        ? plan.globe.dy + plan.globeR
+        ? plan.globe.dy + plan.globeR * (1 + 0.30 + 0.62 * _round)
         : plan.groundY + _groundH / 2;
     if (plan.globeR > 0) {
       minX = min(minX, plan.globe.dx - plan.globeR);
@@ -988,6 +1078,7 @@ class _TreePainter extends CustomPainter {
   void _draw(Canvas canvas, _Plan plan) {
     final shape = data.shape;
 
+    _underside(canvas, plan);
     _mound(canvas, Offset(plan.cx, plan.groundY), _groundH,
         world: plan.globeR > 0 ? (at: plan.globe, r: plan.globeR) : null);
 
