@@ -772,14 +772,17 @@ class Repository {
       areas: areas,
       field: field == null ? '' : await fieldDescription(field),
       existingTopics: uniqueBy([for (final s in own) s.title, ...extraTopics], normKey),
-      difficulty: switch (stats.week.right.of < 8 ? 'easy' : ((stats.week.right.pct ?? 0) >= 85 ? 'harder' : ((stats.week.right.pct ?? 0) < 60 ? 'easier' : 'easy'))) {
-        'harder' => pr.SceneDifficulty.harder,
-        'easier' => pr.SceneDifficulty.easier,
-        _ => pr.SceneDifficulty.easy,
-      },
+      // No difficulty goes with this. How hard a turn is belongs to the
+      // ladder, which moves it by speed, noise, accent and what it takes
+      // away; asking the AI to pitch the sentences as well would put two
+      // hands on one dial.
       recent: week.right.of == 0
           ? null
-          : (gistPct: week.right.pct ?? 0, replyPct: week.kept.pct ?? 0, exchanges: week.right.of),
+          : (
+              rightPct: week.right.pct ?? 0,
+              firstTimePct: week.kept.pct ?? 0,
+              turns: week.right.of,
+            ),
       tendencies: tendencies,
       scenes: scenes,
     );

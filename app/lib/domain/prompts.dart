@@ -21,8 +21,9 @@ const schemaVersion = '1.0';
 /// its own version; the importer accepts both for ever.
 const packSchemaVersion = '2.0';
 
-/// Scenes — listen, choose, grow. The importer accepts every version for ever.
-const scenesSchemaVersion = '3.1';
+/// Scenes: read the replies, hear the line once, answer inside the window.
+/// The importer accepts every version for ever.
+const scenesSchemaVersion = '4.0';
 
 class PromptVersions {
   static const profile = 'PROFILE_PROMPT_V1';
@@ -31,7 +32,7 @@ class PromptVersions {
   static const addRealm = 'ADD_REALM_PROMPT_V1';
   static const pack = 'PACK_PROMPT_V1';
   static const critique = 'CRITIQUE_PROMPT_V1';
-  static const scenes = 'SCENES_PROMPT_V2';
+  static const scenes = 'SCENES_PROMPT_V4';
 }
 
 String _commonRules(String native) => '''
@@ -745,26 +746,19 @@ $attemptText
 
 // ------------------------------------------------------------------ scenes
 
-/// How the AI is asked to pitch the scenes. Decided from the learner's recent
-/// results, never typed in: the app reports the numbers and the AI adjusts.
-enum SceneDifficulty {
-  /// The default, and where everyone starts: one or two short sentences,
-  /// school-level words, wrong answers that differ on a big point.
-  easy,
-
-  /// Recent results were high: longer lines, finer mishearings.
-  harder,
-
-  /// Recent results were low: even shorter lines, the most concrete facts.
-  easier,
-}
-
-/// Five scenes for one learner, in one reply.
+/// The conversations, for the learner's own assistant.
 ///
-/// Everything the exercise relies on is spelled out: one right answer per
-/// question, wrong answers that a mishearing would produce, no names or
-/// titles in the lines, short plain English. The learner's recent results
-/// and mistakes ride along so the next scenes aim at them.
+/// The whole exercise rests on one thing, so the prompt is built around it:
+/// the three replies must all be natural, and only the sound of the line may
+/// decide which is right. Everything else here — the three types, the tests
+/// to run before answering, the ban on invented names — is there to keep that
+/// true, because a reply that gives itself away turns listening practice into
+/// reading practice and nothing in the app can tell the difference afterwards.
+///
+/// Nothing here asks for a difficulty. How hard this is belongs to the
+/// ladder: the same line at 1.6× with noise over it is a harder question than
+/// the same line at 1.0×, and that is the axis the app moves. Asking the AI
+/// for harder sentences as well would make two things measure one.
 String scenesPrompt({
   required String uiLanguage,
   String level = 'A2',
@@ -773,173 +767,277 @@ String scenesPrompt({
   List<String> priorities = const [],
   List<String> areas = const [],
   List<String> existingTopics = const [],
-  SceneDifficulty difficulty = SceneDifficulty.easy,
   String field = '',
-  ({int gistPct, int replyPct, int exchanges})? recent,
+  ({int rightPct, int firstTimePct, int turns})? recent,
   List<String> tendencies = const [],
   int scenes = 5,
 }) {
   final native = languageFor(uiLanguage).englishName;
-  String list(Iterable<String> xs, String empty) =>
-      xs.isEmpty ? empty : xs.map((x) => '- $x').join('\n');
+  String list(Iterable<String> xs) => xs.map((x) => '- $x').join('\n');
 
-  final difficultyText = switch (difficulty) {
-    SceneDifficulty.easy =>
-      'EASY. Each line is 1 or 2 short sentences in school-level English. One line carries at most two facts. Wrong answers differ from the right one on a big point (tonight vs tomorrow, stay vs leave, free vs paid).',
-    SceneDifficulty.harder =>
-      'A STEP HARDER than easy. Lines may be 2 or 3 sentences and carry two or three facts. Wrong answers may differ on a finer detail (this morning vs tonight, forty vs four, included vs not included). Vocabulary stays everyday.',
-    SceneDifficulty.easier =>
-      'VERY EASY. One short sentence per line, one fact per line, the most concrete everyday words. Wrong answers differ on the most obvious point.',
-  };
+  final person = StringBuffer()..writeln('- English level: $level');
+  if (ageBand.isNotEmpty) person.writeln('- Age group: $ageBand');
+  if (roles.isNotEmpty) person.writeln('- What they do: ${roles.join(', ')}');
+  if (priorities.isNotEmpty) {
+    person.writeln('- Where they want English: ${priorities.join(', ')}');
+  }
+  if (areas.isNotEmpty) person.writeln('- Areas they practise: ${areas.join(', ')}');
+  person.write('- Their language: $native');
+  if (field.isNotEmpty) {
+    person.write('\n- This set is about: $field. Every one of the $scenes '
+        'conversations happens there; the settings differ, the field does not.');
+  }
 
   final recentText = recent == null
-      ? '(no results yet — this is their first set)'
-      : 'Over the last 7 days, across ${recent.exchanges} exchanges: "what did they say?" ${recent.gistPct}% right, "how do you reply?" ${recent.replyPct}% right.';
-
-  final learner = StringBuffer()
-    ..writeln('- Native language: $native. Every field named "native" is written in $native.')
-    ..writeln('- English level: $level.');
-  if (ageBand.isNotEmpty) {
-    learner.writeln('- Age group: $ageBand. Choose settings and a register that fit this age.');
-  }
-  if (roles.isNotEmpty) learner.writeln('- Roles: ${roles.join(', ')}.');
-  if (priorities.isNotEmpty) {
-    learner.writeln('- What they want English for: ${priorities.join(', ')}.');
-  }
-  if (areas.isNotEmpty) learner.writeln('- Areas they practise: ${areas.join(', ')}.');
-  if (field.isNotEmpty) {
-    learner.writeln(
-        '- This set is about: $field. Every one of the $scenes scenes happens there; the settings differ, the field does not.');
-  }
-  learner.write('- Difficulty for this set: $difficultyText');
+      ? ''
+      : '\n## HOW THEY HAVE BEEN DOING\n\n'
+          'Over their last ${recent.turns} turns: ${recent.rightPct}% right, '
+          '${recent.firstTimePct}% caught on the first hearing, inside the window.\n';
 
   final tendencyText = tendencies.isEmpty
       ? ''
-      : 'Mistakes they keep making:\n${list(tendencies, '')}\nMake 1 or 2 of the $scenes scenes target these.\n';
+      : '\n## WHAT THEY KEEP MISHEARING\n\n${list(tendencies)}\n\n'
+          'Aim one or two of the $scenes conversations at these.\n';
+
+  final topicText = existingTopics.isEmpty
+      ? ''
+      : '\n## CONVERSATIONS THEY ALREADY HAVE\n\n'
+          'Do not repeat these, and do not write a near-twin of one — '
+          '"Code review timing" after "Code review submission" is a repeat.\n\n'
+          '${list(existingTopics)}\n';
 
   return '''
-You are writing listening practice for one person learning English. They will
-hear a line (spoken by their phone), then answer two three-way questions about
-it, both in English. They cannot ask you anything while practising, so
-everything has to be in this reply.
+You are writing listening practice for one person learning English.
 
-Reply with ONE JSON code block in the exact shape at the end. No greeting, no
-explanation before or after it.
+They hear a line of speech **once**, then choose one of three replies. They
+never see the line written down. A machine can translate for them; what it
+cannot do is keep up with a conversation in real time. That is what this
+practice is for.
 
-THE LEARNER
-$learner
+## THE PERSON
 
-RECENT RESULTS (aim the scenes at these)
-$recentText
-$tendencyText
-TOPICS THEY ALREADY HAVE (do not repeat these, and do not write a near-twin of
-any of them — "Code review timing" after "Code review submission" is a repeat)
-${list(existingTopics, '(none yet)')}
+$person
+$recentText$tendencyText$topicText
+## WHAT TO WRITE
 
-WHAT TO WRITE
-$scenes conversations. A conversation runs from one turn to five, and the
-lengths vary across the set. Each turn is: the other person says one line,
-and the learner picks one of three replies.
-Each exchange has two questions, both answered in English:
-1. gist — "What did they say?": three short English summaries of the line,
-   in different words from the line itself. Exactly one is right.
-2. reply — "How do you reply?": three English replies. Exactly one is right.
+$scenes conversations. Output JSON only, no commentary.
 
-RULES — every one of these matters
-1. Every question has exactly one right answer. The other two are what a
-   person who MISHEARD the line would say.
-2. A wrong answer mishears a word or phrase that is actually IN the line — a
-   time, a day, a number, a place, an object, a person, or whether something
-   happens. It never brings in a fact the line does not contain. ("Bring
-   another monitor from storage" may become "bring a projector"; it may not
-   become "order two laptops".)
-3. A wrong reply STATES the misheard fact as if it were true. It is never a
-   preference, an alternative, a request or a check that a correct listener
-   might also make. Banned shapes: "Can I pay by card instead?", "I would
-   prefer beef", "Should I leave the key on the desk after?". Allowed shape:
-   "Ten dollars, right? Here you go." Never grade on politeness, tone or
-   negotiating skill.
-4. Wrong replies must still be things people say — never a bare negation
-   ("OK, I won't do that").
-5. The two wrong gists and the two wrong replies of one exchange mishear
-   DIFFERENT details. Procedure: write the gist question first; note which two
-   details its wrong answers got wrong; then, for the reply question, choose
-   two OTHER details of the line to mishear. If the gists misheard the day and
-   the time, the replies mishear the place and the object.
-6. The three replies of one question must not share a shape. Three sentences
-   that differ by one word ("Sure, I'll check the last page" / "Sure, I'll
-   check the first page") are not allowed. Give each reply a different first
-   word and a different structure — for example one plain statement, one short
-   check-back question, one acknowledgement plus the next action.
-7. A gist is a paraphrase, not a copy: never reuse four or more consecutive
-   words of the line. Say who, what and when in other words.
-8. Lines: 1 or 2 sentences, school-level vocabulary. No jargon, no product or
-   brand names, no technical abbreviations: "the chat tool", not "Slack"; "the
-   cable", not "HDMI"; "send the code", not "push".
-9. No names, job titles or organisations inside the lines ("as your manager"
-   is also banned). The one line of setting goes in setting_native only.
-10. If a word could mean two things (free = available / no cost; check = look
-    at / bill), write the line so the context settles it, and make sure the
-    $native translation follows the meaning you intended.
-11. Lengths: a line up to 25 words; a gist option up to 12 words; a reply up
-    to 15 words; every $native string up to 40 characters.
-12. Every English option gets a $native translation in "native". Every reply
-    also gets a one-sentence "why" in $native: why it is right, or what it
-    misheard. A reply without "why" is invalid.
-13. Fit the scenes to the learner's age, roles and areas above. At most 2 of
-    the $scenes scenes may be about documents, files or results; the others
-    involve people — a visitor, a call, a change of plan, lunch, equipment,
-    being late. No two scenes share the same errand or object.
+A conversation is 1 to 5 turns. **Vary the length across the set.** A quick
+exchange in a corridor is one turn; a phone call about a change of plan is
+four or five. Do not make them all the same length.
 
-BEFORE YOU ANSWER, CHECK EVERY QUESTION AGAINST THIS LIST
-- exactly one right answer, and the two wrong ones mishear a word that is in the line
-- the two wrong replies state a misheard fact; none is a preference, alternative or check
-- the reply distractors mishear different details from the gist distractors
-- the three replies start with different words and have different shapes
-- no gist copies four words in a row from the line
-- every reply has a "why"
+Each turn is: the other person says one line, and the learner picks one of
+three replies.
 
-OUTPUT SHAPE (keep the key names exactly; "answer" is the 0-based index of the
-right option — its position does not matter, the app arranges the choices)
+## THE ONE RULE THAT MATTERS
+
+**The three replies must all be natural, and only the sound of the line may
+decide which is right.**
+
+Test it like this, for every turn you write, before you output it:
+
+> Hide the line. Show only the situation and the three replies to a native
+> speaker. If they can tell which one is correct, the turn is broken.
+
+A reply is broken if it is rude, off-topic, ungrammatical, or obviously
+strange. Someone who misheard the line must be able to choose it without
+feeling that they are choosing something odd.
+
+## THE THREE TYPES
+
+Mix them across the set: about half `keyword`, a quarter `polarity`, a
+quarter `multiFact`. Do not make a whole conversation one type; mix within a
+conversation too.
+
+### `keyword` — one word decides
+
+A single word in the line carries the meaning, and a word that **sounds like
+it** would change that meaning. The learner has to tell the two apart by ear.
+
+Three tests. A turn that fails any of them is not a `keyword` turn.
+
+**1. The pair must sound alike.** Not opposites in meaning — pairs that ears
+actually confuse: twelve and twenty, thirteen and thirty, fifteen and fifty,
+Tuesday and Thursday, fourteen and forty, Monday and Sunday, walk and work,
+can and cat. `noon` and `night` are not such a pair. Neither are `better` and
+`worse`: they mean the opposite, and sound nothing alike, so nothing is being
+heard — only understood.
+
+**2. The line must not contain the other word.** "Can we talk at three
+instead of two?" names both, so anyone who caught the sentence knows which is
+which. There is nothing left to mishear. Put the key word in the line and
+leave its pair out.
+
+**3. Swapping them must still make sense.** Replace the key word with its
+pair and read the line again. It has to be a grammatical sentence, and one
+the same person could plausibly have said in the same situation. "I will walk
+home" fails: swap in `work` and "I will work home" is not English, so the
+learner rules the wrong reply out without hearing anything. If the swap turns
+the line into nonsense, the turn measures nothing.
+
+Test three is the one that catches the most. Do it on every `keyword` turn
+before you output it.
+
 ```json
 {
-  "schema_version": "$scenesSchemaVersion",
+  "type": "keyword",
+  "line": "The handover's on Thursday, so I'll need the file by Wednesday night.",
+  "keyWord": "Thursday",
+  "confusable": "Tuesday",
+  "replies": [
+    { "text": "Thursday — I'll have it ready the evening before.", "correct": true },
+    { "text": "Got it, Tuesday. I'll finish up over the weekend, then.", "correct": false },
+    { "text": "Is there any chance of another day? That week is full.", "correct": false }
+  ],
+  "restate": "It's the Thursday handover, so the file has to be in the night before.",
+  "translations": { "line": "...", "replies": ["...", "...", "..."] }
+}
+```
+
+**Do not write two replies that are the same sentence with one word changed.**
+Change the wording as well, the way real people vary. Two near-identical
+replies tell the learner that the answer is one of those two, and the third
+becomes decoration.
+
+### `polarity` — a reversing word decides
+
+`not`, `can't`, `unless`, `without`, `never`, `hardly`. Miss it and the
+meaning flips. This is where mishearing costs the most in real life.
+
+**One of the two wrong replies must be the one a person who missed the
+reversing word would naturally choose.** That is what makes a wrong answer
+worth something: it says exactly what went wrong.
+
+```json
+{
+  "type": "polarity",
+  "line": "I won't be able to join unless the client call gets cancelled.",
+  "keyWord": "unless",
+  "confusable": "if",
+  "replies": [
+    { "text": "Understood — so only if that call drops off.", "correct": true },
+    { "text": "Great, I'll save you a seat.", "correct": false },
+    { "text": "Shall I move it to the afternoon instead?", "correct": false }
+  ],
+  "restate": "Only if that client call falls through can I make it.",
+  "translations": { "line": "...", "replies": ["...", "...", "..."] }
+}
+```
+
+### `multiFact` — two facts must both be caught
+
+Time and place, person and place, day and time. The learner has to hold both
+and check them.
+
+**Each wrong reply drops exactly one of the facts, and says which one in
+`missedSlot`.** A wrong answer then points at the thing that was missed, and
+the same weakness can be practised again later.
+
+Here the three replies *are* parallel in shape. That is correct for this
+type: what differs is which fact was caught, and all three are natural
+confirmations.
+
+```json
+{
+  "type": "multiFact",
+  "line": "Let's meet at the west exit at six, not the ticket gate.",
+  "facts": [
+    { "slot": "place", "value": "west exit", "confusable": "ticket gate" },
+    { "slot": "time",  "value": "six",       "confusable": "seven" }
+  ],
+  "replies": [
+    { "text": "West exit at six. See you then.", "correct": true },
+    { "text": "Ticket gate at six — see you there.", "correct": false, "missedSlot": "place" },
+    { "text": "West exit at seven, then.", "correct": false, "missedSlot": "time" }
+  ],
+  "restate": "Six in the evening, by the west exit — not the gate.",
+  "translations": { "line": "...", "replies": ["...", "...", "..."] }
+}
+```
+
+## RESTATE
+
+Every turn carries a `restate`: what the person says when the learner misses
+the moment to reply. **Say the same thing in different words.** Repeating the
+sentence exactly would make it a second listen, which this practice does not
+give.
+
+## THE LINES THEMSELVES
+
+- One to three sentences. Spoken English, not written English.
+- Only what this person would actually hear.
+- Invent nothing about the learner's world. You were told what they do and
+  where they want English; everything else is unknown to you.
+- **People are roles, never names.** "the reviewer", "someone on the team",
+  "the person covering for her" — not Sarah, not David. A name you make up is
+  a colleague they do not have, and the learner notices.
+- **Tools are kinds, never products.** "the team channel", "chat", "the
+  tracker", "email" — not the names of the apps. The same goes for companies.
+- No jargon and no idioms that belong to one country only.
+- The line must stand on its own. The learner has the situation and nothing
+  else, so a line that needs earlier context is unusable.
+- On a later turn the line may answer the reply the learner just gave, but it
+  must still make sense whichever reply they chose.
+
+## WINDOW
+
+Each conversation carries `windowMs`: how long the learner has to reply,
+after the line ends.
+
+- A hurried exchange, someone on their way out: 2000
+- Ordinary talk: 3000
+- Unhurried, someone thinking aloud: 4000
+
+**Vary it across the set.** The gap between turns is what real conversation
+is made of; a fixed window would take that away.
+
+## OUTPUT
+
+```json
+{
+  "schema_version": "4.0",
   "type": "scenes",
   "native_language": "$native",
   "scenes": [
     {
-      "topic": "Asked to stay late",
-      "topic_native": "(topic in $native)",
-      "setting_native": "(one line of setting in $native: where and when, never who)",
-      "exchanges": [
-        {
-          "line": "Sorry to ask, but could you stay an extra hour tonight? The client moved the deadline to tomorrow morning.",
-          "line_native": "(translation in $native)",
-          "gist": {
-            "options": [
-              { "text": "They want you to come in an hour early tomorrow.", "native": "(translation)" },
-              { "text": "They want you to stay an hour tonight; the deadline is tomorrow morning.", "native": "(translation)" },
-              { "text": "They say you can go home early tonight.", "native": "(translation)" }
-            ],
-            "answer": 1
-          },
-          "reply": {
-            "options": [
-              { "text": "One hour is fine. What should I start on?", "native": "(translation)", "why": "(why it is right)" },
-              { "text": "The whole evening? That's a long time.", "native": "(translation)", "why": "(misheard: an hour as the whole evening)" },
-              { "text": "Only the slides, right? I'll leave the report.", "native": "(translation)", "why": "(misheard: what the work is)" }
-            ],
-            "answer": 0
-          }
-        },
-        { "line": "...", "line_native": "...", "gist": { "options": [ { "text": "...", "native": "..." }, { "text": "...", "native": "..." }, { "text": "...", "native": "..." } ], "answer": 2 }, "reply": { "options": [ { "text": "...", "native": "...", "why": "..." }, { "text": "...", "native": "...", "why": "..." }, { "text": "...", "native": "...", "why": "..." } ], "answer": 1 } }
-      ]
+      "title": "Moving a deadline",
+      "titleNative": "...",
+      "situation": "...",
+      "settingNative": "...",
+      "windowMs": 3000,
+      "turns": [ ... ]
     }
   ]
 }
 ```
-The example above only shows the shape. Do not write that topic; write $scenes new
-scenes in the same shape, with real $native text in every native and why field.
+
+- `title` in English, `titleNative` in $native.
+- `settingNative` is one line of setting in $native. Where they are, never who
+  the other person is — that would give the answer away.
+- `translations.line` and `translations.replies` in $native. Natural
+  translation, not word for word. The learner reads these only after
+  answering.
+
+## BEFORE YOU ANSWER
+
+Go through every turn once more:
+
+1. Hide the line. Can the three replies alone give the answer away? If yes,
+   rewrite.
+2. Are all three replies something a real person would say here?
+3. `keyword` and `polarity`: are any two replies the same sentence with one
+   word swapped? If yes, rewrite the wording.
+4. `polarity`: does one wrong reply belong to someone who missed the
+   reversing word?
+5. `multiFact`: does each wrong reply drop exactly one fact, and name it?
+6. Is `restate` different wording, not the same sentence?
+7. Do the conversations vary in length, and the windows in size?
+8. Did you invent anything about the learner's world — a name, a company, a
+   product — that you were not told?
+9. `keyword`: swap the pair into the line. Is it still a grammatical sentence
+   the same person could have said?
+
+Output the JSON and nothing else.
 ''';
 }
 
