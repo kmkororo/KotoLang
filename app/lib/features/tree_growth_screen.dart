@@ -11,22 +11,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
-import '../domain/ladder.dart';
 import '../domain/scene.dart' show TurnType;
 import '../domain/tree.dart';
 import 'tree_view.dart';
 
-/// One row per name the tree answers to: the step it is earned at, and the
-/// step it is drawn at.
+/// One row per name the tree answers to: the number of questions it is
+/// earned at, and the number it is drawn at.
 ///
-/// Read off [treeName] rather than divided out of the ladder, which put two
-/// rows on the same name and skipped another: the names are not spaced
-/// evenly along the ladder, and the only thing that knows where they fall is
-/// the function that names them.
+/// Read off [treeName] rather than worked out from the table, so that the
+/// screen and the tree can never disagree about where a name begins.
 List<({int entry, int draw})> get _stages {
   final entry = <int>[];
   var last = -1;
-  for (var r = 0; r <= ladderSteps; r++) {
+  for (var r = 0; r <= treeNameAt.last; r++) {
     final n = treeName(r);
     if (n != last) {
       entry.add(r);
@@ -40,17 +37,14 @@ List<({int entry, int draw})> get _stages {
   return [for (final e in entry) (entry: e, draw: e)];
 }
 
-/// A tree made up for the picture: enough work behind it to look like it
-/// belongs at that height, and three fields, which is what everyone starts
-/// with.
-TreeShape _imagined(int reached, {int fields = 3}) {
-  // Three answers to the step, near enough: with no screen yet for choosing
-  // a rung, every clean answer moves all five axes, so ten of them are five
-  // steps. Drawn from a number the learner will actually have at that height,
-  // the row and their own tree are the same tree.
-  final answers = reached * 3;
+/// A tree made up for the picture: the questions it takes to earn the name,
+/// and three fields, which is what everyone starts with.
+TreeShape _imagined(int scenes, {int fields = 3}) {
+  // Two turns to the question, which is what the built-in conversations
+  // average, so the boughs are the length they would really be.
+  final answers = scenes * 2;
   return TreeShape(
-    reached: reached,
+    scenes: scenes,
     answers: answers,
     branches: [
       for (var i = 0; i < fields; i++)
@@ -60,7 +54,7 @@ TreeShape _imagined(int reached, {int fields = 3}) {
           answers: (answers / fields).round(),
           twigs: const {TurnType.keyword: 1},
           learned: 1,
-          flowers: reached > ladderSteps ~/ 3 ? 1 : 0,
+          flowers: scenes >= treeNameAt[4] ? 1 : 0,
         ),
     ],
   );
@@ -117,7 +111,7 @@ class TreeGrowthScreen extends ConsumerWidget {
                 need: s.t('treeStageNeed', {'n': stage.entry}),
                 // The one the learner is standing in, marked rather than
                 // written about: they can count the rest themselves.
-                now: here != null && treeName(here.reached) == treeName(stage.draw),
+                now: here != null && treeName(here.scenes) == treeName(stage.draw),
                 nowLabel: s.t('treeStageNow'),
               ),
               const SizedBox(height: 6),
@@ -131,10 +125,8 @@ class TreeGrowthScreen extends ConsumerWidget {
               const SizedBox(height: 6),
               Text(
                 s.t('treeHowYoursLine', {
-                  'r': here.reached,
-                  't': ladderSteps,
-                  'a': here.answers,
-                  'f': here.branches.length,
+                  'a': here.scenes,
+                  'f': here.fields,
                 }),
                 style: muted,
               ),

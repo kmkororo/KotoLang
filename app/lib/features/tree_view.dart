@@ -61,7 +61,6 @@ final treeDataProvider = FutureProvider.autoDispose<TreeData>((ref) async {
   final scenes = await ref.watch(allScenesProvider.future);
   final fields = await ref.watch(fieldsProvider.future);
   final shape = treeFrom(
-    ladder: await ref.watch(ladderProvider.future),
     due: await repo.reviewsDue(day: t, limit: 99),
     today: t,
     results: results,
@@ -179,13 +178,14 @@ class _TreePanelState extends ConsumerState<TreePanel>
       // one thing this screen must never do.
       height: widget.compact
           ? 140
-          : min(150 + 130 * trunkGrowth(shape.reached), MediaQuery.sizeOf(context).height * 0.28),
+          : min(150 + 130 * trunkGrowth(shape.scenes),
+              MediaQuery.sizeOf(context).height * 0.28),
       width: double.infinity,
       child: TweenAnimationBuilder<double>(
-        // Grows into place rather than appearing at full size. Height is the
-        // ladder: the trunk rises when a step is held, and the answers that
-        // did not raise one go into the girth and the boughs instead.
-        tween: Tween(begin: 0, end: trunkGrowth(shape.reached)),
+        // Grows into place rather than appearing at full size. The tween
+        // runs off the questions answered, so a question finished visibly
+        // adds to it.
+        tween: Tween(begin: 0, end: trunkGrowth(shape.scenes)),
         duration: const Duration(milliseconds: 900),
         curve: Curves.easeOutCubic,
         builder: (context, grown, _) => CustomPaint(
@@ -196,7 +196,7 @@ class _TreePanelState extends ConsumerState<TreePanel>
             data: data.value!,
             art: art.value!,
             grown: grown,
-            girth: trunkGirth(shape.answers),
+            girth: trunkGirth(shape.scenes, shape.fields),
             dark: theme.brightness == Brightness.dark,
             breeze: _breeze,
           ),
@@ -1041,8 +1041,8 @@ class TreeStill extends ConsumerWidget {
         painter: _TreePainter(
           data: TreeData(shape: shape),
           art: art,
-          grown: trunkGrowth(shape.reached),
-          girth: trunkGirth(shape.answers),
+          grown: trunkGrowth(shape.scenes),
+          girth: trunkGirth(shape.scenes, shape.fields),
           dark: Theme.of(context).brightness == Brightness.dark,
           breeze: _stillAir,
         ),

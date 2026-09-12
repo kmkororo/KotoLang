@@ -188,7 +188,7 @@ void main() {
     // counted.
     final built = <String>[
       for (final a in LadderAxis.values) 'axis_${a.name}',
-      for (var n = 0; n <= ladderSteps; n++) 'treeStage${treeName(n)}',
+      for (var n = 0; n <= treeNameAt.last; n++) 'treeStage${treeName(n)}',
       for (final id in builtinFieldIds) 'interest_$id',
       for (final b in ageBands) 'age_${b.replaceAll('+', 'plus')}',
       'window_short', 'window_normal', 'window_long', 'window_longest',

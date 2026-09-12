@@ -106,7 +106,7 @@ class HomeScreen extends ConsumerWidget {
               Text(
                 stats.scenes == 0
                     ? s.t(hasOwn ? 'treeSproutHintOwn' : 'treeSproutHint')
-                    : '${s.t('treeStage${treeName(tree.value?.shape.reached ?? 0)}')} · ${s.t('treeGrownScenes', {'n': stats.scenes})}',
+                    : '${s.t('treeStage${treeName(tree.value?.shape.scenes ?? 0)}')} · ${s.t('treeGrownScenes', {'n': stats.scenes})}',
                 textAlign: TextAlign.center,
                 style: muted,
               ),

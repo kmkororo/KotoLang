@@ -1,10 +1,10 @@
 /// The shape of the tree, derived entirely from what the learner has done.
 ///
-/// **Height is the ladder, width is the ground covered.** A thousand answers
-/// at the easiest setting do not make the tree taller; a step held at a speed
-/// never heard before does. That is the whole of it, and it is why the tree
-/// can be a reward without also being a measurement: the measuring is the
-/// ladder's job, and the tree only shows it.
+/// **Height and girth are the questions answered, width is the ground
+/// covered.** Nothing else. The ladder measures how hard the listening is
+/// and has no say in the drawing: a reward that needs the ladder explained
+/// before it can be read is not a reward, and the ladder is a thing to feel
+/// in the ear rather than to count on a trunk.
 ///
 /// Nothing here is stored. The tree is a reading of the record, so it can
 /// never drift out of step with the numbers, it survives a backup and restore
@@ -15,7 +15,6 @@ library;
 import 'dart:math';
 
 import 'field.dart';
-import 'ladder.dart';
 import 'scene.dart';
 
 /// A bough is one field of the learner's life, on one of two sides: the
@@ -71,56 +70,59 @@ class Branch {
 }
 
 /// How finely the tree is cut. Many stages rather than a few, so that the
-/// thing the learner is climbing shows a change often enough to be felt.
+/// work shows a change often enough to be felt.
 const treeStages = 24;
 
-/// Which stage a ladder of [reached] steps has grown to. The whole ladder is
-/// a little over fifty steps, so the tree changes shape every couple of them.
-int treeStage(int reached) {
-  if (reached <= 0) return 0;
-  final step = (reached / (ladderSteps / (treeStages - 1))).floor() + 1;
+/// Which stage [scenes] questions answered has grown to.
+int treeStage(int scenes) {
+  if (scenes <= 0) return 0;
+  final step = (treeGrown(scenes) * (treeStages - 1)).ceil();
   return step.clamp(1, treeStages - 1);
 }
 
-/// The names the tree answers to, as the ladder step each is earned at.
+/// The names the tree answers to, as the number of questions each is earned
+/// at.
 ///
 /// Close together at the bottom and further apart at the top, the way a tree
 /// actually changes: a seedling looks different every week and an old tree
-/// looks the same for years. Six evenly spaced names gave the opposite — one
-/// name for the whole of the beginning, when there is least to show and a
-/// name is worth most, and then three in a row near the top where the picture
-/// barely moves.
+/// looks the same for years. Names spread evenly gave the opposite — one name
+/// for the whole of the beginning, when there is least to show for the work
+/// and a name is worth most, then several in a row near the top where the
+/// picture barely moves.
 ///
-/// Set on the steps the ladder actually stops at. With no screen yet for
-/// choosing a rung every clean answer moves all five axes together, so the
-/// total goes 0, 5, 10, 15, 19, 23, 26, 29 — and a name set anywhere else is
-/// a name nobody is ever called. Two of ten were unreachable before this.
-///
-/// The samples are a little over sixty turns, which the ladder reads as
-/// twenty-six steps, and they land exactly on "young tree": the work that
-/// comes with the app is meant to carry the learner to a tree, and leave the
-/// crown to the conversations their own AI writes.
-const treeNameAt = <int>[0, 5, 10, 15, 19, 23, 26, 33, 40, 47];
+/// The samples are thirty questions and they land exactly on "young tree":
+/// the work that comes with the app is meant to carry the learner as far as a
+/// tree, and leave the crown to the conversations their own AI writes.
+const treeNameAt = <int>[0, 2, 4, 7, 12, 19, 30, 60, 120, 250];
 
 /// How many names the tree answers to.
 int get treeNames => treeNameAt.length;
 
-/// Which name a ladder of [reached] steps has earned.
-int treeName(int reached) {
+/// Where the tree stands between nothing and full grown, for [scenes]
+/// questions answered. A log curve: the first few questions move it plainly,
+/// and after that it slows, which is both how a tree grows and the only way
+/// a number with no ceiling can drive a drawing that has one.
+double treeGrown(int scenes) {
+  if (scenes <= 0) return 0;
+  return (log(scenes + 1) / log(treeNameAt.last + 1)).clamp(0.0, 1.0);
+}
+
+/// Which name [scenes] questions answered has earned.
+int treeName(int scenes) {
   var n = 0;
   for (var i = 0; i < treeNameAt.length; i++) {
-    if (reached >= treeNameAt[i]) n = i;
+    if (scenes >= treeNameAt[i]) n = i;
   }
   return n;
 }
 
 class TreeShape {
-  /// Steps of the ladder ever reached. The height and girth of the trunk.
-  final int reached;
+  /// Questions answered at least once. The height and girth of the trunk, and
+  /// the name it answers to.
+  final int scenes;
 
-  /// Turns answered, all told. Not what the tree is measured by — it is what
-  /// the boughs are thickened by, since a field worked in often should look
-  /// worked in.
+  /// Turns answered, all told. Finer than the questions, and what the boughs
+  /// are lengthened by: a field worked in often should look worked in.
   final int answers;
 
   /// Situations that have anything in them. The spread of the crown.
@@ -131,33 +133,34 @@ class TreeShape {
   final List<Branch> branches;
 
   /// Nothing done yet: the pot is shown instead of a tree.
-  bool get isSeed => reached == 0 && answers == 0;
+  bool get isSeed => scenes == 0 && answers == 0;
 
   int get flowers => branches.fold(0, (a, b) => a + b.flowers);
   int get fruit => branches.fold(0, (a, b) => a + b.fruit);
-  int get stage => treeStage(reached);
+  int get stage => treeStage(scenes);
+
+  /// One bough per field. The ground covered, which is the third thing the
+  /// tree shows.
+  int get fields => branches.length;
 
   const TreeShape({
-    required this.reached,
+    required this.scenes,
     required this.answers,
     this.situations = 0,
     required this.branches,
   });
 }
 
-/// How tall the trunk stands, from the ladder alone.
-double trunkGrowth(int reached) {
-  if (reached <= 0) return 0;
-  return (reached / ladderSteps).clamp(0.0, 1.0);
-}
+/// How tall the trunk stands: the questions answered, and nothing else.
+double trunkGrowth(int scenes) => treeGrown(scenes);
 
-/// How thick it is. Height comes from the ladder; girth from the work done at
-/// it, so someone who climbs fast has a tall thin tree and someone who stays
-/// and practises has a stout one.
-double trunkGirth(int answers) {
-  if (answers <= 0) return 0;
-  final log10k = (log(answers + 1) / log(1001)).clamp(0.0, 1.0);
-  return pow(log10k, 0.8).toDouble() * 1.6;
+/// How thick it is. The questions answered again, and the ground covered with
+/// them: a tree holding up six fields carries a stouter bole than one holding
+/// up a single field, at the same number of questions.
+double trunkGirth(int scenes, int fields) {
+  if (scenes <= 0) return 0;
+  final spread = 0.88 + 0.04 * fields.clamp(0, 6);
+  return pow(treeGrown(scenes), 0.8).toDouble() * 1.6 * spread;
 }
 
 double branchGrowth(int answers, int busiest) {
@@ -184,7 +187,6 @@ double branchReach(int answers) {
 /// Reads the tree off the record. [fieldLabels] names the fields in the
 /// interface language; a field without a name shows its id.
 TreeShape treeFrom({
-  required Ladder ladder,
   required String today,
   List<TurnResult> results = const [],
   Map<String, Scene> scenes = const {},
@@ -281,7 +283,7 @@ TreeShape treeFrom({
   }
 
   return TreeShape(
-    reached: ladder.reached,
+    scenes: branches.fold(0, (a, b) => a + b.learned),
     answers: results.length,
     situations: situations.length,
     branches: branches,

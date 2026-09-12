@@ -30,6 +30,7 @@ import '../domain/ladder.dart';
 import '../domain/progress_service.dart';
 import '../domain/scene.dart';
 import '../domain/tree.dart' show treeName;
+import 'tree_view.dart' show treeDataProvider;
 
 /// A turn that has been answered, kept so it can stay in the conversation
 /// above the one being taken. [picked] is null when the window closed on it.
@@ -174,6 +175,14 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   /// Where they all land.
   Offset? _seedTo;
 
+  /// Questions answered before this one was opened, and whether this one is
+  /// among them. The tree is read from the count of questions, so whether it
+  /// has just been renamed is a question about that number and not about the
+  /// ladder — which used to be asked of the ladder, back when the ladder was
+  /// what made the tree grow.
+  int _scenesBefore = 0;
+  bool _firstTimeHere = false;
+
   final _bodyKey = GlobalKey();
   final _counterKey = GlobalKey();
   final _replyKeys = [for (var i = 0; i < repliesPerTurn; i++) GlobalKey()];
@@ -193,6 +202,9 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     ];
     final stats = ref.read(skillStatsProvider).value;
     _combo = stats?.runs.combo ?? 0;
+    _scenesBefore = ref.read(treeDataProvider).value?.shape.scenes ?? 0;
+    _firstTimeHere = !(ref.read(sceneResultsProvider).value ?? const [])
+        .any((r) => r.sceneId == widget.scene.id);
     _window = AnimationController(vsync: this, duration: Duration(milliseconds: _windowMs))
       ..addStatusListener((st) {
         if (st == AnimationStatus.completed && mounted) _windowClosed();
@@ -1118,8 +1130,10 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   /// score, what it earned, and anything the ladder did above it.
   Widget _result(S s, ThemeData theme) {
     final scheme = theme.colorScheme;
-    final stageUp =
-        treeName(_ladder.reached) > treeName(_ladder.reached - _promoted.length);
+    // Only a question never answered before adds to the count, so only one of
+    // those can rename the tree.
+    final grownTo = _scenesBefore + (_firstTimeHere ? 1 : 0);
+    final stageUp = treeName(grownTo) > treeName(_scenesBefore);
     return Column(
       children: [
         Expanded(
@@ -1162,8 +1176,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
               if (stageUp) ...[
                 const SizedBox(height: 10),
                 Text(
-                    s.t('treeStageUp',
-                        {'name': s.t('treeStage${treeName(_ladder.reached)}')}),
+                    s.t('treeStageUp', {'name': s.t('treeStage${treeName(grownTo)}')}),
                     style: theme.textTheme.bodyMedium
                         ?.copyWith(fontWeight: FontWeight.w700)),
               ],
