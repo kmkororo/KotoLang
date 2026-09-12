@@ -96,6 +96,15 @@ class AppSettings {
   /// voice's region; off, every scene uses the chosen voice.
   final bool voicePerScene;
 
+  /// How long the window to answer in is, as a multiplier on what each
+  /// conversation asks for.
+  ///
+  /// A multiplier rather than a number of seconds, because the conversations
+  /// already vary: someone on their way out gives you two seconds, someone
+  /// thinking aloud gives you four. A flat setting would flatten that, and
+  /// the gap between turns is a good part of what makes a conversation one.
+  final double windowScale;
+
   const AppSettings({
     this.voiceName,
     this.speechRate,
@@ -110,6 +119,7 @@ class AppSettings {
     this.interests = const [],
     this.tutorialDone = false,
     this.voicePerScene = true,
+    this.windowScale = 1.0,
   });
 
   Difficulty get level => difficulties[difficulty] ?? difficulties['normal']!;
@@ -132,9 +142,11 @@ class AppSettings {
     List<String>? interests,
     bool? tutorialDone,
     bool? voicePerScene,
+    double? windowScale,
   }) =>
       AppSettings(
         voicePerScene: voicePerScene ?? this.voicePerScene,
+        windowScale: windowScale ?? this.windowScale,
         ageBand: ageBand ?? this.ageBand,
         interests: interests ?? this.interests,
         tutorialDone: tutorialDone ?? this.tutorialDone,
@@ -241,6 +253,16 @@ int seedsForTurn({
   final left = windowLeft.clamp(0.0, 1.0);
   return seedFloor + ((seedTop - seedFloor) * left).round();
 }
+
+/// The window lengths the settings screen offers, as multipliers on what the
+/// conversation itself asks for. Named in the interface by what they feel
+/// like rather than by the number: nobody chooses "1.5".
+const windowScales = <double>[0.75, 1.0, 1.5, 2.0];
+
+/// The nearest offered scale to one that was stored. A value from a build
+/// that offered something else is snapped rather than left unreachable.
+double offeredWindowScale(double stored) => windowScales
+    .reduce((a, b) => (a - stored).abs() <= (b - stored).abs() ? a : b);
 
 /// Conversations answered in a field before its results are worth sending to
 /// the AI. Below this there is not enough there to see a pattern.

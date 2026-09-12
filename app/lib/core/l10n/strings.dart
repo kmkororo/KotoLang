@@ -212,6 +212,10 @@ class S {
     'sceneRestateNote', 'ladderUp', 'tutRead',
     'axis_speed', 'axis_noise', 'axis_translation', 'axis_accent', 'axis_replay',
 
+    // how long there is to answer
+    'windowLabel', 'windowHint',
+    'window_short', 'window_normal', 'window_long', 'window_longest',
+
     // where a wrong answer went wrong
     'slipKeyword', 'slipPolarity', 'slipFact',
 
@@ -795,6 +799,12 @@ const _catalogueCore = <String, Map<String, String>>{
     'slipPolarity': 'The word “{word}” turns the meaning round. It went by.',
     'slipFact': 'The {slot} went by: they said “{said}”.',
     'sceneWindowGone': 'The moment passed — it comes back tomorrow',
+    'windowLabel': 'How long to answer',
+    'windowHint': 'About {n} seconds on an ordinary conversation. A hurried one gives less, an unhurried one more.',
+    'window_short': 'Short',
+    'window_normal': 'Normal',
+    'window_long': 'Long',
+    'window_longest': 'Longest',
     'ladderUp': 'A step up',
     'tutRead': 'Read the three replies first. The line is said once, and you answer from what you heard.',
     'axis_speed': 'Speed',
@@ -1370,6 +1380,12 @@ const _catalogueCore = <String, Map<String, String>>{
     'slipPolarity': '「{word}」で意味が反転します。そこを聞き落としました。',
     'slipFact': '{slot}を聞き落としました。言ったのは「{said}」です。',
     'sceneWindowGone': '間に合いませんでした。明日また出ます',
+    'windowLabel': '答える時間',
+    'windowHint': 'ふつうの“会話”でおよそ{n}秒です。急いでいる場面は短く、ゆっくりした場面は長くなります。',
+    'window_short': '短め',
+    'window_normal': 'ふつう',
+    'window_long': '長め',
+    'window_longest': '最長',
     'ladderUp': '一段上がりました',
     'tutRead': '先に三つの返事を読みます。相手の一言は一度だけ。聞き取った内容で選びます。',
     'axis_speed': '速さ',

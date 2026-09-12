@@ -191,6 +191,7 @@ void main() {
       for (var n = 0; n <= ladderSteps; n++) 'treeStage${treeName(n)}',
       for (final id in builtinFieldIds) 'interest_$id',
       for (final b in ageBands) 'age_${b.replaceAll('+', 'plus')}',
+      'window_short', 'window_normal', 'window_long', 'window_longest',
     ];
     final unknown = built.toSet().where((k) => !S.keys.contains(k)).toList();
     expect(unknown, isEmpty, reason: 'built keys with no entry: $unknown');

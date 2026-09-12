@@ -199,7 +199,39 @@ void main() {
         reason: 'it is about what is coming, not about what happened');
   });
 
+  testWidgets('a right answer pays, and the counter says so on the spot',
+      (tester) async {
+    tall(tester);
+    final (repo, s) = await open(tester, turns: 1);
+    final first = s.turns.first;
+
+    // Nothing earned yet, so there is no counter to look at.
+    expect(find.textContaining('🌱'), findsNothing);
+
+    await answer(tester, first, first.answer);
+
+    // The payment arrives after an await, so it needs a rebuild of its own.
+    // Without one the counter kept its old total and the seed never flew —
+    // the screen was simply never told.
+    final paid = (await repo.loadProgress()).seeds;
+    expect(paid, greaterThan(0));
+    expect(find.text('$paid'), findsOneWidget, reason: 'the counter');
+    expect(find.text('+$paid'), findsOneWidget, reason: 'and the verdict');
+  });
+
+  testWidgets('a wrong answer pays nothing, and nothing is shown',
+      (tester) async {
+    tall(tester);
+    final (repo, s) = await open(tester, turns: 1);
+    final first = s.turns.first;
+
+    await answer(tester, first, (first.answer + 1) % first.replies.length);
+    expect((await repo.loadProgress()).seeds, 0);
+    expect(find.textContaining('+'), findsNothing);
+  });
+
   testWidgets('every turn answered is written down, and the run is counted',
+
 
       (tester) async {
     tall(tester);

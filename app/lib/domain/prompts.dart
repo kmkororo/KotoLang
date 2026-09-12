@@ -947,7 +947,7 @@ confirmations.
 ```json
 {
   "type": "multiFact",
-  "line": "Shall we say the west exit at six — does that work for you?",
+  "line": "Shall we say the west exit at six, does that work for you?",
   "facts": [
     { "slot": "place", "value": "west exit", "confusable": "ticket gate" },
     { "slot": "time",  "value": "six",       "confusable": "seven" }
@@ -965,6 +965,10 @@ confirmations.
 
 - One to three sentences, ending in the question. Spoken English, not
   written English.
+- **No dashes in the line.** Use a comma. A phone's voice reads a dash as
+  the end of a sentence: the half in front of it comes out flat and the
+  question never rises, so the learner hears a statement and has nothing to
+  answer. Commas, full stops and question marks only.
 - Only what this person would actually be asked.
 - Invent nothing about the learner's world. You were told what they do and
   where they want English; everything else is unknown to you.
@@ -1037,6 +1041,7 @@ Go through every turn once more:
    product — that you were not told?
 9. `keyword`: swap the pair into the line. Is it still a grammatical sentence
    the same person could have said?
+10. Is there a dash anywhere in a line? Replace it with a comma.
 
 Output the JSON and nothing else.
 ''';

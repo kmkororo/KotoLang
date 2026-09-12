@@ -168,11 +168,22 @@ class SpeechService {
         _applied = want;
       }
       await _tts.setSpeechRate((rate * 0.5).clamp(0.1, 1.0));
-      await _tts.speak(text);
+      // The engine takes a moment to open the audio route, and whatever is
+      // said in that moment is lost. On the device the first word or two of
+      // every line went missing — which in this app is often the word the
+      // whole turn turns on. A beat of silence in front of the line is what
+      // reliably lands: waiting before calling speak does not help, because
+      // the route opens when speech starts, not before.
+      await _tts.speak('$_leadIn$text');
     } catch (e) {
       debugPrint('[KotoLang] speak failed: $e');
     }
   }
+
+  /// Said before every line and never heard: commas the engine pauses on
+  /// rather than pronounces. Long enough to cover the audio route opening,
+  /// short enough not to be a wait.
+  static const _leadIn = ', , ';
 
   Future<void> stop() async {
     try {

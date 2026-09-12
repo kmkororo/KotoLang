@@ -203,7 +203,10 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
 
   // ------------------------------------------------------------- the ladder
 
-  int get _windowMs => _card.scene.windowMs;
+  /// How long there is to answer: what this conversation asks for, stretched
+  /// or shortened by the learner's own setting.
+  int get _windowMs =>
+      (_card.scene.windowMs * ref.read(settingsProvider).windowScale).round();
   double get _rate => speedAt(_ladder.currentOf(LadderAxis.speed));
 
   /// Whether a missed window is given a second hearing. The hardest steps of
@@ -311,11 +314,17 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
           windowLeft: left,
         );
     if (!mounted) return;
-    _ladder = out.ladder;
-    _promoted.addAll(out.promoted);
-    if (out.seeds > 0) {
+    // All of this arrives after the await, so it needs its own setState: the
+    // one above ran before the answer had been recorded. Without it the
+    // counter kept its old total, the seed never flew, and a step of the
+    // ladder went unmentioned — the screen was simply never told.
+    setState(() {
+      _ladder = out.ladder;
+      _promoted.addAll(out.promoted);
       _paid = out.seeds;
       _seedRun += out.seeds;
+    });
+    if (out.seeds > 0) {
       ref.read(progressProvider.notifier).state = await repo.loadProgress();
       if (mounted) _seedFlight.forward(from: 0);
     }

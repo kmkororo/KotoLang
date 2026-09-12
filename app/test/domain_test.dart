@@ -110,7 +110,33 @@ void main() {
     });
   });
 
+  // ====================================================== the answer window
+  group('how long there is to answer', () {
+    test('the setting scales what the conversation asks for', () {
+      // A flat number of seconds would flatten the conversations: one person
+      // is on their way out and gives you two seconds, another is thinking
+      // aloud and gives you four. The setting stretches both.
+      const hurried = 2000, unhurried = 4000;
+      for (final scale in windowScales) {
+        expect((hurried * scale).round() < (unhurried * scale).round(), isTrue,
+            reason: 'at ×$scale the two are still different');
+      }
+      expect((hurried * windowScales.first).round(),
+          lessThan((hurried * windowScales.last).round()));
+    });
+
+    test('a stored scale from another build is snapped to one on offer', () {
+      for (final v in windowScales) {
+        expect(offeredWindowScale(v), v);
+      }
+      expect(offeredWindowScale(1.1), 1.0);
+      expect(offeredWindowScale(3.0), windowScales.last);
+      expect(offeredWindowScale(0.1), windowScales.first);
+    });
+  });
+
   // ========================================================= what it pays
+
   group('what a turn is worth', () {
     test('a wrong answer is worth nothing', () {
       // Paying for those would make the balance a measure of time spent

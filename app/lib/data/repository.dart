@@ -187,6 +187,8 @@ class Repository {
       interests: ((j['interests'] as List?) ?? const []).cast<String>(),
       tutorialDone: (j['tutorialDone'] ?? false) as bool,
       voicePerScene: (j['voicePerScene'] ?? true) as bool,
+      windowScale:
+          offeredWindowScale(((j['windowScale'] ?? 1.0) as num).toDouble()),
     );
   }
 
@@ -206,6 +208,7 @@ class Repository {
         'interests': s.interests,
         'tutorialDone': s.tutorialDone,
         'voicePerScene': s.voicePerScene,
+        'windowScale': s.windowScale,
       }));
 
   /// null until the learner has chosen one, which is what triggers the very

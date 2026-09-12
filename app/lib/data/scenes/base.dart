@@ -125,7 +125,7 @@ final _work = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "The review call's moved back fifteen minutes — does that still suit you?",
+        line: "The review call's moved back fifteen minutes, does that still suit you?",
         keyWord: 'fifteen',
         confusable: 'fifty',
         replies: [
@@ -145,7 +145,7 @@ final _work = <Scene>[
     turns: [
       _turn(
         type: TurnType.multiFact,
-        line: "Whoever's covering starts at nine on the second floor — can you tell them?",
+        line: "Whoever's covering starts at nine on the second floor, can you tell them?",
         facts: [
           Fact(slot: 'time', value: 'nine', confusable: 'ten'),
           Fact(slot: 'place', value: 'the second floor', confusable: 'the third floor'),
@@ -197,7 +197,7 @@ final _work = <Scene>[
         ],
       ),
       _turn(
-        line: "There's a copy on the desk — would you rather read it on paper?",
+        line: "There's a copy on the desk, would you rather read it on paper?",
         keyWord: 'copy',
         confusable: 'coffee',
         replies: [
@@ -217,7 +217,7 @@ final _work = <Scene>[
     turns: [
       _turn(
         type: TurnType.polarity,
-        line: "They're not coming in on Friday — can you take the room booking down?",
+        line: "They're not coming in on Friday, can you take the room booking down?",
         keyWord: 'not',
         confusable: '',
         replies: [
@@ -328,7 +328,7 @@ final _work = <Scene>[
         ],
       ),
       _turn(
-        line: "I'll be back at half past ten — is that any use to you?",
+        line: "I'll be back at half past ten, is that any use to you?",
         keyWord: 'ten',
         confusable: 'two',
         replies: [
@@ -365,7 +365,7 @@ final _travel = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "You want platform fourteen — do you know where that is?",
+        line: "You want platform fourteen, do you know where that is?",
         keyWord: 'fourteen',
         confusable: 'forty',
         replies: [
@@ -385,7 +385,7 @@ final _travel = <Scene>[
     turns: [
       _turn(
         type: TurnType.polarity,
-        line: "The room won't be ready until two — is that all right?",
+        line: "The room won't be ready until two, is that all right?",
         keyWord: "won't",
         confusable: 'will',
         replies: [
@@ -395,7 +395,7 @@ final _travel = <Scene>[
         ],
       ),
       _turn(
-        line: "Breakfast runs until half past nine — will you be down by then?",
+        line: "Breakfast runs until half past nine, will you be down by then?",
         keyWord: 'nine',
         confusable: 'five',
         replies: [
@@ -415,7 +415,7 @@ final _travel = <Scene>[
     turns: [
       _turn(
         type: TurnType.multiFact,
-        line: "Take the second turning and it's on your left — have you got that?",
+        line: "Take the second turning and it's on your left, have you got that?",
         facts: [
           Fact(slot: 'turning', value: 'the second', confusable: 'the third'),
           Fact(slot: 'side', value: 'left', confusable: 'right'),
@@ -427,7 +427,7 @@ final _travel = <Scene>[
         ],
       ),
       _turn(
-        line: "It's about ten minutes — are you happy to walk it?",
+        line: "It's about ten minutes, are you happy to walk it?",
         keyWord: 'walk',
         confusable: 'work',
         replies: [
@@ -456,7 +456,7 @@ final _travel = <Scene>[
     windowMs: 3000,
     turns: [
       _turn(
-        line: "We've put you in a quiet room at the back — does that suit?",
+        line: "We've put you in a quiet room at the back, does that suit?",
         keyWord: 'quiet',
         confusable: 'quite',
         replies: [
@@ -467,7 +467,7 @@ final _travel = <Scene>[
       ),
       _turn(
         type: TurnType.polarity,
-        line: "There's no charge for changing it — shall I go ahead?",
+        line: "There's no charge for changing it, shall I go ahead?",
         keyWord: 'no',
         confusable: '',
         replies: [
@@ -486,7 +486,7 @@ final _travel = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "That's thirteen altogether — how would you like to pay?",
+        line: "That's thirteen altogether, how would you like to pay?",
         keyWord: 'thirteen',
         confusable: 'thirty',
         replies: [
@@ -506,7 +506,7 @@ final _travel = <Scene>[
     turns: [
       _turn(
         type: TurnType.polarity,
-        line: "It's not stopping here today — did nobody tell you?",
+        line: "It's not stopping here today, did nobody tell you?",
         keyWord: 'not',
         confusable: '',
         replies: [
@@ -516,7 +516,7 @@ final _travel = <Scene>[
         ],
       ),
       _turn(
-        line: "The next one's in eighteen minutes — can you wait?",
+        line: "The next one's in eighteen minutes, can you wait?",
         keyWord: 'eighteen',
         confusable: 'eighty',
         replies: [
@@ -536,7 +536,7 @@ final _travel = <Scene>[
     turns: [
       _turn(
         type: TurnType.multiFact,
-        line: "It's gate twelve and boarding starts at quarter past — all clear?",
+        line: "It's gate twelve and boarding starts at quarter past, all clear?",
         facts: [
           Fact(slot: 'gate', value: 'twelve', confusable: 'twenty'),
           Fact(slot: 'time', value: 'quarter past', confusable: 'half past'),
@@ -559,7 +559,7 @@ final _travel = <Scene>[
       ),
       _turn(
         type: TurnType.polarity,
-        line: "You can't take that through without a label — shall I get you one?",
+        line: "You can't take that through without a label, shall I get you one?",
         keyWord: "can't",
         confusable: 'can',
         replies: [
@@ -569,7 +569,7 @@ final _travel = <Scene>[
         ],
       ),
       _turn(
-        line: "Boarding's from the desk on the left — can you see it?",
+        line: "Boarding's from the desk on the left, can you see it?",
         keyWord: 'left',
         confusable: 'lift',
         replies: [
@@ -593,7 +593,7 @@ final _school = <Scene>[
     windowMs: 3000,
     turns: [
       _turn(
-        line: "The test is on Tuesday — will the weekend be enough for you?",
+        line: "The test is on Tuesday, will the weekend be enough for you?",
         keyWord: 'Tuesday',
         confusable: 'Thursday',
         replies: [
@@ -604,7 +604,7 @@ final _school = <Scene>[
       ),
       _turn(
         type: TurnType.polarity,
-        line: "You won't need the book for it — have you got everything else?",
+        line: "You won't need the book for it, have you got everything else?",
         keyWord: "won't",
         confusable: 'will',
         replies: [
@@ -655,7 +655,7 @@ final _school = <Scene>[
         ],
       ),
       _turn(
-        line: "Send it however you like — I'll accept it either way, all right?",
+        line: "Send it however you like, I'll accept it either way, all right?",
         keyWord: 'accept',
         confusable: 'except',
         replies: [
@@ -685,7 +685,7 @@ final _school = <Scene>[
     windowMs: 3000,
     turns: [
       _turn(
-        line: "It's in room thirty this week — do you know the one?",
+        line: "It's in room thirty this week, do you know the one?",
         keyWord: 'thirty',
         confusable: 'thirteen',
         replies: [
@@ -725,7 +725,7 @@ final _school = <Scene>[
       ),
       _turn(
         type: TurnType.polarity,
-        line: "It's not open on Thursdays — can you come another day?",
+        line: "It's not open on Thursdays, can you come another day?",
         keyWord: 'not',
         confusable: '',
         replies: [
@@ -744,7 +744,7 @@ final _school = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "You can keep it for fourteen days — is that long enough?",
+        line: "You can keep it for fourteen days, is that long enough?",
         keyWord: 'fourteen',
         confusable: 'forty',
         replies: [
@@ -763,7 +763,7 @@ final _school = <Scene>[
     windowMs: 4000,
     turns: [
       _turn(
-        line: "This is much better than your first one — can you see why?",
+        line: "This is much better than your first one, can you see why?",
         keyWord: 'first',
         confusable: 'worst',
         replies: [
@@ -787,7 +787,7 @@ final _school = <Scene>[
       ),
       _turn(
         type: TurnType.polarity,
-        line: "Don't rewrite the whole thing — could you just fix what's marked?",
+        line: "Don't rewrite the whole thing, could you just fix what's marked?",
         keyWord: "don't",
         confusable: 'do',
         replies: [
@@ -811,7 +811,7 @@ final _daily = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "I've left it with the neighbour at forty — is that all right?",
+        line: "I've left it with the neighbour at forty, is that all right?",
         keyWord: 'forty',
         confusable: 'fourteen',
         replies: [
@@ -830,7 +830,7 @@ final _daily = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "The dessert comes with it — would you like to choose one?",
+        line: "The dessert comes with it, would you like to choose one?",
         keyWord: 'dessert',
         confusable: 'desert',
         replies: [
@@ -841,7 +841,7 @@ final _daily = <Scene>[
       ),
       _turn(
         type: TurnType.polarity,
-        line: "We can't do it without the card — do you have it with you?",
+        line: "We can't do it without the card, do you have it with you?",
         keyWord: 'without',
         confusable: 'with',
         replies: [
@@ -873,7 +873,7 @@ final _daily = <Scene>[
         ],
       ),
       _turn(
-        line: "We've eaten already — is that all right?",
+        line: "We've eaten already, is that all right?",
         keyWord: 'eaten',
         confusable: 'eating',
         replies: [
@@ -892,7 +892,7 @@ final _daily = <Scene>[
     windowMs: 4000,
     turns: [
       _turn(
-        line: "Someone can come on the fifteenth — does that work?",
+        line: "Someone can come on the fifteenth, does that work?",
         keyWord: 'fifteenth',
         confusable: 'fiftieth',
         replies: [
@@ -903,7 +903,7 @@ final _daily = <Scene>[
       ),
       _turn(
         type: TurnType.polarity,
-        line: "You don't have to be in for it — shall I book it anyway?",
+        line: "You don't have to be in for it, shall I book it anyway?",
         keyWord: "don't",
         confusable: 'do',
         replies: [
@@ -913,7 +913,7 @@ final _daily = <Scene>[
         ],
       ),
       _turn(
-        line: "There's a form to sign at the end — will you be around?",
+        line: "There's a form to sign at the end, will you be around?",
         keyWord: 'form',
         confusable: 'phone',
         replies: [
@@ -932,7 +932,7 @@ final _daily = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "I'm away for a week from Sunday — could you keep an eye on things?",
+        line: "I'm away for a week from Sunday, could you keep an eye on things?",
         keyWord: 'Sunday',
         confusable: 'Monday',
         replies: [
@@ -952,7 +952,7 @@ final _daily = <Scene>[
     turns: [
       _turn(
         type: TurnType.polarity,
-        line: "It's never busy here in the morning — did you not know?",
+        line: "It's never busy here in the morning, did you not know?",
         keyWord: 'never',
         confusable: 'always',
         replies: [
@@ -992,7 +992,7 @@ final _daily = <Scene>[
       ),
       _turn(
         type: TurnType.polarity,
-        line: "I can't stay long, though — is that still worth it?",
+        line: "I can't stay long, though, is that still worth it?",
         keyWord: "can't",
         confusable: 'can',
         replies: [
@@ -1012,7 +1012,7 @@ final _daily = <Scene>[
     turns: [
       _turn(
         type: TurnType.multiFact,
-        line: "Go left at the bridge — it's twenty minutes from there, all right?",
+        line: "Go left at the bridge, it's twenty minutes from there, all right?",
         facts: [
           Fact(slot: 'way', value: 'left', confusable: 'right'),
           Fact(slot: 'length', value: 'twenty minutes', confusable: 'ten minutes'),

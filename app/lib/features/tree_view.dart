@@ -574,6 +574,10 @@ class _TreePainter extends CustomPainter {
   /// the trunk on the middle of the picture left it standing on air.
   static const _soilTop = 0.16;
 
+  /// How far above the soil the lowest leaf or bud is kept. Enough that the
+  /// near lip of the mound, painted afterwards, cannot clip it.
+  static const _clearance = 10.0;
+
   /// How tall the ground picture is drawn. It widens a little with the trunk,
   /// so a full-grown tree is not standing on a seedling's patch of soil.
   double get _groundH => 44 + 9 * girth;
@@ -745,7 +749,39 @@ class _TreePainter extends CustomPainter {
     limb(top, -pi / 2 + 0.06, reach * 0.5, w0 * 0.5, w0 * 0.18, 1, 5,
         10.5 + min(totalGrowing, 10) * 0.5, branches.every((b) => b.thirsty), high.isNotEmpty);
 
+    // Nothing that grows is allowed below the soil line.
+    //
+    // A bough low on the trunk, angled outward and down, can put its tip —
+    // and the bud or the leaves on that tip — into the earth. The lip of the
+    // mound is then painted over half of it, which reads as a plant sunk in
+    // the ground rather than standing on it. Lifting the tip and its control
+    // point together keeps the curve, so a bough that wanted to droop simply
+    // levels out at the ground instead of going through it.
+    Offset above(Offset p) =>
+        p.dy > plan.soil - _clearance ? Offset(p.dx, plan.soil - _clearance) : p;
+    _Limb lift(_Limb l) => (
+          from: l.from,
+          ctrl: above(l.ctrl),
+          to: above(l.to),
+          seed: l.seed,
+          tip: l.tip,
+          own: l.own,
+        );
+    for (var i = 0; i < plan.wood.length; i++) {
+      final (l, wa, wb) = plan.wood[i];
+      plan.wood[i] = (lift(l), wa, wb);
+    }
+    for (var i = 0; i < plan.leafy.length; i++) {
+      final (l, size, dry) = plan.leafy[i];
+      plan.leafy[i] = (lift(l), size, dry);
+    }
+    for (var i = 0; i < plan.buds.length; i++) {
+      final (at, tilt) = plan.buds[i];
+      plan.buds[i] = (above(at), tilt);
+    }
+
     // What all of that needs, leaf tips included, against what there is.
+
     var minX = plan.base.dx, maxX = plan.base.dx;
     var minY = plan.top.dy, maxY = plan.groundY + _groundH / 2;
     for (final (l, leafSize, _) in plan.leafy) {

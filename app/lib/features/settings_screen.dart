@@ -19,6 +19,7 @@ import '../app.dart';
 import '../core/l10n/languages.dart';
 import '../domain/field.dart';
 import '../domain/models.dart';
+import '../domain/progress_service.dart';
 import 'field_picker_screen.dart';
 import 'onboarding_screens.dart';
 import 'profile_screen.dart';
@@ -26,6 +27,15 @@ import 'tree_view.dart';
 
 final _realmsProvider =
     FutureProvider.autoDispose<List<Realm>>((ref) => ref.watch(repositoryProvider).realms());
+
+/// The l10n key suffix for one window length. Named by feel rather than by
+/// the number: nobody chooses "1.5".
+String _scaleKey(double v) => switch (v) {
+      < 1.0 => 'short',
+      == 1.0 => 'normal',
+      < 2.0 => 'long',
+      _ => 'longest',
+    };
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -150,7 +160,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           ],
+
+          // How long there is to answer. A multiplier rather than a number of
+          // seconds: the conversations already vary — someone on their way out
+          // gives you two seconds, someone thinking aloud four — and a flat
+          // setting would take that away.
+          const SizedBox(height: 14),
+          Text(s.t('windowLabel'), style: theme.textTheme.titleSmall),
+          const SizedBox(height: 6),
+          SegmentedButton<double>(
+            segments: [
+              for (final v in windowScales)
+                ButtonSegment(value: v, label: Text(s.t('window_${_scaleKey(v)}'))),
+            ],
+            selected: {settings.windowScale},
+            showSelectedIcon: false,
+            onSelectionChanged: (v) =>
+                updateSettings(ref, settings.copyWith(windowScale: v.first)),
+          ),
+          const SizedBox(height: 4),
+          Text(s.t('windowHint', {'n': (3 * settings.windowScale).toStringAsFixed(1)}),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         ]),
+
 
         // ------------------------------------------------------ feedback
         _Section(title: s.t('hapticsSection'), children: [
