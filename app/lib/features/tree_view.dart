@@ -686,16 +686,25 @@ class _TreePainter extends CustomPainter {
     final low = [for (final b in branches) if (!b.own) b];
     final high = [for (final b in branches) if (b.own) b];
 
-    void bough(Branch b, int i, int n, {required bool own}) {
+    // [own] is what the bough carries — only the learner's own conversations
+    // blossom. [crown] is where it goes, which is a separate question: with
+    // nothing of their own on the tree yet, the samples are the tree, and
+    // holding them to the foot of the trunk puts every leaf round the ankles
+    // of a bare stem. That is a shrub, not a young tree.
+    void bough(Branch b, int i, int n, {required bool own, required bool crown}) {
       final spread = n == 1 ? 0.5 : i / (n - 1);
-      final t = own ? (n == 1 ? 0.72 : 0.50 + 0.45 * spread) : (n == 1 ? 0.36 : 0.26 + 0.24 * spread);
+      final t =
+          crown ? (n == 1 ? 0.72 : 0.50 + 0.45 * spread) : (n == 1 ? 0.36 : 0.26 + 0.24 * spread);
       final side = i.isEven ? -1.0 : 1.0;
       final angle = -pi / 2 +
           0.08 +
-          side * (own ? (1.02 - 0.44 * t + _wobble(i * 17) * 0.10) : (1.28 + _wobble(i * 19) * 0.06));
+          side *
+              (crown
+                  ? (1.02 - 0.44 * t + _wobble(i * 17) * 0.10)
+                  : (1.28 + _wobble(i * 19) * 0.06));
       final from = onTrunk(t);
-      final width = (w0 * (1 - 0.55 * t)) * (own ? 0.66 : 0.58);
-      final len = lengthOf(b) * (own ? 1.0 : 0.80);
+      final width = (w0 * (1 - 0.55 * t)) * (crown ? 0.66 : 0.58);
+      final len = lengthOf(b) * (crown ? 1.0 : 0.80);
       final seedBase = (own ? 1000 : 0) + i * 100;
 
       final live = TurnType.values.where((x) => (b.twigs[x] ?? 0) > 0).toList();
@@ -740,11 +749,14 @@ class _TreePainter extends CustomPainter {
       }
     }
 
+    // The samples hold the crown until there is something of the learner's
+    // own to take it from them.
+    final samplesAreTheTree = high.isEmpty;
     for (var i = 0; i < low.length; i++) {
-      bough(low[i], i, low.length, own: false);
+      bough(low[i], i, low.length, own: false, crown: samplesAreTheTree);
     }
     for (var i = 0; i < high.length; i++) {
-      bough(high[i], i, high.length, own: true);
+      bough(high[i], i, high.length, own: true, crown: true);
     }
 
     // The leader: the trunk carries on above the boughs and ends in leaves.
