@@ -4,7 +4,7 @@
 /// decoration. Three things move it, and each one is a different thing the
 /// learner did: the trunk rises with the ladder, thickens with the work, and
 /// the crown widens with the fields opened. Said in words that is a rule;
-/// drawn at six heights it is something to want.
+/// drawn at every name it answers to, it is something to want.
 library;
 
 import 'package:flutter/material.dart';
@@ -33,18 +33,22 @@ List<({int entry, int draw})> get _stages {
       last = n;
     }
   }
-  return [
-    // Drawn at the top of its band, where it is most itself.
-    for (var i = 0; i < entry.length; i++)
-      (entry: entry[i], draw: i + 1 < entry.length ? entry[i + 1] - 1 : ladderSteps)
-  ];
+  // Drawn at the step it is earned at, not at the top of its band: the row
+  // then shows what the learner will be looking at on the day the name
+  // arrives, and the number beside it is the number that drew it. Drawn at
+  // the top, the first row came out a small tree rather than a seed.
+  return [for (final e in entry) (entry: e, draw: e)];
 }
 
 /// A tree made up for the picture: enough work behind it to look like it
 /// belongs at that height, and three fields, which is what everyone starts
 /// with.
 TreeShape _imagined(int reached, {int fields = 3}) {
-  final answers = (reached * 8).clamp(0, 400);
+  // Three answers to the step, near enough: with no screen yet for choosing
+  // a rung, every clean answer moves all five axes, so ten of them are five
+  // steps. Drawn from a number the learner will actually have at that height,
+  // the row and their own tree are the same tree.
+  final answers = reached * 3;
   return TreeShape(
     reached: reached,
     answers: answers,

@@ -189,6 +189,35 @@ void main() {
         reason: 'each name once, in order, from the seed to the last');
   });
 
+  test('every name is on a step the ladder actually stops at', () {
+    // With no screen for choosing a rung, a clean answer moves all five axes
+    // at once, so the total only ever takes certain values. A name set
+    // between two of them is a name nobody is ever called: two of the ten
+    // were unreachable that way.
+    final stops = <int>{};
+    var l = const Ladder({});
+    stops.add(l.reached);
+    for (var i = 0; i < ladderWindow * 60; i++) {
+      l = l.record(true).ladder;
+      stops.add(l.reached);
+    }
+    expect(l.reached, ladderSteps, reason: 'the ladder can be finished');
+    final missed = treeNameAt.where((s) => !stops.contains(s)).toList();
+    expect(missed, isEmpty, reason: 'names on steps nobody lands on: $missed');
+  });
+
+  test('the samples alone come to a young tree', () {
+    // Sixty-one turns is what the built-in conversations hold. They are meant
+    // to carry the learner as far as a tree and no further: the crown and the
+    // blossom are what their own conversations add.
+    var l = const Ladder({});
+    for (var i = 0; i < 61; i++) {
+      l = l.record(true).ladder;
+    }
+    expect(l.reached, 26);
+    expect(treeName(l.reached), 6, reason: 'young tree');
+  });
+
   test('the same record always draws the same tree', () {
     final scenes = {for (final s in [make('a'), make('b', field: 'travel')]) s.id: s};
     final results = [answered('a', 0), answered('b', 0, correct: false)];

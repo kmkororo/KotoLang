@@ -82,17 +82,36 @@ int treeStage(int reached) {
   return step.clamp(1, treeStages - 1);
 }
 
-/// How many names the tree answers to. Far fewer than [treeStages] on
-/// purpose: the picture has to change often enough for the climb to be felt,
-/// but the name is the thing the learner repeats to themselves, and something
-/// renamed every other day has no name at all.
-const treeNames = 6;
+/// The names the tree answers to, as the ladder step each is earned at.
+///
+/// Close together at the bottom and further apart at the top, the way a tree
+/// actually changes: a seedling looks different every week and an old tree
+/// looks the same for years. Six evenly spaced names gave the opposite — one
+/// name for the whole of the beginning, when there is least to show and a
+/// name is worth most, and then three in a row near the top where the picture
+/// barely moves.
+///
+/// Set on the steps the ladder actually stops at. With no screen yet for
+/// choosing a rung every clean answer moves all five axes together, so the
+/// total goes 0, 5, 10, 15, 19, 23, 26, 29 — and a name set anywhere else is
+/// a name nobody is ever called. Two of ten were unreachable before this.
+///
+/// The samples are a little over sixty turns, which the ladder reads as
+/// twenty-six steps, and they land exactly on "young tree": the work that
+/// comes with the app is meant to carry the learner to a tree, and leave the
+/// crown to the conversations their own AI writes.
+const treeNameAt = <int>[0, 5, 10, 15, 19, 23, 26, 33, 40, 47];
+
+/// How many names the tree answers to.
+int get treeNames => treeNameAt.length;
 
 /// Which name a ladder of [reached] steps has earned.
 int treeName(int reached) {
-  if (reached <= 0) return 0;
-  final n = (reached * (treeNames - 1) / ladderSteps).ceil();
-  return n.clamp(1, treeNames - 1);
+  var n = 0;
+  for (var i = 0; i < treeNameAt.length; i++) {
+    if (reached >= treeNameAt[i]) n = i;
+  }
+  return n;
 }
 
 class TreeShape {
@@ -145,6 +164,21 @@ double branchGrowth(int answers, int busiest) {
   if (answers <= 0) return 0;
   final top = max(busiest, 1);
   return (0.45 + 0.55 * (log(answers + 1) / log(top + 1))).clamp(0.0, 1.0);
+}
+
+/// How far the boughs reach for the work that has gone into the tree, apart
+/// from how they compare with one another.
+///
+/// [branchGrowth] only says which bough is longer than which: four fields
+/// worked equally all came out at full reach, whether that was fifteen
+/// answers each or five hundred. So a tree with sixty answers behind it wore
+/// the crown of a tree with a thousand, and the rule the growing screen
+/// states — that answering lengthens the boughs — was not true of the
+/// drawing. This is the part that is true of it.
+double branchReach(int answers) {
+  if (answers <= 0) return 0;
+  final log1k = (log(answers + 1) / log(1001)).clamp(0.0, 1.0);
+  return pow(log1k, 1.4).toDouble();
 }
 
 /// Reads the tree off the record. [fieldLabels] names the fields in the

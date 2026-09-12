@@ -279,7 +279,14 @@ class _TreePainter extends CustomPainter {
 
   /// Green at the start, fully barked a few hundred answers in. It used to
   /// finish inside fifty, which is a couple of days.
-  double get _woodiness => ((data.shape.answers - 8) / 240).clamp(0.0, 1.0);
+  ///
+  /// Height counts too, and for a plain reason: a stem that stands that tall
+  /// has to be wood to stand at all. Left to the answer count alone, someone
+  /// who climbed the ladder quickly — which the samples do, since every clean
+  /// answer moves all five axes at once — ended up half a tree tall and
+  /// entirely green, which is a bush.
+  double get _woodiness =>
+      max(grown, ((data.shape.answers - 8) / 240).clamp(0.0, 1.0));
 
   Color get _stemColour => Color.lerp(dark ? _stemOnDark : _stem,
       dark ? _barkOnDark : _bark, _woodiness)!;
@@ -586,8 +593,12 @@ class _TreePainter extends CustomPainter {
     // has to start as a stem rather than as a thin trunk — a seedling with a
     // woody bole is the thing that made the early stages look wrong.
     final w0 = min(1.7 + 13 * girth, size.width * 0.075);
-    // A crown wider than it is tall: the shape of a tree left to spread.
-    final reach = headroom * (0.16 + 0.36 * grown);
+    // A crown wider than it is tall: the shape of a tree left to spread. How
+    // far it actually reaches is the work done, so a young tree has short
+    // boughs rather than a full crown on a short stem.
+    final reach = headroom *
+        (0.16 + 0.36 * grown) *
+        (0.35 + 0.65 * branchReach(shape.answers));
 
     plan
       ..base = base
@@ -662,22 +673,29 @@ class _TreePainter extends CustomPainter {
       }
     }
 
-    // Two sides of one tree. The samples grow low on the trunk, short and
-    // near-level, and stop at leaves; the learner's own scenes grow above
+    // Two sides of one tree. The samples grow lower on the trunk, shorter and
+    // nearer level, and stop at leaves; the learner's own scenes grow above
     // them and make the crown, where the flowers and fruit are.
+    //
+    // The samples used to be held down far enough that working through all of
+    // them left a bare trunk with four twigs at its foot — which is not what
+    // sixty turns of work looks like, and not the young tree the ladder by
+    // then calls it. They are a smaller branch than the learner's own, not a
+    // different order of thing; what the learner's own conversations add that
+    // the samples cannot is the crown, and the blossom on it.
     final low = [for (final b in branches) if (!b.own) b];
     final high = [for (final b in branches) if (b.own) b];
 
     void bough(Branch b, int i, int n, {required bool own}) {
       final spread = n == 1 ? 0.5 : i / (n - 1);
-      final t = own ? (n == 1 ? 0.72 : 0.50 + 0.45 * spread) : (n == 1 ? 0.30 : 0.20 + 0.18 * spread);
+      final t = own ? (n == 1 ? 0.72 : 0.50 + 0.45 * spread) : (n == 1 ? 0.36 : 0.26 + 0.24 * spread);
       final side = i.isEven ? -1.0 : 1.0;
       final angle = -pi / 2 +
           0.08 +
           side * (own ? (1.02 - 0.44 * t + _wobble(i * 17) * 0.10) : (1.28 + _wobble(i * 19) * 0.06));
       final from = onTrunk(t);
-      final width = (w0 * (1 - 0.55 * t)) * (own ? 0.66 : 0.48);
-      final len = lengthOf(b) * (own ? 1.0 : 0.55);
+      final width = (w0 * (1 - 0.55 * t)) * (own ? 0.66 : 0.58);
+      final len = lengthOf(b) * (own ? 1.0 : 0.80);
       final seedBase = (own ? 1000 : 0) + i * 100;
 
       final live = TurnType.values.where((x) => (b.twigs[x] ?? 0) > 0).toList();
