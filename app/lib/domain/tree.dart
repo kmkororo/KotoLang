@@ -109,15 +109,18 @@ int treeLevel(int scenes) {
   return l < 1 ? 1 : l;
 }
 
-/// The name, and which level of that name, for [scenes] questions answered.
-({int name, int level}) treeRank(int scenes) {
-  var l = treeLevel(scenes);
+/// The name, and which level of that name, for a global [level].
+({int name, int level}) treeRankOfLevel(int level) {
+  var l = level < 1 ? 1 : level;
   for (var i = 0; i < treeLevelsPerName.length; i++) {
     if (l <= treeLevelsPerName[i]) return (name: i, level: l);
     l -= treeLevelsPerName[i];
   }
   return (name: treeLevelsPerName.length, level: l);
 }
+
+/// The name, and which level of that name, for [scenes] questions answered.
+({int name, int level}) treeRank(int scenes) => treeRankOfLevel(treeLevel(scenes));
 
 /// The global level at which the last named tree begins, and the height of
 /// the drawing is reached.
@@ -133,16 +136,23 @@ double treeGrown(int scenes) {
   return ((l - 1) / (treeFullLevel - 1)).clamp(0.0, 1.0);
 }
 
-/// How far past a full-grown tree the learner is, from 0 upwards, with no
-/// ceiling.
+/// The last level there is.
 ///
-/// Height has to stop because the panel does; nothing else does. The bole
-/// goes on thickening, the crown on filling, and the ground widens under it
-/// until what is showing is the curve of it.
+/// Growing stops somewhere, and this is a better somewhere than a number that
+/// simply runs out: by here the ground under the tree has closed into a world
+/// and the crown has gone round it. There is nothing left to be bigger than.
+const treeTopLevel = 200;
+
+/// How far past a full-grown tree the learner is: 0 at the top of the panel,
+/// 1 when the tree has gone round the world, and no further.
+///
+/// Height has to stop because the panel does, and everything else carries on
+/// from there — the bole thickening, the crown filling, the ground curving
+/// under it — until it has nowhere left to go.
 double treeBeyond(int scenes) {
   final l = treeLevel(scenes);
   if (l <= treeFullLevel) return 0;
-  return (l - treeFullLevel) / (treeFullLevel - 1);
+  return ((l - treeFullLevel) / (treeTopLevel - treeFullLevel)).clamp(0.0, 1.0);
 }
 
 /// Which name [scenes] questions answered has earned.

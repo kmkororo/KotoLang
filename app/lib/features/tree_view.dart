@@ -347,11 +347,16 @@ class _TreePainter extends CustomPainter {
   /// earth with a darker rim, in the app's own cartoon line. No grass — the
   /// leaves are the only green, and they belong to the tree.
   void _mound(Canvas canvas, Offset centre, double h) {
-    // Past a full-grown tree the mound goes on widening, and its rim leaves
-    // the panel: what is left across the bottom of the picture is an arc, and
-    // an arc under a tree that tall is a horizon.
-    final w = h * (3.4 + 5.0 * beyond);
-    final rect = Rect.fromCenter(center: centre, width: w, height: h);
+    // Past a full-grown tree the mound widens and then, as the crown comes
+    // round it, closes: a flat ellipse at the start, a horizon in the middle
+    // of the climb, and by the end a world with the tree standing on it. It
+    // is drawn lower as it rounds, so the whole of it is in the picture.
+    final round = ((beyond - 0.45) / 0.55).clamp(0.0, 1.0);
+    final w = h * (3.4 + 4.0 * beyond) * (1 - 0.42 * round);
+    final tall = h * (1 + 5.6 * round);
+    final drop = (tall - h) * 0.42;
+    final rect =
+        Rect.fromCenter(center: centre.translate(0, drop), width: w, height: tall);
     final rim = Paint()..color = dark ? const Color(0xFF3A2A1E) : const Color(0xFF4A3323);
     final earth = Paint()
       ..shader = LinearGradient(
@@ -363,11 +368,19 @@ class _TreePainter extends CustomPainter {
       ).createShader(rect);
     canvas.drawOval(rect, rim);
     canvas.drawOval(rect.deflate(h * 0.07), earth);
-    // A lighter band across the top, the way the old picture had it.
-    final band = Paint()..color = (dark ? const Color(0xFF9E6C43) : const Color(0xFFC08D5C)).withValues(alpha: 0.8);
-    canvas.drawOval(
-        Rect.fromCenter(center: centre.translate(-w * 0.06, -h * 0.12), width: w * 0.62, height: h * 0.30),
-        band);
+    // A lighter band across the top, the way the old picture had it. It
+    // shrinks away as the ground rounds, since a world has no near lip.
+    final band = Paint()
+      ..color = (dark ? const Color(0xFF9E6C43) : const Color(0xFFC08D5C))
+          .withValues(alpha: 0.8 * (1 - round));
+    if (round < 0.98) {
+      canvas.drawOval(
+          Rect.fromCenter(
+              center: centre.translate(-w * 0.06, -h * 0.12),
+              width: w * 0.62,
+              height: h * 0.30),
+          band);
+    }
   }
 
   void _image(Canvas canvas, ui.Image img, Offset at, double height,
@@ -552,7 +565,7 @@ class _TreePainter extends CustomPainter {
   /// it comes on slowly: a tree with its head this far up is not standing in
   /// the same afternoon it started in.
   void _sky(Canvas canvas, Size size) {
-    final depth = (beyond * 0.75).clamp(0.0, 0.92);
+    final depth = beyond.clamp(0.0, 1.0);
     if (depth <= 0.01) return;
     final rect = Offset.zero & size;
     canvas.drawRect(
@@ -653,9 +666,13 @@ class _TreePainter extends CustomPainter {
     // A crown wider than it is tall: the shape of a tree left to spread. How
     // far it actually reaches is the work done, so a young tree has short
     // boughs rather than a full crown on a short stem.
+    // The crown reaches further and further as the ground rounds under it,
+    // until the boughs are coming down past the sides of the world. That is
+    // as far as a tree goes.
     final reach = headroom *
         (0.16 + 0.36 * grown) *
-        (0.35 + 0.65 * branchReach(shape.answers));
+        (0.35 + 0.65 * branchReach(shape.answers)) *
+        (1 + 1.1 * beyond);
 
     plan
       ..base = base

@@ -215,15 +215,20 @@ void main() {
     expect(treeRank(1000000).level, greaterThan(200));
   });
 
-  test('nothing in the drawing ever finishes', () {
-    // Height stops because the panel does. Nothing else stops: the bole goes
-    // on thickening and the ground goes on widening under it, so that there
-    // is always something the next question does.
+  test('growing carries on past the height, and stops at a world gone round', () {
+    // Height stops because the panel does, and everything else carries on
+    // from there — the bole thickening, the ground curving under it — until
+    // the crown has gone round the world, which is as far as a tree goes.
     expect(treeBeyond(treeLevelAt(treeFullLevel)), 0);
-    expect(treeBeyond(1000000), greaterThan(3),
-        reason: 'past a full-grown tree is still somewhere to go');
-    expect(trunkGirth(1000000, 3),
+    expect(treeBeyond(treeLevelAt(treeFullLevel + 1)), greaterThan(0),
+        reason: 'the first question past a full-grown tree still does something');
+    expect(treeBeyond(treeLevelAt(treeTopLevel)), 1);
+    expect(treeBeyond(1000000), 1, reason: 'and no further');
+
+    expect(trunkGirth(treeLevelAt(treeTopLevel), 3),
         greaterThan(trunkGirth(treeLevelAt(treeFullLevel), 3)));
+    expect(trunkGirth(1000000, 3), trunkGirth(treeLevelAt(treeTopLevel), 3),
+        reason: 'the top is a top');
   });
 
   test('the climb to a full-grown tree is a climb', () {
