@@ -97,8 +97,7 @@ class _FieldScreenState extends ConsumerState<FieldScreen> {
               if (hasBough) ...[
                 const TreePanel(compact: true),
                 const SizedBox(height: 8),
-              ] else
-                const Spacer(),
+              ],
               Text(
                 scenes.isEmpty
                     ? s.t(widget.own ? 'fieldOwnNone' : 'sceneNoneYet')
@@ -106,7 +105,27 @@ class _FieldScreenState extends ConsumerState<FieldScreen> {
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
               ),
-              const Spacer(),
+              const SizedBox(height: 10),
+
+              // What is actually in this field. The middle of this screen was
+              // empty until something had been answered here — a title, a
+              // count and then a hand's breadth of nothing — which is the one
+              // place a learner comes to see what they have.
+              Expanded(
+                child: scenes.isEmpty
+                    ? const SizedBox.shrink()
+                    : ListView(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        children: [
+                          for (final x in scenes)
+                            _SceneRow(
+                              label: x.label,
+                              sub: x.situation,
+                              done: done.contains(x.id),
+                            ),
+                        ],
+                      ),
+              ),
 
               // -------- the three things that can be done here --------
               if (scenes.isNotEmpty)
@@ -138,6 +157,48 @@ class _FieldScreenState extends ConsumerState<FieldScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// One question in the field: what it is about, and whether it has been
+/// answered. Not tappable — everything here is started from the one button
+/// below, which picks the next one that is owed rather than asking the
+/// learner to choose. It is here to be read.
+class _SceneRow extends StatelessWidget {
+  final String label;
+  final String sub;
+  final bool done;
+  const _SceneRow({required this.label, required this.sub, required this.done});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(done ? Icons.check_circle : Icons.circle_outlined,
+              size: 18, color: done ? scheme.primary : scheme.outlineVariant),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                        color: done ? scheme.onSurfaceVariant : scheme.onSurface)),
+                if (sub.isNotEmpty)
+                  Text(sub,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

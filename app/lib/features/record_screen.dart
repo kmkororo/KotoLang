@@ -54,19 +54,24 @@ class RecordScreen extends ConsumerWidget {
             style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 12),
 
-        // -------- the two skills --------
+        // -------- how the listening is going --------
+        //
+        // Two figures, not two skills. The screen used to call them
+        // understanding and replying, which was a model the app no longer
+        // has: what is read off an answer is whether the reply fitted, and
+        // whether it came while the window was still open.
         _Block(title: s.t('skillsSection'), children: [
           _SkillRow(
             label: s.t('skillUnderstand'),
             all: pct(stats.all.right),
             week: pct(stats.week.right),
-            sub: '${s.t("byEarLabel")} ${pct(stats.all.kept)}',
           ),
           const SizedBox(height: 10),
           _SkillRow(
             label: s.t('skillReply'),
             all: pct(stats.all.kept),
             week: pct(stats.week.kept),
+            sub: s.t('byEarLabel'),
           ),
           const SizedBox(height: 8),
           Text('${s.t('allTimeLabel')} · ${s.t('last7Label')}',
