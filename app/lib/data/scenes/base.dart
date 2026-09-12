@@ -27,7 +27,6 @@
 library;
 
 import '../../domain/scene.dart';
-
 /// The right reply is written first in every turn below, as the prompt asks
 /// of the learner's assistant. [_scene] moves it, deterministically, from the
 /// conversation's own id — so an author never has to think about position and
@@ -61,11 +60,10 @@ Turn _arrange(Turn t, List<int> order) => Turn(
       confusable: t.confusable,
       facts: t.facts,
       replies: arrangeBy(order, t.replies),
-      restate: t.restate,
     );
 
-/// One turn. [replies] is right-first; the rest are what a mishearing would
-/// pick.
+/// One turn. [line] asks something; [replies] is right-first, and the rest
+/// are what a mishearing would answer.
 Turn _turn({
   TurnType type = TurnType.keyword,
   required String line,
@@ -73,7 +71,6 @@ Turn _turn({
   String confusable = '',
   List<Fact> facts = const [],
   required List<Reply> replies,
-  required String restate,
 }) =>
     Turn(
       type: type,
@@ -82,7 +79,6 @@ Turn _turn({
       confusable: confusable,
       facts: facts,
       replies: replies,
-      restate: restate,
     );
 
 Reply _ok(String text) => Reply(text: text, correct: true);
@@ -99,27 +95,25 @@ final _work = <Scene>[
     windowMs: 3000,
     turns: [
       _turn(
-        line: "The handover's on Thursday, so I'll need the file the night before.",
+        line: "Can you get the file to me by Thursday morning?",
         keyWord: 'Thursday',
         confusable: 'Tuesday',
         replies: [
-          _ok("Thursday — I'll have it ready the evening before."),
-          _no("Tuesday, got it. I'll finish it off over the weekend."),
+          _ok("Yes — I'll send it over the evening before."),
+          _no("That only leaves me the weekend. Could we say midweek?"),
           _no("Is there any chance of another day? That week is full."),
         ],
-        restate: "It's the Thursday handover, so the file has to be in the night before.",
       ),
       _turn(
         type: TurnType.polarity,
-        line: "I won't get to it before Wednesday unless my morning clears.",
-        keyWord: 'unless',
-        confusable: 'if',
+        line: "Can you manage without the figures until then?",
+        keyWord: 'without',
+        confusable: 'with',
         replies: [
-          _ok("Understood — only if your morning frees up, then."),
-          _no("Good, so it'll be with me by Wednesday morning."),
+          _ok("I'll work round them and fill the gaps at the end."),
+          _no("Yes, having them in front of me makes it much quicker."),
           _no("Would it help if I took part of it off you?"),
         ],
-        restate: "Only a clear morning would let me start it before Wednesday.",
       ),
     ],
   ),
@@ -131,15 +125,14 @@ final _work = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "The review call's been pushed back fifteen minutes.",
+        line: "The review call's moved back fifteen minutes — does that still suit you?",
         keyWord: 'fifteen',
         confusable: 'fifty',
         replies: [
-          _ok("A quarter of an hour — fine, I'll dial in later."),
-          _no("Fifty? That puts us right into lunch."),
+          _ok("A quarter of an hour is fine. I'll dial in a bit later."),
+          _no("That takes us right into lunch, I'm afraid."),
           _no("Has everyone been told, or shall I pass it on?"),
         ],
-        restate: "It starts a quarter of an hour later than it says in the invite.",
       ),
     ],
   ),
@@ -152,7 +145,7 @@ final _work = <Scene>[
     turns: [
       _turn(
         type: TurnType.multiFact,
-        line: "The person covering the desk starts at nine, on the second floor.",
+        line: "Whoever's covering starts at nine on the second floor — can you tell them?",
         facts: [
           Fact(slot: 'time', value: 'nine', confusable: 'ten'),
           Fact(slot: 'place', value: 'the second floor', confusable: 'the third floor'),
@@ -162,30 +155,27 @@ final _work = <Scene>[
           _no("Ten on the second floor — I'll pass that on.", missed: 'time'),
           _no("Nine, up on the third floor. Got it.", missed: 'place'),
         ],
-        restate: "Second floor, and they're in from nine.",
       ),
       _turn(
-        line: "Ask them for the sheet before you go up.",
+        line: "Could you pick up the sheet before you go up?",
         keyWord: 'sheet',
         confusable: 'seat',
         replies: [
-          _ok("Will do — I'll pick the paperwork up on the way."),
-          _no("A seat? I can stand, it's not a long meeting."),
+          _ok("Will do — I'll collect the paperwork on the way."),
+          _no("I can stand, honestly. It's not a long meeting."),
           _no("Is that something they hand out, or do I ask?"),
         ],
-        restate: "Get the printed one off them before you head upstairs.",
       ),
       _turn(
         type: TurnType.polarity,
-        line: "Don't wait for me if the room's already open.",
+        line: "Don't wait for me if the room's already open, all right?",
         keyWord: "don't",
         confusable: 'do',
         replies: [
           _ok("Sure — if it's open I'll go straight in."),
-          _no("Right, I'll hang on outside for you either way."),
-          _no("Shall I text you when I get there?"),
+          _no("Of course. I'll hang on outside until you get there."),
+          _no("Shall I text you when I arrive?"),
         ],
-        restate: "An open room means go in; there's no need to stand about for me.",
       ),
     ],
   ),
@@ -193,7 +183,7 @@ final _work = <Scene>[
     id: 'builtin_w4',
     field: 'work',
     situation: 'a request',
-    title: 'A favour before lunch',
+    title: 'A favour before the launch',
     windowMs: 2000,
     turns: [
       _turn(
@@ -202,21 +192,19 @@ final _work = <Scene>[
         confusable: 'lunch',
         replies: [
           _ok("Before it goes live — yes, I'll make time today."),
-          _no("Before lunch is tight, but I can manage a quick look."),
+          _no("That's tight, but I can manage a quick look before I eat."),
           _no("How long do you think it needs from me?"),
         ],
-        restate: "It needs a pair of eyes on it before the thing goes out.",
       ),
       _turn(
-        line: "There's a copy on the desk if you'd rather read it on paper.",
+        line: "There's a copy on the desk — would you rather read it on paper?",
         keyWord: 'copy',
         confusable: 'coffee',
         replies: [
-          _ok("A printout — that's easier, thanks. I'll grab it."),
-          _no("Coffee would be lovely, actually. Thank you."),
+          _ok("A printout is easier, thanks. I'll pick it up."),
+          _no("That's very kind, but I've just had one."),
           _no("I'll read it on screen, it's quicker for me."),
         ],
-        restate: "There's a printed one sitting out, if paper suits you better.",
       ),
     ],
   ),
@@ -229,30 +217,28 @@ final _work = <Scene>[
     turns: [
       _turn(
         type: TurnType.polarity,
-        line: "They're not coming in on Friday after all.",
+        line: "They're not coming in on Friday — can you take the room booking down?",
         keyWord: 'not',
         confusable: '',
         replies: [
-          _ok("So Friday's clear again. I'll take the room booking down."),
-          _no("Friday it is — I'll get the room set up."),
-          _no("Do we know yet who's coming with them?"),
+          _ok("Of course. I'll free the room up again."),
+          _no("I'll make sure it's set up for them before they arrive."),
+          _no("Do we know yet who was going to come with them?"),
         ],
-        restate: "Friday's visit has fallen through; nobody's coming.",
       ),
       _turn(
-        line: "We'll do it on the thirteenth instead.",
+        line: "Shall we do it on the thirteenth instead?",
         keyWord: 'thirteenth',
         confusable: 'thirtieth',
         replies: [
-          _ok("The thirteenth — that's the week after next, isn't it?"),
-          _no("The thirtieth. That's nearly a month away."),
+          _ok("That's the week after next — yes, that works."),
+          _no("Nearly a month away? That feels like a long wait."),
           _no("Is that fixed, or might it move again?"),
         ],
-        restate: "It's been moved to the one after the twelfth.",
       ),
       _turn(
         type: TurnType.multiFact,
-        line: "Book the small room for two hours, from four.",
+        line: "Could you book the small room for two hours from four?",
         facts: [
           Fact(slot: 'length', value: 'two hours', confusable: 'an hour'),
           Fact(slot: 'time', value: 'four', confusable: 'five'),
@@ -262,18 +248,16 @@ final _work = <Scene>[
           _no("An hour from four — booked.", missed: 'length'),
           _no("Two hours from five, then.", missed: 'time'),
         ],
-        restate: "From four, and hold it for a couple of hours.",
       ),
       _turn(
-        line: "Let the team know, and copy in whoever takes the notes.",
+        line: "Would you tell the team, and copy in whoever takes the notes?",
         keyWord: 'notes',
         confusable: 'notice',
         replies: [
-          _ok("I'll tell everyone and add the person writing things up."),
-          _no("I'll send it out and give them plenty of notice."),
-          _no("Shall I put it in the team channel or send it round?"),
+          _ok("I'll tell everyone and add whoever's writing it up."),
+          _no("I'll send it round and give them plenty of warning."),
+          _no("Shall I put it in the team channel, or send it separately?"),
         ],
-        restate: "Tell the team, and put the person minuting it on there too.",
       ),
     ],
   ),
@@ -285,15 +269,14 @@ final _work = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "I'll walk over after this and look at it with you.",
+        line: "Shall I walk over after this and look at it with you?",
         keyWord: 'walk',
         confusable: 'work',
         replies: [
-          _ok("Come over whenever — I'll be at my desk."),
-          _no("If you'd rather work on it from there, that's fine too."),
+          _ok("Come across whenever — I'll be at my desk."),
+          _no("If you'd rather stay where you are, that's fine too."),
           _no("Great. Give me ten minutes to get it open."),
         ],
-        restate: "I'll come across to you once this is done, and we'll look together.",
       ),
     ],
   ),
@@ -305,27 +288,25 @@ final _work = <Scene>[
     windowMs: 3000,
     turns: [
       _turn(
-        line: "The last part still needs a bit of work.",
+        line: "The last part still needs some work, doesn't it?",
         keyWord: 'work',
         confusable: 'walk',
         replies: [
-          _ok("I'll go back over the ending and tidy it up."),
-          _no("A walk might help, actually — I've been staring at it."),
+          _ok("It does. I'll go back over the ending and tidy it."),
+          _no("Some air would probably help — I've been staring at it."),
           _no("Is it the wording, or is something missing?"),
         ],
-        restate: "The ending isn't finished; it wants another pass.",
       ),
       _turn(
         type: TurnType.polarity,
-        line: "I can hardly read the numbers in that table.",
+        line: "Can you hardly read the figures in that table either?",
         keyWord: 'hardly',
         confusable: '',
         replies: [
-          _ok("I'll make the figures bigger and give it more room."),
-          _no("Good — I thought the table came out clearly."),
+          _ok("No, they're very hard to make out. I'll make them bigger."),
+          _no("They came out clearly on mine, so it may just be the print."),
           _no("Would a chart work better than a table there?"),
         ],
-        restate: "Those figures are almost impossible to make out.",
       ),
     ],
   ),
@@ -337,30 +318,28 @@ final _work = <Scene>[
     windowMs: 3000,
     turns: [
       _turn(
-        line: "Leave it with the person on the front desk.",
+        line: "Could you leave it with the person on the front desk?",
         keyWord: 'leave',
         confusable: 'live',
         replies: [
           _ok("I'll drop it off downstairs on my way out."),
-          _no("They live near there, don't they? That's handy."),
+          _no("They're nearby, aren't they? That's handy."),
           _no("Does it need signing for, or can I just hand it over?"),
         ],
-        restate: "Hand it in downstairs and they'll keep hold of it.",
       ),
       _turn(
-        line: "I'll be back at half past ten.",
+        line: "I'll be back at half past ten — is that any use to you?",
         keyWord: 'ten',
         confusable: 'two',
         replies: [
-          _ok("Half ten — I'll catch you in the morning, then."),
-          _no("Half two. I'll come by after lunch."),
+          _ok("Yes, I'll catch you in the morning then."),
+          _no("That works — I'll come by after lunch."),
           _no("Shall I leave it on your desk in the meantime?"),
         ],
-        restate: "I'm back in about half an hour past the hour, in the morning.",
       ),
       _turn(
         type: TurnType.multiFact,
-        line: "Send it to the team channel, not by email, and mark it urgent.",
+        line: "Can you send it to the team channel and mark it urgent?",
         facts: [
           Fact(slot: 'channel', value: 'the team channel', confusable: 'email'),
           Fact(slot: 'mark', value: 'urgent', confusable: 'normal'),
@@ -370,7 +349,6 @@ final _work = <Scene>[
           _no("I'll email it and flag it urgent.", missed: 'channel'),
           _no("Team channel it is — I'll send it as normal.", missed: 'mark'),
         ],
-        restate: "Post it where the team can see it, and put the urgent flag on.",
       ),
     ],
   ),
@@ -387,15 +365,14 @@ final _travel = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "It goes from platform fourteen.",
+        line: "You want platform fourteen — do you know where that is?",
         keyWord: 'fourteen',
         confusable: 'forty',
         replies: [
-          _ok("Fourteen — is that up the stairs or along here?"),
-          _no("Forty? This station must be bigger than it looks."),
-          _no("Thanks. Do I need to be there early?"),
+          _ok("Not really. Is it up the stairs or along here?"),
+          _no("That many? This station must be bigger than it looks."),
+          _no("I'll find it, thanks. Do I need to be there early?"),
         ],
-        restate: "It leaves from the one after thirteen.",
       ),
     ],
   ),
@@ -408,26 +385,24 @@ final _travel = <Scene>[
     turns: [
       _turn(
         type: TurnType.polarity,
-        line: "The room won't be ready until two.",
+        line: "The room won't be ready until two — is that all right?",
         keyWord: "won't",
         confusable: 'will',
         replies: [
-          _ok("That's fine — could I leave my bag here until then?"),
-          _no("Wonderful, I'll go straight up and drop my things."),
+          _ok("That's fine. Could I leave my bag here until then?"),
+          _no("Wonderful — I'll go straight up and drop my things."),
           _no("Is there somewhere nearby you'd recommend for lunch?"),
         ],
-        restate: "Two o'clock is the earliest anyone can go up.",
       ),
       _turn(
-        line: "Breakfast is served until half past nine.",
+        line: "Breakfast runs until half past nine — will you be down by then?",
         keyWord: 'nine',
         confusable: 'five',
         replies: [
-          _ok("Half nine — I'll come down before then."),
-          _no("Half five? That's earlier than I usually manage."),
+          _ok("Yes, I'll come down before it finishes."),
+          _no("That's earlier than I usually manage, I'm afraid."),
           _no("Is it in this room, or somewhere else in the building?"),
         ],
-        restate: "They stop serving breakfast half an hour after nine.",
       ),
     ],
   ),
@@ -440,7 +415,7 @@ final _travel = <Scene>[
     turns: [
       _turn(
         type: TurnType.multiFact,
-        line: "Take the second turning and it's on your left.",
+        line: "Take the second turning and it's on your left — have you got that?",
         facts: [
           Fact(slot: 'turning', value: 'the second', confusable: 'the third'),
           Fact(slot: 'side', value: 'left', confusable: 'right'),
@@ -450,29 +425,26 @@ final _travel = <Scene>[
           _no("Third turning, then left. Got it.", missed: 'turning'),
           _no("Second turning and it's on the right.", missed: 'side'),
         ],
-        restate: "Not the first one — the next after that, and look to your left.",
       ),
       _turn(
-        line: "You can walk it in about ten minutes.",
+        line: "It's about ten minutes — are you happy to walk it?",
         keyWord: 'walk',
         confusable: 'work',
         replies: [
-          _ok("Ten minutes on foot — that's easy enough."),
-          _no("I could work for ten minutes while I wait, I suppose."),
-          _no("Is there a bus, or is walking the quickest?"),
+          _ok("Ten minutes on foot is nothing. I'll walk."),
+          _no("I could get something done while I wait, I suppose."),
+          _no("Is there a bus, or is that the quickest way?"),
         ],
-        restate: "On foot it's only about ten minutes from here.",
       ),
       _turn(
-        line: "There's a card machine by the door.",
+        line: "Did you see the card machine by the door?",
         keyWord: 'card',
         confusable: 'cart',
         replies: [
-          _ok("So I can pay by card. That's a relief."),
-          _no("A cart by the door? I'll watch out for it."),
+          _ok("I did — so I can pay that way. That's a relief."),
+          _no("I'll watch out for it on my way past."),
           _no("Does it take the small notes as well?"),
         ],
-        restate: "You can pay with a card — the machine's just inside.",
       ),
     ],
   ),
@@ -484,27 +456,25 @@ final _travel = <Scene>[
     windowMs: 3000,
     turns: [
       _turn(
-        line: "We've put you in a quiet room at the back.",
+        line: "We've put you in a quiet room at the back — does that suit?",
         keyWord: 'quiet',
         confusable: 'quite',
         replies: [
-          _ok("Away from the noise — that's very kind, thank you."),
-          _no("Quite a room, is it? I'm looking forward to seeing it."),
+          _ok("Away from the noise? Perfect, thank you."),
+          _no("It sounds lovely. I'm looking forward to seeing it."),
           _no("Does it look out over the street, or the other way?"),
         ],
-        restate: "It's round the back, so you shouldn't hear much.",
       ),
       _turn(
         type: TurnType.polarity,
-        line: "There's no charge for changing it.",
+        line: "There's no charge for changing it — shall I go ahead?",
         keyWord: 'no',
         confusable: '',
         replies: [
-          _ok("Nothing to pay — that's good of you."),
-          _no("How much is it? I'll pay it now while I'm here."),
-          _no("And can I change it again later if I need to?"),
+          _ok("Nothing to pay? Yes, please do."),
+          _no("How much is it? I'll settle up now while I'm here."),
+          _no("Can I change it again later if I need to?"),
         ],
-        restate: "Moving the booking costs you nothing at all.",
       ),
     ],
   ),
@@ -516,15 +486,14 @@ final _travel = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "That'll be thirteen altogether.",
+        line: "That's thirteen altogether — how would you like to pay?",
         keyWord: 'thirteen',
         confusable: 'thirty',
         replies: [
-          _ok("Thirteen — here you are."),
-          _no("Thirty? That's more than I expected."),
+          _ok("Cash is fine. Here you are."),
+          _no("That's more than I expected. Let me check what I have."),
           _no("Can I pay part of it by card?"),
         ],
-        restate: "It comes to one more than a dozen.",
       ),
     ],
   ),
@@ -537,26 +506,24 @@ final _travel = <Scene>[
     turns: [
       _turn(
         type: TurnType.polarity,
-        line: "It's not stopping here today.",
+        line: "It's not stopping here today — did nobody tell you?",
         keyWord: 'not',
         confusable: '',
         replies: [
-          _ok("So I'll need another one. Which should I take?"),
-          _no("Good — I'll wait on this platform, then."),
+          _ok("No, nobody did. Which one should I take instead?"),
+          _no("They did, thanks. I'll wait here on this platform."),
           _no("Is that just today, or all week?"),
         ],
-        restate: "That train goes straight through; it won't pull in here.",
       ),
       _turn(
-        line: "The next one's in eighteen minutes.",
+        line: "The next one's in eighteen minutes — can you wait?",
         keyWord: 'eighteen',
         confusable: 'eighty',
         replies: [
-          _ok("Under twenty minutes — I'll wait for that one."),
-          _no("Eighty minutes? I'd better find somewhere to sit."),
+          _ok("Under twenty minutes? Yes, I'll wait for that."),
+          _no("That long? I'd better find somewhere to sit."),
           _no("Does that one stop here, at least?"),
         ],
-        restate: "There's another due in a little under twenty minutes.",
       ),
     ],
   ),
@@ -569,7 +536,7 @@ final _travel = <Scene>[
     turns: [
       _turn(
         type: TurnType.multiFact,
-        line: "Go to gate twelve, and boarding starts at quarter past.",
+        line: "It's gate twelve and boarding starts at quarter past — all clear?",
         facts: [
           Fact(slot: 'gate', value: 'twelve', confusable: 'twenty'),
           Fact(slot: 'time', value: 'quarter past', confusable: 'half past'),
@@ -579,41 +546,37 @@ final _travel = <Scene>[
           _no("Gate twenty, from quarter past.", missed: 'gate'),
           _no("Gate twelve, and they start at half past.", missed: 'time'),
         ],
-        restate: "It's the gate after eleven, and they'll start fifteen minutes into the hour.",
       ),
       _turn(
-        line: "You'll need to take the bag off the cart first.",
+        line: "Could you take the bag off the cart first?",
         keyWord: 'cart',
         confusable: 'card',
         replies: [
-          _ok("I'll lift it off the trolley — one moment."),
-          _no("My card? Of course, it's here somewhere."),
+          _ok("Of course — I'll lift it off the trolley."),
+          _no("Certainly, it's here somewhere. One moment."),
           _no("Is it too heavy, or is it the size?"),
         ],
-        restate: "Lift it off the trolley before we weigh it.",
       ),
       _turn(
         type: TurnType.polarity,
-        line: "You can't take that through without a label on it.",
+        line: "You can't take that through without a label — shall I get you one?",
         keyWord: "can't",
         confusable: 'can',
         replies: [
-          _ok("Could I have a label, then? I'll write it out now."),
-          _no("That's good news — I'll carry it through as it is."),
+          _ok("Yes please. I'll write it out here."),
+          _no("No need, I'll carry it through as it is."),
           _no("What usually goes on the label?"),
         ],
-        restate: "Nothing goes through unlabelled, so it needs one first.",
       ),
       _turn(
-        line: "Boarding's from the desk on the left.",
+        line: "Boarding's from the desk on the left — can you see it?",
         keyWord: 'left',
         confusable: 'lift',
         replies: [
-          _ok("The desk on that side — thank you."),
-          _no("By the lift? I'll go and look for it."),
+          _ok("Yes, the desk on that side. Thank you."),
+          _no("I'll go and look for it. Is it well signed?"),
           _no("Should I go over now, or wait to be called?"),
         ],
-        restate: "It's the desk on the same side as your left hand.",
       ),
     ],
   ),
@@ -630,27 +593,25 @@ final _school = <Scene>[
     windowMs: 3000,
     turns: [
       _turn(
-        line: "The test is on Tuesday, so use the weekend.",
+        line: "The test is on Tuesday — will the weekend be enough for you?",
         keyWord: 'Tuesday',
         confusable: 'Thursday',
         replies: [
-          _ok("Tuesday — I'll get most of it done on Sunday, then."),
-          _no("Thursday gives me a bit more room. That helps."),
+          _ok("It should be. I'll get most of it done on Sunday."),
+          _no("With those extra days, yes, comfortably."),
           _no("How much of the term does it cover?"),
         ],
-        restate: "It's the day after Monday, so the weekend is your time.",
       ),
       _turn(
         type: TurnType.polarity,
-        line: "You won't need the book for it.",
+        line: "You won't need the book for it — have you got everything else?",
         keyWord: "won't",
         confusable: 'will',
         replies: [
-          _ok("So I can leave it at home. Good."),
-          _no("I'll bring it along, then — mine's at home."),
+          _ok("I have, thanks. I'll leave it at home, then."),
+          _no("Mine's at home, so I'll bring it in tomorrow."),
           _no("Is there anything we should bring?"),
         ],
-        restate: "Leave the book behind; it isn't used in this one.",
       ),
     ],
   ),
@@ -662,15 +623,14 @@ final _school = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "Have a look at the text before next week.",
+        line: "Could you look at the text before next week?",
         keyWord: 'text',
         confusable: 'test',
         replies: [
-          _ok("I'll read through it over the weekend."),
-          _no("Is the test next week? Nobody told us."),
+          _ok("Yes, I'll read through it over the weekend."),
+          _no("Is there one next week? Nobody told us."),
           _no("How long is it, roughly?"),
         ],
-        restate: "Read the piece through before we meet again.",
       ),
     ],
   ),
@@ -683,7 +643,7 @@ final _school = <Scene>[
     turns: [
       _turn(
         type: TurnType.multiFact,
-        line: "You take the first part, and hand it in by Monday.",
+        line: "Will you take the first part and hand it in by Monday?",
         facts: [
           Fact(slot: 'part', value: 'the first part', confusable: 'the second part'),
           Fact(slot: 'day', value: 'Monday', confusable: 'Friday'),
@@ -693,30 +653,27 @@ final _school = <Scene>[
           _no("Second part, by Monday. Fine.", missed: 'part'),
           _no("The first part, in by Friday, then.", missed: 'day'),
         ],
-        restate: "The opening section is yours, and it's due at the start of the week.",
       ),
       _turn(
-        line: "Send it to me and I'll accept it either way.",
+        line: "Send it however you like — I'll accept it either way, all right?",
         keyWord: 'accept',
         confusable: 'except',
         replies: [
-          _ok("So you'll take it however it comes. That's a relief."),
-          _no("Except what? Is there a part I should leave out?"),
+          _ok("That's a relief. I'll send whatever I have."),
+          _no("Which part should I leave out, then?"),
           _no("Shall I send the whole thing, or just my bit?"),
         ],
-        restate: "However you send it, I'll take it.",
       ),
       _turn(
         type: TurnType.polarity,
-        line: "I'd rather you didn't start the second half yet.",
-        keyWord: "didn't",
-        confusable: 'did',
+        line: "Could you not start the second half yet?",
+        keyWord: 'not',
+        confusable: '',
         replies: [
-          _ok("I'll leave it for now and wait to hear from you."),
+          _ok("I'll leave it and wait to hear from you."),
           _no("I'll make a start on it this evening, then."),
           _no("Is something changing in that section?"),
         ],
-        restate: "Hold off on the second half until I say.",
       ),
     ],
   ),
@@ -728,26 +685,24 @@ final _school = <Scene>[
     windowMs: 3000,
     turns: [
       _turn(
-        line: "It's in room thirty this week.",
+        line: "It's in room thirty this week — do you know the one?",
         keyWord: 'thirty',
         confusable: 'thirteen',
         replies: [
-          _ok("Room thirty — is that the one at the end?"),
-          _no("Thirteen. That's the small one downstairs, isn't it?"),
+          _ok("Is that the big one at the end of the corridor?"),
+          _no("The small one downstairs, isn't it? I know it."),
           _no("Just this week, or from now on?"),
         ],
-        restate: "It's the room numbered three tens.",
       ),
       _turn(
-        line: "Take a seat near the front if you can.",
+        line: "Could you take a seat nearer the front?",
         keyWord: 'seat',
         confusable: 'sheet',
         replies: [
-          _ok("I'll sit nearer the front this time."),
-          _no("A sheet? I don't think I was given one."),
+          _ok("Of course. I'll move up a few rows."),
+          _no("I don't think I was given one, sorry."),
           _no("Does it matter much where we sit?"),
         ],
-        restate: "Sit somewhere close to the front if there's room.",
       ),
     ],
   ),
@@ -759,27 +714,25 @@ final _school = <Scene>[
     windowMs: 3000,
     turns: [
       _turn(
-        line: "You'll need to confirm it before Friday.",
+        line: "Can you confirm it before Friday?",
         keyWord: 'confirm',
         confusable: 'conform',
         replies: [
-          _ok("I'll say yes to it before the end of the week."),
+          _ok("Yes, I'll say yes to it before the end of the week."),
           _no("I'll make sure mine matches the others, then."),
           _no("Where do I do that — online, or in person?"),
         ],
-        restate: "Say yes to it in writing, and do it before Friday.",
       ),
       _turn(
         type: TurnType.polarity,
-        line: "It's not open on Thursdays.",
+        line: "It's not open on Thursdays — can you come another day?",
         keyWord: 'not',
         confusable: '',
         replies: [
-          _ok("I'll go on another day, then."),
-          _no("Thursday suits me. I'll go after class."),
+          _ok("I can. I'll go on Wednesday instead."),
+          _no("Thursday suits me best. I'll go after class."),
           _no("What are the usual hours?"),
         ],
-        restate: "Thursday is the one day it stays shut.",
       ),
     ],
   ),
@@ -791,15 +744,14 @@ final _school = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "You can keep it for fourteen days.",
+        line: "You can keep it for fourteen days — is that long enough?",
         keyWord: 'fourteen',
         confusable: 'forty',
         replies: [
-          _ok("Two weeks — that should be plenty."),
-          _no("Forty days? That's more than I'll need."),
+          _ok("Two weeks should be plenty, thank you."),
+          _no("That's far more than I'll need, but thank you."),
           _no("Can I take it out again after that?"),
         ],
-        restate: "It's yours for two weeks before it comes back.",
       ),
     ],
   ),
@@ -811,19 +763,18 @@ final _school = <Scene>[
     windowMs: 4000,
     turns: [
       _turn(
-        line: "Your last piece was much better than the first.",
+        line: "This is much better than your first one — can you see why?",
         keyWord: 'first',
         confusable: 'worst',
         replies: [
-          _ok("So I've come on since the start. That's good to hear."),
-          _no("Better than my worst — I'll take that, I suppose."),
-          _no("What made the difference, do you think?"),
+          _ok("I think so. I've come a long way since the start."),
+          _no("It would be hard to do worse than that one, I suppose."),
+          _no("Not really. What made the difference?"),
         ],
-        restate: "Compared with the one you handed in at the beginning, it's come a long way.",
       ),
       _turn(
         type: TurnType.multiFact,
-        line: "Come and see me on Wednesday, in the office on the ground floor.",
+        line: "Can you come on Wednesday, to the office on the ground floor?",
         facts: [
           Fact(slot: 'day', value: 'Wednesday', confusable: 'Tuesday'),
           Fact(slot: 'place', value: 'the ground floor', confusable: 'the first floor'),
@@ -833,19 +784,17 @@ final _school = <Scene>[
           _no("Tuesday, on the ground floor. Noted.", missed: 'day'),
           _no("Wednesday, first floor office, then.", missed: 'place'),
         ],
-        restate: "Midweek, and it's the office downstairs rather than up.",
       ),
       _turn(
         type: TurnType.polarity,
-        line: "Don't rewrite the whole thing.",
+        line: "Don't rewrite the whole thing — could you just fix what's marked?",
         keyWord: "don't",
         confusable: 'do',
         replies: [
-          _ok("I'll just work on the parts you marked, then."),
+          _ok("That's much easier. I'll only touch the marked parts."),
           _no("I'll start again from the beginning this week."),
           _no("Which parts should I look at first?"),
         ],
-        restate: "There's no need to start it again — leave most of it as it is.",
       ),
     ],
   ),
@@ -862,15 +811,14 @@ final _daily = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "I've left it with the neighbour at forty.",
+        line: "I've left it with the neighbour at forty — is that all right?",
         keyWord: 'forty',
         confusable: 'fourteen',
         replies: [
-          _ok("Number forty — I'll knock on my way past."),
-          _no("Fourteen? That's right down the other end."),
+          _ok("That's fine, I'll knock on my way past."),
+          _no("That's right down the other end, but I'll manage."),
           _no("Did they say when they'd be in?"),
         ],
-        restate: "It's next door but one, at the four-tens house.",
       ),
     ],
   ),
@@ -882,27 +830,25 @@ final _daily = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "The dessert comes with it.",
+        line: "The dessert comes with it — would you like to choose one?",
         keyWord: 'dessert',
         confusable: 'desert',
         replies: [
-          _ok("Something sweet as well? That's good value."),
-          _no("The desert one — is that the spicy dish?"),
-          _no("Could I have that without, and pay less?"),
+          _ok("Something sweet is included? Then yes, please."),
+          _no("Is that the spicy one? I'd rather not, thanks."),
+          _no("Could I have it without, and pay less?"),
         ],
-        restate: "The sweet course is included in the price.",
       ),
       _turn(
         type: TurnType.polarity,
-        line: "We can't do it without the card.",
+        line: "We can't do it without the card — do you have it with you?",
         keyWord: 'without',
         confusable: 'with',
         replies: [
-          _ok("I'll find the card — one second."),
-          _no("Good, because I've left mine at home."),
+          _ok("I do, somewhere. One second."),
+          _no("I've left it at home, but that's no problem then."),
           _no("Does a photo of it count?"),
         ],
-        restate: "The card has to be here or it can't be done.",
       ),
     ],
   ),
@@ -915,7 +861,7 @@ final _daily = <Scene>[
     turns: [
       _turn(
         type: TurnType.multiFact,
-        line: "I'll come round at seven, and I'll bring the dog.",
+        line: "Can I come round at seven and bring the dog?",
         facts: [
           Fact(slot: 'time', value: 'seven', confusable: 'eleven'),
           Fact(slot: 'who', value: 'the dog', confusable: 'the children'),
@@ -923,20 +869,18 @@ final _daily = <Scene>[
         replies: [
           _ok("Seven, and the dog's welcome. See you then."),
           _no("Eleven with the dog — that's late, but fine.", missed: 'time'),
-          _no("Seven, and bring the children along.", missed: 'who'),
+          _no("Seven, and do bring the children along.", missed: 'who'),
         ],
-        restate: "I'll be there at seven, and the dog's coming too.",
       ),
       _turn(
-        line: "Don't worry about food, we've eaten.",
+        line: "We've eaten already — is that all right?",
         keyWord: 'eaten',
         confusable: 'eating',
         replies: [
-          _ok("Nothing to cook, then. I'll put the kettle on instead."),
-          _no("You're still eating? Take your time, there's no rush."),
-          _no("Are you sure? It's no trouble at all."),
+          _ok("Of course. I'll put the kettle on instead, then."),
+          _no("Take your time. There's no rush at all."),
+          _no("Are you sure? It's no trouble to make something."),
         ],
-        restate: "We've already had ours, so there's no need to make anything.",
       ),
     ],
   ),
@@ -948,38 +892,35 @@ final _daily = <Scene>[
     windowMs: 4000,
     turns: [
       _turn(
-        line: "Someone can come out on the fifteenth.",
+        line: "Someone can come on the fifteenth — does that work?",
         keyWord: 'fifteenth',
         confusable: 'fiftieth',
         replies: [
-          _ok("The fifteenth — that's the middle of the month, isn't it?"),
-          _no("The fiftieth? There aren't that many days in a month."),
+          _ok("The middle of the month? Yes, that's fine."),
+          _no("There aren't that many days in a month, are there?"),
           _no("Is there anything earlier?"),
         ],
-        restate: "It's the day after the fourteenth.",
       ),
       _turn(
         type: TurnType.polarity,
-        line: "You don't have to be in for it.",
+        line: "You don't have to be in for it — shall I book it anyway?",
         keyWord: "don't",
         confusable: 'do',
         replies: [
-          _ok("So I can leave the key next door and go to work."),
-          _no("I'll take the morning off, then, to be here."),
-          _no("How will they get in?"),
+          _ok("Please do. I'll leave the key next door and go to work."),
+          _no("Then I'll take the morning off to be here."),
+          _no("How would they get in?"),
         ],
-        restate: "Nobody needs to be home while they do it.",
       ),
       _turn(
-        line: "There's a form to sign when it's done.",
+        line: "There's a form to sign at the end — will you be around?",
         keyWord: 'form',
         confusable: 'phone',
         replies: [
-          _ok("A bit of paperwork at the end — that's fine."),
-          _no("A phone call afterwards? I'll keep mine on me."),
+          _ok("Some paperwork? I'll make sure someone's here."),
+          _no("I'll keep mine on me all afternoon, then."),
           _no("Does it get left with me, or do they take it?"),
         ],
-        restate: "They leave a sheet to put your name on once they've finished.",
       ),
     ],
   ),
@@ -991,15 +932,14 @@ final _daily = <Scene>[
     windowMs: 2000,
     turns: [
       _turn(
-        line: "I'll be away for a week from Sunday.",
+        line: "I'm away for a week from Sunday — could you keep an eye on things?",
         keyWord: 'Sunday',
         confusable: 'Monday',
         replies: [
-          _ok("From Sunday — I'll keep an eye on the place."),
-          _no("Monday. So you've got the weekend at home first."),
-          _no("Anywhere nice, or is it work?"),
+          _ok("Of course. From the end of this week, then."),
+          _no("So you've got the whole weekend at home first? Lovely."),
+          _no("Happily. Anywhere nice, or is it work?"),
         ],
-        restate: "It starts on the last day of the week and runs seven days.",
       ),
     ],
   ),
@@ -1012,26 +952,24 @@ final _daily = <Scene>[
     turns: [
       _turn(
         type: TurnType.polarity,
-        line: "This one's never busy in the morning.",
+        line: "It's never busy here in the morning — did you not know?",
         keyWord: 'never',
         confusable: 'always',
         replies: [
-          _ok("I'll come earlier next time, then."),
-          _no("So mornings are the worst? I'll avoid them."),
+          _ok("I didn't. I'll come earlier next time, then."),
+          _no("I did, which is why I avoid them. Afternoons are better."),
           _no("What about later in the day?"),
         ],
-        restate: "Mornings here are always quiet.",
       ),
       _turn(
-        line: "Put it on the desk by the window.",
+        line: "Could you put it on the desk by the window?",
         keyWord: 'desk',
         confusable: 'disk',
         replies: [
-          _ok("On the table over there — will do."),
-          _no("A disk? I don't think I was given one."),
+          _ok("On the table over there? Will do."),
+          _no("I don't think I was given one, sorry."),
           _no("Should I leave my name with it?"),
         ],
-        restate: "Leave it on the table that's next to the window.",
       ),
     ],
   ),
@@ -1047,23 +985,21 @@ final _daily = <Scene>[
         keyWord: 'twelve',
         confusable: 'twenty',
         replies: [
-          _ok("Half twelve suits me — I'll see you then."),
-          _no("Half twenty? I'm not sure what that means."),
+          _ok("Half twelve suits me. See you then."),
+          _no("I'm not quite sure what time you mean."),
           _no("Could we make it a little later than that?"),
         ],
-        restate: "Thirty minutes past midday, rather than when we said.",
       ),
       _turn(
         type: TurnType.polarity,
-        line: "I can't stay long, though.",
+        line: "I can't stay long, though — is that still worth it?",
         keyWord: "can't",
         confusable: 'can',
         replies: [
-          _ok("A quick one, then. That's fine."),
-          _no("Good, we've got all afternoon."),
+          _ok("A quick one is better than none. Let's do it."),
+          _no("Plenty of time, then. We can take the afternoon over it."),
           _no("Shall we make it another day instead?"),
         ],
-        restate: "I'll have to be off fairly soon after we sit down.",
       ),
     ],
   ),
@@ -1076,7 +1012,7 @@ final _daily = <Scene>[
     turns: [
       _turn(
         type: TurnType.multiFact,
-        line: "Go left at the bridge, and it's about twenty minutes from there.",
+        line: "Go left at the bridge — it's twenty minutes from there, all right?",
         facts: [
           Fact(slot: 'way', value: 'left', confusable: 'right'),
           Fact(slot: 'length', value: 'twenty minutes', confusable: 'ten minutes'),
@@ -1086,7 +1022,6 @@ final _daily = <Scene>[
           _no("Right at the bridge, then twenty minutes.", missed: 'way'),
           _no("Left at the bridge, about ten minutes.", missed: 'length'),
         ],
-        restate: "Bear left when you reach the bridge; it's a good twenty minutes after that.",
       ),
     ],
   ),

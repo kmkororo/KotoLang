@@ -111,9 +111,6 @@ class Turn {
 
   final List<Reply> replies;
 
-  /// What they say when the moment to reply goes by: the same thing in
-  /// different words, never the same sentence, so it is not a second listen.
-  final String restate;
 
   const Turn({
     this.type = TurnType.keyword,
@@ -123,7 +120,6 @@ class Turn {
     this.confusable = '',
     this.facts = const [],
     required this.replies,
-    this.restate = '',
   });
 
   /// Where the right reply sits. Always exactly one.
@@ -140,7 +136,6 @@ class Turn {
         'confusable': confusable,
         if (facts.isNotEmpty) 'facts': [for (final f in facts) f.toJson()],
         'replies': [for (final r in replies) r.toJson()],
-        'restate': restate,
       };
 
   factory Turn.fromJson(Map<String, dynamic> j) => Turn(
@@ -157,7 +152,6 @@ class Turn {
           for (final r in (j['replies'] as List? ?? const []))
             Reply.fromJson(Map<String, dynamic>.from(r as Map))
         ],
-        restate: '${j['restate'] ?? ''}',
       );
 }
 

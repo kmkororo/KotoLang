@@ -590,8 +590,10 @@ class _TreePainter extends CustomPainter {
     if (shape.isSeed) return plan;
 
     // A young stem is short but not invisible, and grows from there. The
-    // constant is what the very first answer buys.
-    final trunkH = headroom * (0.13 + 0.53 * grown);
+    // first term is the part that is buried, added back so that what shows
+    // above the soil is the same at every size — without it a seedling stood
+    // with its crown in the earth.
+    final trunkH = 13 + headroom * (0.16 + 0.50 * grown);
     // The foot is buried: the mound's near lip is painted over it afterwards,
     // so the stem goes into the ground instead of resting on top of it.
     final base = Offset(cx + 3, soil + 13);
@@ -866,9 +868,14 @@ class _TreePainter extends CustomPainter {
     // The near lip of the mound, painted over the roots. This is the only
     // depth in the picture and the one place it is needed: the roots have to
     // be seen going into the ground rather than stopping on top of it.
+    //
+    // Only as wide as the roots. It used to be repainted across the whole
+    // panel, which buried everything that hung below the soil line — and on
+    // a young tree that is the leaves, which sit barely above it.
+    final lip = plan.w0 * 0.75 * (1.1 + 2.2 * _woodiness) * 1.35 + 10;
     canvas.save();
-    canvas.clipRect(Rect.fromLTRB(plan.cx - 400, plan.soil + 2,
-        plan.cx + 400, plan.groundY + _groundH));
+    canvas.clipRect(Rect.fromLTRB(plan.cx - lip, plan.soil + 2,
+        plan.cx + lip, plan.groundY + _groundH));
     _mound(canvas, Offset(plan.cx, plan.groundY), _groundH);
     canvas.restore();
   }

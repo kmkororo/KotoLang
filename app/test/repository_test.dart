@@ -19,7 +19,7 @@ import 'package:kotolang/domain/field.dart';
 import 'package:kotolang/domain/ladder.dart';
 import 'package:kotolang/domain/progress_service.dart';
 
-import 'fixtures.dart' show climb, pack, scene, turn;
+import 'fixtures.dart' show pack, scene, turn;
 
 /// A profile reply naming [realms] as the learner's areas. Exported because
 /// three other suites start from the same place.
@@ -145,7 +145,6 @@ void main() {
       final t = s.turns.single;
       expect(s.windowMs, 2400);
       expect(t.keyWord, 'Thursday');
-      expect(t.restate, isNotEmpty);
       expect(t.replies, hasLength(3));
       expect(t.replies[t.answer].native, isNotEmpty,
           reason: 'the translation followed its own reply through the shuffle');
@@ -244,15 +243,24 @@ void main() {
           reason: 'closing a field hands its opening back');
     });
 
-    test('the ladder opens the next one, and says how far off it is', () async {
-      await fourAreas();
-      await repo.chooseFields(
-          [for (final r in (await repo.realms()).take(freeRealmSlots)) r.id]);
-      expect(await repo.fieldOpeningsLeft(), 0);
-      expect(await repo.stepsToNextFieldOpening(), stepsPerField);
+    test('the first batch in a field is free and the next one is not', () async {
+      expect(await repo.sceneAddCostFor('work'), 0);
+      await repo.importScenes(pack([scene('Talk')]), uiLanguage: 'en', field: 'work');
+      expect(await repo.sceneAddCostFor('work'), sceneAddCost);
+    });
 
-      await climb(repo, stepsPerField);
-      expect(await repo.fieldOpeningsLeft(), 1);
+    test('answering quickly is what fills the balance', () async {
+      await repo.importScenes(pack([scene('Talk')]), uiLanguage: 'en', field: 'work');
+      final id = (await repo.scenes()).single.id;
+
+      final quick = await repo.recordTurn(
+          sceneId: id, turn: 0, correct: true, windowLeft: 1);
+      final slow = await repo.recordTurn(
+          sceneId: id, turn: 0, correct: true, windowLeft: 0);
+      final wrong = await repo.recordTurn(sceneId: id, turn: 0, correct: false);
+      expect(quick.seeds, greaterThan(slow.seeds));
+      expect(wrong.seeds, 0);
+      expect((await repo.loadProgress()).seeds, quick.seeds + slow.seeds);
     });
   });
 

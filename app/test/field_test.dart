@@ -15,7 +15,7 @@ import 'package:kotolang/domain/field.dart';
 import 'package:kotolang/domain/progress_service.dart';
 
 import 'repository_test.dart' show profileJson;
-import 'fixtures.dart' show builtScene, climb, pack, realm, scene;
+import 'fixtures.dart' show builtScene, pack, realm, scene;
 
 void main() {
   late AppDatabase db;
@@ -98,16 +98,17 @@ void main() {
     expect((await repo.realms()).where((r) => r.unlocked), hasLength(freeRealmSlots));
   });
 
-  test('a field the learner types still needs room on the ladder', () async {
+  test('a field the learner types costs the same as any other', () async {
     // Three openings are owed from the start, so the first three land; the
-    // fourth waits for the climb rather than for a balance.
+    // fourth is bought.
     for (final n in ['Cooking', 'Sailing', 'Rowing']) {
       expect(await repo.addField(n), isNotNull, reason: n);
     }
     expect(await repo.fieldOpeningsLeft(), 0);
-    expect(await repo.addField('Chess'), isNull);
+    expect(await repo.addField('Chess'), isNull, reason: 'nothing in the balance');
 
-    await climb(repo, stepsPerField);
+    await repo.saveProgress(
+        (await repo.loadProgress()).copyWith(seeds: realmUnlockCost));
     final more = await repo.addField('Chess');
     expect(more, isNotNull);
     expect(more!.unlocked, isTrue);
@@ -118,7 +119,7 @@ void main() {
     expect((await repo.realms()).where((r) => r.normKeyValue == 'cooking'), hasLength(1));
   });
 
-  test('three open at the start, and the fourth waits for the ladder', () async {
+  test('three open at the start, and the fourth is paid for', () async {
     for (final n in ['A', 'B', 'C', 'D']) {
       await db.into(db.realms).insertOnConflictUpdate(realmToRow(realm(n).copyWith(unlocked: false)));
     }
@@ -128,13 +129,14 @@ void main() {
     expect(await repo.openField('C'), isTrue);
     expect(await repo.fieldOpeningsLeft(), 0);
 
-    // The fourth is not for sale, because nothing is.
+    // The fourth needs Seeds, and a short balance opens nothing.
     expect(await repo.openField('D'), isFalse);
-    expect(await repo.stepsToNextFieldOpening(), stepsPerField);
+    expect((await repo.realms()).where((r) => r.unlocked), hasLength(3));
 
-    await climb(repo, stepsPerField);
-    expect(await repo.fieldOpeningsLeft(), 1);
+    await repo.saveProgress(
+        (await repo.loadProgress()).copyWith(seeds: realmUnlockCost));
     expect(await repo.openField('D'), isTrue);
+    expect((await repo.loadProgress()).seeds, 0, reason: 'and it was spent');
     expect(await repo.openField('D'), isTrue, reason: 'already open, nothing owed');
   });
 

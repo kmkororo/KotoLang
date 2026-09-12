@@ -26,7 +26,6 @@ Map<String, dynamic> turn({
             {'text': 'Tuesday, got it.', 'correct': false},
             {'text': 'Could it be sooner?', 'correct': false},
           ],
-      'restate': 'It should reach you Thursday.',
       'translations': ?translations,
     };
 
@@ -210,7 +209,6 @@ void main() {
     expect(back.id, s.id);
     expect(back.windowMs, s.windowMs);
     expect(back.turns.first.type, TurnType.polarity);
-    expect(back.turns.first.restate, s.turns.first.restate);
     expect(back.turns.first.replies[back.turns.first.answer].text,
         s.turns.first.replies[s.turns.first.answer].text);
   });

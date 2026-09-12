@@ -226,22 +226,22 @@ class _FeedbackButton extends StatelessWidget {
 }
 
 
-/// Opens one of the areas the AI read off the profile, when the ladder has
-/// room for it. When [toScenes] is set, the scenes screen follows with the
-/// field already chosen — an open field with no scenes is nothing yet.
-/// Returns true when opened.
+/// Opens one of the areas the AI read off the profile: as one of the starting
+/// three while those are still owed, for Seeds after that. When [toScenes] is
+/// set, the scenes screen follows with the field already chosen — an open
+/// field with no scenes is nothing yet. Returns true when opened.
 Future<bool> openLockedField(BuildContext context, WidgetRef ref, Field f,
     {bool toScenes = false}) async {
   final s = ref.read(stringsProvider);
   final repo = ref.read(repositoryProvider);
-  // Room on the ladder means it simply opens: there is nothing to agree to,
-  // because nothing is being spent. Without room the popup is all that
-  // happens, and all the popup does is say how far off the next one is.
-  final room = await repo.fieldOpeningsLeft() > 0;
+  // One of the starting three simply opens: nothing is owed, so there is
+  // nothing to agree to. Past those it costs Seeds, and the popup says so
+  // before a single one is spent.
+  final free = await repo.fieldOpeningsLeft() > 0;
   if (!context.mounted) return false;
-  if (!room) {
-    await showLockedFieldDialog(context, ref, f.label);
-    return false;
+  if (!free) {
+    final ok = await showLockedFieldDialog(context, ref, f.label);
+    if (!ok || !context.mounted) return false;
   }
   final opened = await repo.openField(f.id);
   if (!context.mounted || !opened) return false;
@@ -259,35 +259,42 @@ Future<bool> openLockedField(BuildContext context, WidgetRef ref, Field f,
   return true;
 }
 
-/// The closed field's popup: how many steps of the ladder stand between the
-/// learner and this field.
+/// The closed field's popup: what it costs, what the learner has, and — when
+/// the balance covers it — the button that pays. Returns true only when that
+/// button was pressed.
 ///
-/// It only ever appears when the ladder has no room, because room means the
-/// field simply opens. There is no price and no balance, so there is nothing
-/// to agree to — this exists to answer "why not yet", and then to be closed.
-Future<void> showLockedFieldDialog(BuildContext context, WidgetRef ref, String label) async {
+/// It only appears past the starting three, because those are free and
+/// opening one needs no agreement. Past them something is being spent, and
+/// nothing should be spent without the learner seeing the number first.
+Future<bool> showLockedFieldDialog(BuildContext context, WidgetRef ref, String label) async {
   final s = ref.read(stringsProvider);
-  final steps = await ref.read(repositoryProvider).stepsToNextFieldOpening();
-  if (!context.mounted) return;
-  await showDialog<void>(
+  final seeds = (await ref.read(repositoryProvider).loadProgress()).seeds;
+  final enough = seeds >= realmUnlockCost;
+  if (!context.mounted) return false;
+  final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      icon: const Icon(Icons.lock_outline),
+      icon: Icon(enough ? Icons.lock_open_outlined : Icons.lock_outline),
       // A field name can be long; the default headline size wraps it into
       // three lines on a narrow screen.
       titleTextStyle: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
       title: Text(s.t('lockedFieldTitle', {'realm': label})),
-      content: Text(steps == null
-          ? s.t('fieldLadderLocked')
-          : s.t('fieldLadderSteps', {'n': steps})),
+      content: Text(s.t('lockedFieldBody', {'n': realmUnlockCost, 'have': seeds})),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: Text(s.t('close')),
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text(s.t(enough ? 'cancel' : 'close')),
         ),
+        if (enough)
+          FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(s.t('seedsCost', {'n': realmUnlockCost})),
+          ),
       ],
     ),
   );
+  return ok ?? false;
 }
 
 /// One field as a card: the name on its own line, so a long one wraps

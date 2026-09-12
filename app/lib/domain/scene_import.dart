@@ -190,7 +190,6 @@ NormalisedScenes normaliseScenes(Map<String, dynamic> data) {
       confusable: clean(j['confusable']),
       facts: facts,
       replies: withNatives,
-      restate: clean(j['restate']),
     ),
     reason: null
   );

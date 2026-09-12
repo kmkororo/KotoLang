@@ -7,7 +7,6 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kotolang/core/util.dart';
 import 'package:kotolang/domain/models.dart';
-import 'package:kotolang/domain/ladder.dart';
 import 'package:kotolang/domain/progress_service.dart';
 
 void main() {
@@ -111,30 +110,27 @@ void main() {
     });
   });
 
-  // ============================================================= opening
-  group('what opens a field', () {
-    test('the three chosen at the start are there from the start', () {
-      expect(fieldsOpenAt(0), freeRealmSlots);
+  // ========================================================= what it pays
+  group('what a turn is worth', () {
+    test('a wrong answer is worth nothing', () {
+      // Paying for those would make the balance a measure of time spent
+      // rather than of anything heard.
+      expect(seedsForTurn(correct: false, clean: true, windowLeft: 1), 0);
+      expect(seedsForTurn(correct: false, clean: false, windowLeft: 0), 0);
     });
 
-    test('one more opens every few steps of the ladder, and never unopens', () {
-      var last = fieldsOpenAt(0);
-      for (var reached = 0; reached <= ladderSteps; reached++) {
-        final now = fieldsOpenAt(reached);
-        expect(now, greaterThanOrEqualTo(last), reason: 'step $reached');
-        expect(now, greaterThanOrEqualTo(freeRealmSlots), reason: 'step $reached');
-        last = now;
-      }
-      expect(fieldsOpenAt(stepsPerField), freeRealmSlots + 1);
-      expect(fieldsOpenAt(stepsPerField * 2), freeRealmSlots + 2);
+    test('the faster it was, the more it pays', () {
+      final slow = seedsForTurn(correct: true, clean: true, windowLeft: 0);
+      final quick = seedsForTurn(correct: true, clean: true, windowLeft: 1);
+      expect(slow, seedFloor);
+      expect(quick, seedTop);
+      expect(seedsForTurn(correct: true, clean: true, windowLeft: 0.5),
+          inInclusiveRange(slow, quick));
     });
 
-    test('it says how far off the next one is, and stops saying it at the end', () {
-      expect(stepsToNextField(0, fieldsHeld: 9), stepsPerField);
-      expect(stepsToNextField(stepsPerField - 1, fieldsHeld: 9), 1);
-      // Everything the profile named is already open: there is nothing left
-      // for the number to be about.
-      expect(stepsToNextField(0, fieldsHeld: freeRealmSlots), isNull);
+    test('a second hearing pays the floor and no more', () {
+      // It was right, and it was still not caught the first time.
+      expect(seedsForTurn(correct: true, clean: false, windowLeft: 1), seedFloor);
     });
   });
 

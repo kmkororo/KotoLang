@@ -478,11 +478,11 @@ class SrsState {
 
 /// What the app keeps about the habit, as opposed to the ability.
 ///
-/// There is no balance here and nothing to spend. The v1 model had Koto
-/// Seeds, a chest, a boost and a rest day; all of it is gone, because a
-/// second number that goes up invites a shop, and a shop has nothing to do
-/// with hearing English. The only things that open are opened by the ladder,
-/// which is the ability — see `ladder.dart`.
+/// Ability is the ladder's, and the two are kept apart on purpose. Seeds are
+/// paid for answering quickly and are spent on *more* — another field, more
+/// conversations in one — which is a question of how much material there is,
+/// not of how hard it is to hear. The ladder never takes payment and is
+/// never paid: it only ever says what the learner can hold.
 class Progress {
   final int streak;
   final int bestStreak;
@@ -490,15 +490,19 @@ class Progress {
 
   /// The streak that was running when it broke, set during start-up
   /// reconciliation so home can say plainly what happened while the app was
-  /// closed. Cleared once shown. There is no longer anything that could have
-  /// saved it — a missed day is a missed day, and the record says so.
+  /// closed. Cleared once shown. There is nothing that could have saved it —
+  /// a missed day is a missed day, and the record says so.
   final int streakLostFrom;
+
+  /// Koto Seeds. Earned by answering, and quickly; spent on more to answer.
+  final int seeds;
 
   const Progress({
     this.streak = 0,
     this.bestStreak = 0,
     this.lastStudyDay,
     this.streakLostFrom = 0,
+    this.seeds = 0,
   });
 
   Progress copyWith({
@@ -506,26 +510,28 @@ class Progress {
     int? bestStreak,
     String? lastStudyDay,
     int? streakLostFrom,
+    int? seeds,
   }) =>
       Progress(
         streak: streak ?? this.streak,
         bestStreak: bestStreak ?? this.bestStreak,
         lastStudyDay: lastStudyDay ?? this.lastStudyDay,
         streakLostFrom: streakLostFrom ?? this.streakLostFrom,
+        seeds: seeds ?? this.seeds,
       );
 
   Map<String, dynamic> toJson() => {
         'streak': streak,
         'bestStreak': bestStreak,
         'lastStudyDay': lastStudyDay,
+        'seeds': seeds,
       };
 
-  /// Anything the v1 blob carried beyond these three is dropped on the way
-  /// in. There is nowhere left to put a balance.
   factory Progress.fromJson(Map<String, dynamic> j) => Progress(
         streak: (j['streak'] ?? 0) as int,
         bestStreak: (j['bestStreak'] ?? 0) as int,
         lastStudyDay: j['lastStudyDay'] as String?,
+        seeds: (j['seeds'] ?? 0) as int,
       );
 }
 

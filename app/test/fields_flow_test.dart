@@ -18,7 +18,7 @@ import 'package:kotolang/features/tree_view.dart';
 
 import 'app_flow_test.dart' show pumpApp, seedLearner;
 import 'repository_test.dart' show profileJson;
-import 'fixtures.dart' show climb, pack, scene;
+import 'fixtures.dart' show pack, scene;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -196,7 +196,7 @@ void main() {
     expect(find.text('KotoLang'), findsOneWidget);
   });
 
-  testWidgets('opening an area from the profile waits on the ladder, not a price',
+  testWidgets('opening an area from the profile costs Seeds and needs the balance',
       (tester) async {
     tall(tester);
     final (db, repo) = await pumpApp(tester, seed: (r) async {
@@ -207,7 +207,8 @@ void main() {
       await r.importProfile(profileJson(['Nursing', 'Cycling', 'Gardening', 'Chess', 'Sailing']),
           uiLanguage: 'en');
       await r.chooseFields([for (final x in (await r.realms()).take(3)) x.id]);
-      await climb(r, stepsPerField);
+      await r.saveProgress(
+          (await r.loadProgress()).copyWith(seeds: realmUnlockCost + 5));
     });
     addTearDown(db.close);
     final s = S('en');
@@ -228,10 +229,15 @@ void main() {
     for (final r in lockedBefore) {
       expect(find.text(r.label), findsOneWidget);
     }
-    // The ladder has room, so it simply opens: nothing is spent, so there
-    // is nothing to agree to first.
+    // Past the starting three it costs, so the popup says the number before
+    // a single Seed is spent.
     await tester.tap(find.text(lockedBefore.first.label));
     await tester.pumpAndSettle();
+    expect(find.text(s.t('lockedFieldTitle', {'realm': lockedBefore.first.label})),
+        findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, s.t('seedsCost', {'n': realmUnlockCost})));
+    await tester.pumpAndSettle();
+    expect((await repo.loadProgress()).seeds, 5);
     expect((await repo.realms()).where((r) => !r.unlocked), hasLength(1));
     // An open field with no scenes is nothing yet: the scenes screen follows,
     // with the field already chosen.
@@ -245,17 +251,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text(lockedBefore.last.label));
     await tester.pumpAndSettle();
-    // The one opening the ladder had earned is used, so the second closed
-    // area gets the popup that says how far off the next one is — and only
-    // a way out of it.
+    // The balance is short now, so the second closed area gets a popup with
+    // no button on it — only a way out.
     expect(find.text(s.t('lockedFieldTitle', {'realm': lockedBefore.last.label})), findsOneWidget);
-    final steps = await repo.stepsToNextFieldOpening();
-    expect(steps, isNotNull);
-    expect(find.text(s.t('fieldLadderSteps', {'n': steps})), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, s.t('seedsCost', {'n': realmUnlockCost})),
+        findsNothing);
     expect(find.text(s.t('close')), findsOneWidget);
     await tester.tap(find.text(s.t('close')));
     await tester.pumpAndSettle();
     expect((await repo.realms()).where((r) => !r.unlocked), hasLength(1));
+    expect((await repo.loadProgress()).seeds, 5);
   });
 
   testWidgets('the profile screen shows the two answers and the AI profile', (tester) async {

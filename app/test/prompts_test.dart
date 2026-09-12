@@ -32,11 +32,14 @@ void main() {
       expect(p, contains('"schema_version": "4.0"'));
       expect(p, contains('5 conversations'));
       expect(p, contains('1 to 5 turns'));
-      for (final key in ['keyword', 'polarity', 'multiFact', 'restate', 'windowMs']) {
+      for (final key in ['keyword', 'polarity', 'multiFact', 'windowMs']) {
         expect(p, contains(key), reason: key);
       }
       expect(p, contains('missedSlot'),
           reason: 'a wrong reply has to say which fact it dropped');
+      expect(p, contains('Every line is a question'));
+      expect(p, isNot(contains('restate')),
+          reason: 'the same line is replayed now, so there is nothing to rephrase');
     });
 
     test('names the learner’s language, and never leaves it as a placeholder', () {

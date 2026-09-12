@@ -70,14 +70,14 @@ void main() {
       }
     });
 
-    test('says the same thing again in different words', () {
-      // The restate is what the learner gets when the moment passes. Repeating
-      // the sentence would make it a second listen, which this does not give.
+    test('asks something, so the three replies are answers', () {
+      // A statement leaves the learner nodding along, and three ways of
+      // nodding are not three answers. A question makes the choice real and
+      // makes the wrong choices genuinely wrong.
       for (final s in baseScenes) {
         for (var i = 0; i < s.turns.length; i++) {
-          final t = s.turns[i];
-          expect(t.restate.trim(), isNotEmpty, reason: '${s.id}#$i');
-          expect(t.restate, isNot(t.line), reason: '${s.id}#$i');
+          expect(s.turns[i].line.trim(), endsWith('?'),
+              reason: '${s.id}#$i does not ask anything: ${s.turns[i].line}');
         }
       }
     });
@@ -194,8 +194,8 @@ void main() {
       // carry somebody else's Japanese and nobody would notice on screen.
       final ja = {for (final s in builtinScenes('ja')) s.id: s};
       final w1 = ja['builtin_w1']!.turns.first;
-      expect(w1.replies[w1.answer].text, startsWith('Thursday'));
-      expect(w1.replies[w1.answer].native, startsWith('木曜'));
+      expect(w1.replies[w1.answer].text, startsWith('Yes'));
+      expect(w1.replies[w1.answer].native, startsWith('はい'));
     });
 
     test('a language nobody has translated still plays, in English', () {

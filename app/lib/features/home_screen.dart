@@ -72,7 +72,7 @@ class HomeScreen extends ConsumerWidget {
       scrollCacheExtent: const ScrollCacheExtent.pixels(2000),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
-        // -------- the streak, and nothing beside it --------
+        // -------- the streak and the balance --------
         Wrap(
           alignment: WrapAlignment.spaceBetween,
           crossAxisAlignment: WrapCrossAlignment.center,
@@ -81,10 +81,10 @@ class HomeScreen extends ConsumerWidget {
           children: [
             Text('KotoLang',
                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-            // One pill. There was a balance beside it once; a second number
-            // that goes up is the beginning of a shop, and a shop has nothing
-            // to do with hearing English.
-            _Pill(icon: '☀️', text: s.t('streakPill', {'n': progress.streak})),
+            Wrap(spacing: 8, runSpacing: 4, children: [
+              _Pill(icon: '☀️', text: s.t('streakPill', {'n': progress.streak})),
+              _Pill(icon: '🌱', text: '${progress.seeds}'),
+            ]),
           ],
         ),
         const SizedBox(height: 16),

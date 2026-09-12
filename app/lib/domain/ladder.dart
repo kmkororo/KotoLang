@@ -135,10 +135,19 @@ class Ladder {
   /// a learner who only ever raises the noise from climbing the speed ladder
   /// they have never heard.
   ///
+  /// And it counts only a **clean** answer: inside the window, on one
+  /// hearing. A right answer given after the line was played again says the
+  /// learner can do this with a second listen, which is a different claim
+  /// from the one every step of this ladder makes — and counting it would
+  /// let somebody climb to the top by letting every window close first.
+  /// A second hearing is not punished, it simply says nothing: the buffer
+  /// does not see the answer at all.
+  ///
   /// An axis promoted this way carries its setting up with it. Without that,
   /// the first promotion would put every axis one step above where it is
   /// being played, and nothing would ever count again.
-  ({Ladder ladder, List<LadderAxis> promoted}) record(bool correct) {
+  ({Ladder ladder, List<LadderAxis> promoted}) record(bool correct, {bool clean = true}) {
+    if (!clean) return (ladder: this, promoted: const <LadderAxis>[]);
     final next = <LadderAxis, AxisState>{};
     final promoted = <LadderAxis>[];
 

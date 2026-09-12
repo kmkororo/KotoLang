@@ -89,9 +89,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   }
 
-  /// Taps the verdict, which moves on rather than waiting out the beat.
+  /// Presses for the next turn. Nothing moves on by itself: what is on
+  /// screen is the only account of what went wrong that the learner gets.
   Future<void> moveOn(WidgetTester tester, {bool right = true}) async {
-    await tester.tap(find.text(en.t(right ? 'sceneCorrect' : 'sceneWrong')));
+    expect(find.text(en.t(right ? 'sceneCorrect' : 'sceneWrong')), findsOneWidget);
+    await tester.tap(find.text(ja.t('sceneNextButton')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
   }
@@ -169,7 +171,36 @@ void main() {
     expect(find.text(en.t('sceneQ2')), findsOneWidget);
   });
 
+  testWidgets('a window that closes says why the next voice is different',
+      (tester) async {
+    tall(tester);
+    final (_, s) = await open(tester, turns: 1);
+    final first = s.turns.first;
+
+    // Let the window run out rather than answering.
+    await tester.tap(find.text(en.t('scenePlay')));
+    await tester.pump();
+    await tester.pump(Duration(milliseconds: s.windowMs + 100));
+
+    // What plays next is a different sentence, on purpose. Without a word of
+    // warning it is heard as a new line the learner has already fallen behind
+    // on, so the notice has to be up before the voice starts.
+    expect(find.text(ja.t('sceneRestateNote')), findsOneWidget);
+    expect(find.text(en.t('sceneAgain')), findsOneWidget);
+
+    // And it stays up through the second window, to be read while choosing.
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text(ja.t('sceneRestateNote')), findsOneWidget);
+
+    await tester.tap(find.text(first.replies[first.answer].text));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text(ja.t('sceneRestateNote')), findsNothing,
+        reason: 'it is about what is coming, not about what happened');
+  });
+
   testWidgets('every turn answered is written down, and the run is counted',
+
       (tester) async {
     tall(tester);
     final (repo, s) = await open(tester);
@@ -177,7 +208,9 @@ void main() {
     await answer(tester, s.turns[0], s.turns[0].answer);
     await moveOn(tester);
     await answer(tester, s.turns[1], s.turns[1].answer);
-    await tester.pump(const Duration(milliseconds: 2400));
+    await tester.tap(find.text(ja.t('sceneNextButton')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
     final out = await repo.turnResults();
     expect(out, hasLength(2));

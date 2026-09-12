@@ -98,7 +98,6 @@ Turn _dressTurn(String sceneId, int index, Turn turn, TurnText text) {
                 missedSlot: turn.replies[i].missedSlot,
               )
           ],
-    restate: turn.restate,
   );
 }
 

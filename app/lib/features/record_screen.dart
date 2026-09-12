@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app.dart';
 import '../core/util.dart';
 import '../domain/models.dart';
+import '../domain/progress_service.dart';
 import '../domain/scene.dart';
 import '../domain/skills.dart';
 import 'field_picker_screen.dart';
@@ -115,7 +116,7 @@ class RecordScreen extends ConsumerWidget {
         ]),
 
         // -------- the fields --------
-        _FieldsBlock(realms: realms),
+        _FieldsBlock(progress: progress, realms: realms),
 
         // -------- the scenes --------
         _Block(title: s.t('sceneListTitle'), children: [
@@ -194,44 +195,63 @@ class _Cell extends StatelessWidget {
       );
 }
 
-/// The fields, and what stands between the learner and another one.
-///
-/// There was a balance here once, with a shortfall and a price. Nothing is
-/// bought any more: a field opens because the ladder moved, so this says how
-/// far off the next one is and leaves it at that.
+/// The balance, and the one thing it is for. The point is that nobody has to
+/// go hunting for "what is this number for": the number and its use stand in
+/// the same block.
 class _FieldsBlock extends ConsumerWidget {
+  final Progress progress;
   final List<Realm> realms;
-  const _FieldsBlock({required this.realms});
+  const _FieldsBlock({required this.progress, required this.realms});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(stringsProvider);
     final theme = Theme.of(context);
     final locked = realms.where((r) => !r.unlocked).toList();
-    if (locked.isEmpty) return const SizedBox.shrink();
     final room = ref.watch(fieldOpeningsProvider).value ?? 0;
-    final steps = ref.watch(stepsToNextFieldProvider).value;
+    final short = realmUnlockCost - progress.seeds;
 
-    return _Block(title: s.t('fieldsTitle'), children: [
-      Text(
-        room > 0
-            ? s.t('fieldChooseLeft', {'n': room})
-            : (steps == null
-                ? s.t('fieldLadderLocked')
-                : s.t('fieldLadderSteps', {'n': steps})),
-        style: theme.textTheme.bodySmall
-            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+    return _Block(title: '🌱 ${s.t('seedsLabel')}', children: [
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Expanded(
+            child: Text(
+              short > 0
+                  ? s.t('seedsToNextUnlock', {'n': short})
+                  : s.t('seedsCanUnlock'),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
+          Text('${progress.seeds}',
+              style: theme.textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.w800)),
+        ],
       ),
-      const SizedBox(height: 8),
-      OutlinedButton(
-        onPressed: () async {
-          await Navigator.push(
-              context, MaterialPageRoute(builder: (_) => const RealmPickerScreen()));
-          if (!context.mounted) return;
-          ref.invalidate(realmsProvider);
-        },
-        child: Text(s.t('yourRealmsButton')),
-      ),
+      if (locked.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        // The price only applies once the starting three are chosen; quoting
+        // it while they are still owed would contradict the picker, which
+        // gives those away.
+        Text(
+          room > 0
+              ? s.t('fieldChooseLeft', {'n': room})
+              : s.t('unlockRealmCost', {'n': realmUnlockCost}),
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 6),
+        OutlinedButton(
+          onPressed: () async {
+            await Navigator.push(
+                context, MaterialPageRoute(builder: (_) => const RealmPickerScreen()));
+            if (!context.mounted) return;
+            ref.invalidate(realmsProvider);
+          },
+          child: Text(s.t('yourRealmsButton')),
+        ),
+      ],
     ]);
   }
 }

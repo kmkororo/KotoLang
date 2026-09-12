@@ -35,7 +35,6 @@ Map<String, dynamic> turn({
             {'text': 'Got it, Tuesday. I will finish over the weekend.', 'correct': false},
             {'text': 'Any chance of another day? That week is full.', 'correct': false},
           ],
-      'restate': 'It is the Thursday handover — the file has to be in the night before.',
       'translations': {
         'line': '引き継ぎは木曜なので、前の晩までにファイルが要ります。',
         'replies': natives ??
@@ -106,7 +105,6 @@ Scene builtScene(
               Reply(text: 'Tuesday, got it.'),
               Reply(text: 'Could it be sooner?'),
             ],
-            restate: 'It reaches you Thursday.',
           ),
       ],
       source: builtin ? SceneSource.builtin : SceneSource.ai,

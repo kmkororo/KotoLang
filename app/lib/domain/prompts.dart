@@ -826,8 +826,13 @@ A conversation is 1 to 5 turns. **Vary the length across the set.** A quick
 exchange in a corridor is one turn; a phone call about a change of plan is
 four or five. Do not make them all the same length.
 
-Each turn is: the other person says one line, and the learner picks one of
-three replies.
+Each turn is: the other person **asks one question**, and the learner picks
+one of three replies.
+
+**Every line is a question.** Not a remark to agree with — a question that
+wants an answer. A statement leaves the learner nodding along, and three
+ways of nodding are not three answers; a question makes the choice a real
+one and makes the wrong choices genuinely wrong.
 
 ## THE ONE RULE THAT MATTERS
 
@@ -840,8 +845,12 @@ Test it like this, for every turn you write, before you output it:
 > speaker. If they can tell which one is correct, the turn is broken.
 
 A reply is broken if it is rude, off-topic, ungrammatical, or obviously
-strange. Someone who misheard the line must be able to choose it without
+strange. Someone who misheard the question must be able to choose it without
 feeling that they are choosing something odd.
+
+All three must also be answers **to a question of that shape**: do not put a
+yes/no answer against a question that asks which, or a time against a
+question that asks whether.
 
 ## THE THREE TYPES
 
@@ -881,15 +890,14 @@ before you output it.
 ```json
 {
   "type": "keyword",
-  "line": "The handover's on Thursday, so I'll need the file by Wednesday night.",
+  "line": "Can you have the file with me by Thursday morning?",
   "keyWord": "Thursday",
   "confusable": "Tuesday",
   "replies": [
-    { "text": "Thursday — I'll have it ready the evening before.", "correct": true },
-    { "text": "Got it, Tuesday. I'll finish up over the weekend, then.", "correct": false },
+    { "text": "Yes — I'll send it the evening before.", "correct": true },
+    { "text": "That only gives me the weekend. Could we say midweek?", "correct": false },
     { "text": "Is there any chance of another day? That week is full.", "correct": false }
   ],
-  "restate": "It's the Thursday handover, so the file has to be in the night before.",
   "translations": { "line": "...", "replies": ["...", "...", "..."] }
 }
 ```
@@ -911,15 +919,14 @@ worth something: it says exactly what went wrong.
 ```json
 {
   "type": "polarity",
-  "line": "I won't be able to join unless the client call gets cancelled.",
-  "keyWord": "unless",
-  "confusable": "if",
+  "line": "Can you manage without me if the client call runs over?",
+  "keyWord": "without",
+  "confusable": "with",
   "replies": [
-    { "text": "Understood — so only if that call drops off.", "correct": true },
-    { "text": "Great, I'll save you a seat.", "correct": false },
+    { "text": "We'll cope — I'll take the notes myself.", "correct": true },
+    { "text": "Good, it's much easier when you're in the room.", "correct": false },
     { "text": "Shall I move it to the afternoon instead?", "correct": false }
   ],
-  "restate": "Only if that client call falls through can I make it.",
   "translations": { "line": "...", "replies": ["...", "...", "..."] }
 }
 ```
@@ -940,32 +947,25 @@ confirmations.
 ```json
 {
   "type": "multiFact",
-  "line": "Let's meet at the west exit at six, not the ticket gate.",
+  "line": "Shall we say the west exit at six — does that work for you?",
   "facts": [
     { "slot": "place", "value": "west exit", "confusable": "ticket gate" },
     { "slot": "time",  "value": "six",       "confusable": "seven" }
   ],
   "replies": [
-    { "text": "West exit at six. See you then.", "correct": true },
+    { "text": "West exit at six. That works.", "correct": true },
     { "text": "Ticket gate at six — see you there.", "correct": false, "missedSlot": "place" },
     { "text": "West exit at seven, then.", "correct": false, "missedSlot": "time" }
   ],
-  "restate": "Six in the evening, by the west exit — not the gate.",
   "translations": { "line": "...", "replies": ["...", "...", "..."] }
 }
 ```
 
-## RESTATE
-
-Every turn carries a `restate`: what the person says when the learner misses
-the moment to reply. **Say the same thing in different words.** Repeating the
-sentence exactly would make it a second listen, which this practice does not
-give.
-
 ## THE LINES THEMSELVES
 
-- One to three sentences. Spoken English, not written English.
-- Only what this person would actually hear.
+- One to three sentences, ending in the question. Spoken English, not
+  written English.
+- Only what this person would actually be asked.
 - Invent nothing about the learner's world. You were told what they do and
   where they want English; everything else is unknown to you.
 - **People are roles, never names.** "the reviewer", "someone on the team",
@@ -976,8 +976,8 @@ give.
 - No jargon and no idioms that belong to one country only.
 - The line must stand on its own. The learner has the situation and nothing
   else, so a line that needs earlier context is unusable.
-- On a later turn the line may answer the reply the learner just gave, but it
-  must still make sense whichever reply they chose.
+- On a later turn the question may follow from the reply the learner just
+  gave, but it must still make sense whichever reply they chose.
 
 ## WINDOW
 
@@ -1030,7 +1030,8 @@ Go through every turn once more:
 4. `polarity`: does one wrong reply belong to someone who missed the
    reversing word?
 5. `multiFact`: does each wrong reply drop exactly one fact, and name it?
-6. Is `restate` different wording, not the same sentence?
+6. Does every line actually ask something, and does every reply answer that
+   question rather than agree with a remark?
 7. Do the conversations vary in length, and the windows in size?
 8. Did you invent anything about the learner's world — a name, a company, a
    product — that you were not told?

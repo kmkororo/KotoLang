@@ -3,15 +3,17 @@
 /// A turn is three replies read first, then the line once, then a window to
 /// answer in. Reading comes before the sound so that reading is not part of
 /// the listening; the window closes so that answering is not something the
-/// learner can take all evening over. Miss it and they say it again in other
-/// words, which is what happens in a room, until the ladder takes that away
-/// too.
+/// learner can take all evening over. Miss it and the same line comes again,
+/// once, until the ladder takes that away too.
 ///
-/// Answering is one tap. What follows is a beat — right or wrong, and the
-/// words in the learner's own language for as long as the ladder still gives
-/// them — and then the next line starts over the end of it. Nothing here
-/// needs a voice from the learner or a keyboard, and nothing here judges:
-/// every turn carries one right index.
+/// Answering is one tap, and then the screen waits. What it holds while it
+/// waits is the only account of what went wrong the learner will get — the
+/// line revealed, the word or the fact that went by them, and their own
+/// language for as long as the ladder still gives it — so nothing moves on
+/// until they press for the next one.
+///
+/// Nothing here needs a voice from the learner or a keyboard, and nothing
+/// here judges: every turn carries one right index.
 library;
 
 import 'dart:async';
@@ -75,7 +77,7 @@ enum _Phase {
   /// The window is open.
   open,
 
-  /// They are saying it again, in other words.
+  /// The line is coming again, once.
   restating,
 
   /// Answered, or the window closed on it.
@@ -141,8 +143,17 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   /// the line being answered is the one that has to be in front of them.
   final _scroll = ScrollController();
 
+  /// What the turn just answered paid, and what the whole run has paid. The
+  /// first drives the seed that flies to the counter; the second is what the
+  /// counter reads while the screen is open.
+  int _paid = 0;
+  int _seedRun = 0;
+
   /// The window, drained as a bar so the time left is felt rather than read.
   late final AnimationController _window;
+
+  /// The seed's flight from the reply to the counter.
+  late final AnimationController _seedFlight;
   Timer? _beat;
 
   SceneCard get _card => _cards[_index];
@@ -163,12 +174,15 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
       ..addStatusListener((st) {
         if (st == AnimationStatus.completed && mounted) _windowClosed();
       });
+    _seedFlight =
+        AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
   }
 
   @override
   void dispose() {
     _beat?.cancel();
     _window.dispose();
+    _seedFlight.dispose();
     _scroll.dispose();
     _speech.stop();
     super.dispose();
@@ -192,10 +206,9 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   int get _windowMs => _card.scene.windowMs;
   double get _rate => speedAt(_ladder.currentOf(LadderAxis.speed));
 
-  /// Whether a missed window is given a second chance. The two hardest steps
-  /// of the replay axis take it away.
-  bool get _restateAllowed =>
-      _ladder.currentOf(LadderAxis.replay) < 2 && _turn.restate.isNotEmpty;
+  /// Whether a missed window is given a second hearing. The hardest steps of
+  /// the replay axis take it away.
+  bool get _replayAllowed => _ladder.currentOf(LadderAxis.replay) < 2;
 
   /// How long the translation waits after an answer. The axis runs from at
   /// once to never, cut fine so no single step takes it all away.
@@ -241,12 +254,18 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   /// The window closed with nothing chosen.
   Future<void> _windowClosed() async {
     if (_phase != _Phase.open) return;
-    if (_restateAllowed && !_restated) {
+    if (_replayAllowed && !_restated) {
       _restated = true;
       setState(() => _phase = _Phase.restating);
       _buzz(HapticFeedback.selectionClick);
+      // A beat, so the notice is read before the voice starts again. The
+      // same sentence, not another way of putting it: somebody who missed it
+      // needs the thing they missed, and a different sentence would be a new
+      // problem rather than a second chance.
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      if (!mounted || _phase != _Phase.restating) return;
       if (_speech.available) {
-        await _speech.speak(_turn.restate, rate: _rate);
+        await _speech.speak(_turn.line, rate: _rate);
       } else {
         await Future<void>.delayed(const Duration(milliseconds: 900));
       }
@@ -260,6 +279,9 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
 
   Future<void> _answer(int? i) async {
     if (_phase != _Phase.open && _phase != _Phase.reading) return;
+    // How much of the window was left, read before it is stopped. Speed is
+    // what the seeds are for, so this is the number they are worked out from.
+    final left = _phase == _Phase.open ? (1 - _window.value) : 0.0;
     _window.stop();
     _speech.stop();
     final right = i != null && i == _turn.answer;
@@ -278,26 +300,34 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     // The line has just been revealed, so the bubble grew.
     _toBottom();
 
-    final out = await ref.read(repositoryProvider).recordTurn(
+    final repo = ref.read(repositoryProvider);
+    final out = await repo.recordTurn(
           sceneId: _card.scene.id,
           turn: _card.index,
           correct: right,
           missedSlot: i == null ? null : _turn.replies[i].missedSlot,
           inWindow: right && !_restated,
           review: _card.review,
+          windowLeft: left,
         );
     if (!mounted) return;
     _ladder = out.ladder;
     _promoted.addAll(out.promoted);
+    if (out.seeds > 0) {
+      _paid = out.seeds;
+      _seedRun += out.seeds;
+      ref.read(progressProvider.notifier).state = await repo.loadProgress();
+      if (mounted) _seedFlight.forward(from: 0);
+    }
 
-    // The next line starts over the end of this one rather than after it.
-    _beat = Timer(const Duration(milliseconds: 2200), () {
-      if (mounted) _advance();
-    });
+    // Nothing moves on by itself. What is on screen now is the only
+    // explanation of what went wrong that the learner will get, and reading
+    // it takes as long as it takes.
   }
 
   void _advance() {
     _beat?.cancel();
+    _paid = 0;
     // The turn just answered joins the conversation above, whether or not
     // there is another one after it: the result is read over the top of the
     // thread, and leaving early should not rub out what was said.
@@ -393,7 +423,11 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
                           controller: _scroll,
                           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                           child: ConstrainedBox(
-                            constraints: BoxConstraints(minHeight: box.maxHeight - 12),
+                            // Clamped: on a short screen with a long verdict
+                            // there is nothing left over, and a negative
+                            // minimum is not a constraint Flutter accepts.
+                            constraints: BoxConstraints(
+                                minHeight: (box.maxHeight - 12).clamp(0.0, double.infinity)),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.end,
                               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -403,6 +437,8 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
                                   const SizedBox(height: 10),
                                 ],
                                 if (_card.review) _reviewTag(s, theme),
+                                if (_restated && _phase != _Phase.done)
+                                  _restateNote(s, theme),
                                 _them(s, theme),
                               ],
                             ),
@@ -410,17 +446,23 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
                         ),
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (widget.tutorial) _guide(s, theme),
-                          _replies(s, e, theme),
-                        ],
+                    // The replies give way before the verdict does. On a small
+                    // screen with three long replies and a verdict that names
+                    // what went wrong, something has to; the replies are the
+                    // part that can be scrolled without losing anything.
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (widget.tutorial) _guide(s, theme),
+                            _replies(s, e, theme),
+                          ],
+                        ),
                       ),
                     ),
-                    _bottom(e, theme),
+                    _bottom(s, e, theme),
                   ],
                 ),
         ),
@@ -436,6 +478,11 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
         children: [
           IconButton(onPressed: _quit, icon: const Icon(Icons.close)),
           const Spacer(),
+          // What this run has earned. It sits here because it is where the
+          // seeds fly to, and a number that is flown at has to be somewhere
+          // the eye can find without leaving the conversation.
+          _SeedCounter(total: _seedRun, flight: _seedFlight, paid: _paid),
+          const SizedBox(width: 10),
           // The run: shown from two, and it grows on the spot.
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 250),
@@ -623,6 +670,43 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
         ),
       );
 
+  /// Said when the window has closed on a turn and the line is about to come
+  /// back in other words.
+  ///
+  /// It has to be said. What plays next is a *different* sentence, on purpose
+  /// — repeating the first one would be a second listen, and a second listen
+  /// is exactly what this practice does not give. But without a word of
+  /// warning the learner hears an unfamiliar sentence and takes it for a new
+  /// line they have already fallen behind on. It stays up through the second
+  /// window, so it is still there to be read while they choose.
+  Widget _restateNote(S s, ThemeData theme) {
+    final scheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
+        decoration: BoxDecoration(
+          color: scheme.tertiaryContainer.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.replay, size: 14, color: scheme.onTertiaryContainer),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                s.t('sceneRestateNote'),
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: scheme.onTertiaryContainer),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _reviewTag(S s, ThemeData theme) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Row(
@@ -765,7 +849,10 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     );
   }
 
-  Widget _bottom(S s, ThemeData theme) {
+  /// [s] is the interface language, [e] English. The verdict is part of the
+  /// conversation and stays English; the account of what went wrong is about
+  /// it, and is read in the learner's own language.
+  Widget _bottom(S s, S e, ThemeData theme) {
     final scheme = theme.colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
@@ -773,57 +860,113 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
         _Phase.reading => FilledButton.icon(
             onPressed: _play,
             icon: const Icon(Icons.volume_up),
-            label: Text(s.t('scenePlay')),
+            label: Text(e.t('scenePlay')),
           ),
         _Phase.playing || _Phase.restating => Center(
             child: Text(
-              s.t(_phase == _Phase.restating ? 'sceneAgain' : 'sceneListening'),
+              e.t(_phase == _Phase.restating ? 'sceneAgain' : 'sceneListening'),
               style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ),
         _Phase.open => Center(
-            child: Text(s.t('sceneYourTurn'),
+            child: Text(e.t('sceneYourTurn'),
                 style: theme.textTheme.bodyMedium?.copyWith(color: scheme.primary)),
           ),
-        _ => _verdict(s, theme),
+        _ => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _verdict(s, e, theme),
+              const SizedBox(height: 8),
+              // Nothing moves on by itself any more. What is above is the
+              // only account of what went wrong that the learner gets, and
+              // reading it takes as long as it takes.
+              FilledButton(
+                onPressed: _advance,
+                child: Text(s.t('sceneNextButton')),
+              ),
+            ],
+          ),
       },
     );
   }
 
-  Widget _verdict(S s, ThemeData theme) {
+  Widget _verdict(S s, S e, ThemeData theme) {
     final scheme = theme.colorScheme;
     final missed = _picked == null;
     final bg = _right ? scheme.primaryContainer : scheme.errorContainer;
     final fg = _right ? scheme.onPrimaryContainer : scheme.onErrorContainer;
-    return GestureDetector(
-      // Moving on early is allowed, but nothing has to be pressed: the next
-      // line comes over the end of this on its own.
-      onTap: _advance,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
-        child: Row(
-          children: [
-            Icon(missed ? Icons.timer_off_outlined : (_right ? Icons.check : Icons.close),
-                size: 18, color: fg),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                missed
-                    ? s.t('sceneWindowGone')
-                    : (_right ? s.t('sceneCorrect') : s.t('sceneWrong')),
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: fg, fontWeight: FontWeight.w700),
+    final slip = _whatWentWrong(s);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(missed ? Icons.timer_off_outlined : (_right ? Icons.check : Icons.close),
+                  size: 18, color: fg),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  missed
+                      ? e.t('sceneWindowGone')
+                      : (_right ? e.t('sceneCorrect') : e.t('sceneWrong')),
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: fg, fontWeight: FontWeight.w700),
+                ),
               ),
-            ),
-            if (_promoted.isNotEmpty)
-              Text(s.t('ladderUp'),
-                  style: theme.textTheme.labelSmall?.copyWith(color: fg)),
+              if (_paid > 0)
+                Text('+$_paid',
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(color: fg, fontWeight: FontWeight.w800)),
+              if (_promoted.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Text(s.t('ladderUp'),
+                    style: theme.textTheme.labelSmall?.copyWith(color: fg)),
+              ],
+
+            ],
+          ),
+          // Which word, or which fact, went by them. Without this a learner
+          // is told they were wrong and left to find where, in a line they
+          // heard once.
+          if (slip != null) ...[
+            const SizedBox(height: 6),
+            Text(slip, style: theme.textTheme.bodySmall?.copyWith(color: fg)),
           ],
-        ),
+        ],
       ),
     );
+  }
+
+  /// What went by them, in their own language, said as plainly as the turn
+  /// allows.
+  ///
+  /// Everything here was already known and never shown: a `keyword` turn
+  /// carries the pair it turns on, a `polarity` turn the word that reverses
+  /// it, and a wrong reply on a `multiFact` turn names the fact it dropped.
+  String? _whatWentWrong(S s) {
+    if (_right) return null;
+    final t = _turn;
+    switch (t.type) {
+      case TurnType.keyword:
+        if (t.keyWord.isEmpty || t.confusable.isEmpty) return null;
+        return s.t('slipKeyword', {'heard': t.confusable, 'said': t.keyWord});
+      case TurnType.polarity:
+        if (t.keyWord.isEmpty) return null;
+        return s.t('slipPolarity', {'word': t.keyWord});
+      case TurnType.multiFact:
+        final picked = _picked;
+        final slot = picked == null ? null : t.replies[picked].missedSlot;
+        final fact = slot == null
+            ? null
+            : t.facts.where((f) => f.slot == slot).firstOrNull;
+        if (fact == null) return null;
+        return s.t('slipFact', {'slot': fact.slot, 'said': fact.value});
+    }
   }
 
   Widget _result(S s, ThemeData theme) {
@@ -1047,5 +1190,73 @@ Future<void> startScene(
     onDone?.call();
     tutorial = false;
     if (run?.again != true) return;
+  }
+}
+
+/// The seeds earned in this run, with the newest one flying in.
+///
+/// The flight is the whole point of putting it here. A number that only
+/// changes is a number nobody watches; one that is thrown at, and lands,
+/// makes answering quickly feel like it did something — which it did.
+class _SeedCounter extends StatelessWidget {
+  final int total;
+  final int paid;
+  final Animation<double> flight;
+  const _SeedCounter({required this.total, required this.paid, required this.flight});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    if (total <= 0) return const SizedBox.shrink();
+
+    return AnimatedBuilder(
+      animation: flight,
+      builder: (context, _) {
+        final t = flight.value;
+        final flying = paid > 0 && t > 0 && t < 1;
+        return Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.centerRight,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🌱', style: TextStyle(fontSize: 12)),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$total',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w800,
+                      // The count swells a little as the seed lands on it.
+                      fontSize: 13 + 3 * (flying ? 0.0 : ((1 - t) * t * 4).clamp(0.0, 1.0)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // The seed itself, thrown from below the counter and rising into
+            // it. It exists only while it is in the air.
+            if (flying)
+              Positioned(
+                right: 6,
+                bottom: -34 * (1 - Curves.easeOut.transform(t)),
+                child: Opacity(
+                  opacity: (1 - t * t).clamp(0.0, 1.0),
+                  child: Text('🌱',
+                      style: TextStyle(fontSize: 12 + 8 * (1 - t))),
+                ),
+              ),
+          ],
+        );
+      },
+    );
   }
 }

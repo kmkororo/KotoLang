@@ -202,21 +202,45 @@ Progress reconcileStreak(Progress p, [String? day]) {
 
 // ---------------------------------------------------------------- opening
 //
-// What opens, and what opens it. There is one answer to the second question
-// and it is the ladder: a field or a situation opens because the learner can
-// hold a setting they could not hold before, never because a balance reached
-// a number. The v1 model had Koto Seeds, a chest and a price list here; all
-// of it is gone. A second number that goes up invites a shop, and a shop has
-// nothing to do with hearing English.
+// What opens, and what it costs. Seeds buy *more* — another field, more
+// conversations in one — and never anything about difficulty: how hard a
+// turn is belongs to the ladder, which takes no payment and gives none. The
+// two are kept apart so that neither can be mistaken for the other.
 
 /// The fields the learner chooses at the end of the first run. Three, so the
 /// choice is a real one without being a morning's work.
 const freeRealmSlots = 3;
 
-/// Steps of the ladder between one field opening and the next, once the
-/// starting three are chosen. A provisional number, deliberately a constant:
-/// the pace wants to be felt on a device before it is settled.
-const stepsPerField = 6;
+/// What one more field costs, past the starting three.
+const realmUnlockCost = 1000;
+
+/// What another batch of conversations costs, in a field that already has
+/// some. The first batch in each field is free: a field with nothing in it is
+/// not yet a field, and charging to open one and again to fill it would make
+/// the opening feel like a deposit.
+const sceneAddCost = 500;
+
+/// Seeds for one turn answered right, by how much of the window was left.
+///
+/// The floor is what a right answer is worth however long it took; the rest
+/// is for speed, which is the thing this app is actually about. A second
+/// hearing pays the floor and no more — it was still right, and it was still
+/// not caught the first time. Nothing is paid for a wrong answer: paying for
+/// those would make the balance a measure of time spent rather than of
+/// anything heard.
+const seedFloor = 20;
+const seedTop = 60;
+
+int seedsForTurn({
+  required bool correct,
+  required bool clean,
+  required double windowLeft,
+}) {
+  if (!correct) return 0;
+  if (!clean) return seedFloor;
+  final left = windowLeft.clamp(0.0, 1.0);
+  return seedFloor + ((seedTop - seedFloor) * left).round();
+}
 
 /// Conversations answered in a field before its results are worth sending to
 /// the AI. Below this there is not enough there to see a pattern.
@@ -230,19 +254,6 @@ const sessionSizeAll = 0;
 const sessionSizes = <int>[3, 5, 10, 20, sessionSizeAll];
 const maxSessionSize = 45;
 
-/// How many fields are open to a learner whose ladder has reached [reached]
-/// steps: the three they chose, and one more every [stepsPerField] after
-/// that. Never fewer than the three, however the ladder moves.
-int fieldsOpenAt(int reached) =>
-    freeRealmSlots + (reached <= 0 ? 0 : reached ~/ stepsPerField);
-
-/// Steps still to climb before the next field opens, or null once every field
-/// the profile named is already open.
-int? stepsToNextField(int reached, {required int fieldsHeld}) {
-  if (fieldsHeld <= fieldsOpenAt(reached)) return null;
-  final next = (reached ~/ stepsPerField + 1) * stepsPerField;
-  return next - reached;
-}
 
 // ------------------------------------------------------- listening mastery
 //
