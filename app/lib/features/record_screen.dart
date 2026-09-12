@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app.dart';
 import '../core/util.dart';
 import '../domain/models.dart';
-import '../domain/progress_service.dart';
 import '../domain/scene.dart';
 import '../domain/skills.dart';
 import 'field_picker_screen.dart';
@@ -115,8 +114,8 @@ class RecordScreen extends ConsumerWidget {
               style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
         ]),
 
-        // -------- Seeds --------
-        _SeedsBlock(progress: progress, realms: realms),
+        // -------- the fields --------
+        _FieldsBlock(realms: realms),
 
         // -------- the scenes --------
         _Block(title: s.t('sceneListTitle'), children: [
@@ -195,69 +194,44 @@ class _Cell extends StatelessWidget {
       );
 }
 
-/// Seeds, and the two things they buy: an area and a decoration. The point
-/// is that nobody has to go looking for "what is this number for".
-class _SeedsBlock extends ConsumerStatefulWidget {
-  final Progress progress;
+/// The fields, and what stands between the learner and another one.
+///
+/// There was a balance here once, with a shortfall and a price. Nothing is
+/// bought any more: a field opens because the ladder moved, so this says how
+/// far off the next one is and leaves it at that.
+class _FieldsBlock extends ConsumerWidget {
   final List<Realm> realms;
-  const _SeedsBlock({required this.progress, required this.realms});
+  const _FieldsBlock({required this.realms});
 
   @override
-  ConsumerState<_SeedsBlock> createState() => _SeedsBlockState();
-}
-
-class _SeedsBlockState extends ConsumerState<_SeedsBlock> {
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(stringsProvider);
     final theme = Theme.of(context);
-    final seeds = widget.progress.seeds;
-    final locked = widget.realms.where((r) => !r.unlocked).toList();
-    final shortfall = realmUnlockCost - seeds;
+    final locked = realms.where((r) => !r.unlocked).toList();
+    if (locked.isEmpty) return const SizedBox.shrink();
+    final room = ref.watch(fieldOpeningsProvider).value ?? 0;
+    final steps = ref.watch(stepsToNextFieldProvider).value;
 
-    return _Block(title: '🌱 ${s.t('seedsLabel')}', children: [
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          Expanded(
-            child: Text(
-              shortfall > 0
-                  ? s.t('seedsToNextUnlock', {'n': shortfall})
-                  : s.t('seedsCanUnlock'),
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ),
-          Text('$seeds',
-              style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-        ],
+    return _Block(title: s.t('fieldsTitle'), children: [
+      Text(
+        room > 0
+            ? s.t('fieldChooseLeft', {'n': room})
+            : (steps == null
+                ? s.t('fieldLadderLocked')
+                : s.t('fieldLadderSteps', {'n': steps})),
+        style: theme.textTheme.bodySmall
+            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
       ),
-      if (locked.isNotEmpty) ...[
-        const SizedBox(height: 10),
-        // The price only applies once the starting fields are chosen; quoting
-        // it while they are still owed contradicts the picker, which gives
-        // those away.
-        Builder(builder: (_) {
-          final left = ref.watch(freeFieldSlotsProvider).value ?? 0;
-          return Text(
-              left > 0
-                  ? s.t('fieldChooseLeft', {'n': left})
-                  : s.t('unlockRealmCost', {'n': realmUnlockCost}),
-              style: theme.textTheme.bodySmall);
-        }),
-        const SizedBox(height: 6),
-        OutlinedButton(
-          onPressed: () async {
-            await Navigator.push(
-                context, MaterialPageRoute(builder: (_) => const RealmPickerScreen()));
-            if (!context.mounted) return;
-            ref.invalidate(realmsProvider);
-          },
-          child: Text(s.t('yourRealmsButton')),
-        ),
-      ],
+      const SizedBox(height: 8),
+      OutlinedButton(
+        onPressed: () async {
+          await Navigator.push(
+              context, MaterialPageRoute(builder: (_) => const RealmPickerScreen()));
+          if (!context.mounted) return;
+          ref.invalidate(realmsProvider);
+        },
+        child: Text(s.t('yourRealmsButton')),
+      ),
     ]);
   }
 }

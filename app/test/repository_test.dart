@@ -19,7 +19,7 @@ import 'package:kotolang/domain/field.dart';
 import 'package:kotolang/domain/ladder.dart';
 import 'package:kotolang/domain/progress_service.dart';
 
-import 'fixtures.dart' show pack, scene, turn;
+import 'fixtures.dart' show climb, pack, scene, turn;
 
 /// A profile reply naming [realms] as the learner's areas. Exported because
 /// three other suites start from the same place.
@@ -75,7 +75,7 @@ void main() {
           uiLanguage: 'en');
       expect((await repo.realms()).where((r) => r.unlocked), isEmpty,
           reason: 'the learner chooses the starting fields on the next screen');
-      expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
+      expect(await repo.fieldOpeningsLeft(), freeRealmSlots);
     });
 
     test('the same area pasted twice is the same field', () async {
@@ -227,28 +227,32 @@ void main() {
       return [for (final r in await repo.realms()) r.id];
     }
 
-    test('the starting fields are chosen, and cost nothing', () async {
+    test('the starting fields are chosen, and nothing is owed for them', () async {
       final ids = await fourAreas();
       await repo.chooseFields(ids.take(freeRealmSlots).toList());
       expect((await repo.realms()).where((r) => r.unlocked), hasLength(freeRealmSlots));
-      expect(await repo.freeFieldSlotsLeft(), 0);
-      expect((await repo.loadProgress()).seeds, 0);
+      expect(await repo.fieldOpeningsLeft(), 0);
     });
 
     test('an opening is only spent while the field it opened is open', () async {
       final ids = await fourAreas();
       await repo.chooseFields(ids.take(2).toList());
-      expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 2);
+      expect(await repo.fieldOpeningsLeft(), freeRealmSlots - 2);
 
       await repo.clearField(ids.first, closeField: true);
-      expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 1,
+      expect(await repo.fieldOpeningsLeft(), freeRealmSlots - 1,
           reason: 'closing a field hands its opening back');
     });
 
-    test('the first batch in a field is free and the next one is not', () async {
-      expect(await repo.sceneAddCostFor('work'), 0);
-      await repo.importScenes(pack([scene('Talk')]), uiLanguage: 'en', field: 'work');
-      expect(await repo.sceneAddCostFor('work'), sceneAddCost);
+    test('the ladder opens the next one, and says how far off it is', () async {
+      await fourAreas();
+      await repo.chooseFields(
+          [for (final r in (await repo.realms()).take(freeRealmSlots)) r.id]);
+      expect(await repo.fieldOpeningsLeft(), 0);
+      expect(await repo.stepsToNextFieldOpening(), stepsPerField);
+
+      await climb(repo, stepsPerField);
+      expect(await repo.fieldOpeningsLeft(), 1);
     });
   });
 
@@ -303,7 +307,7 @@ void main() {
       expect(await repo.scenes(), isNotEmpty, reason: 'the material stays');
       expect((await repo.loadLadder()).reached, 0,
           reason: 'a step is a claim about answers that are gone');
-      expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 1,
+      expect(await repo.fieldOpeningsLeft(), freeRealmSlots - 1,
           reason: 'the field it opened is still open');
     });
 
@@ -313,7 +317,7 @@ void main() {
       expect(await repo.realms(), isEmpty);
       expect(await repo.scenes(), isEmpty);
       expect(await repo.loadProfile(), isNull);
-      expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
+      expect(await repo.fieldOpeningsLeft(), freeRealmSlots);
       expect((await repo.loadProgress()).streak, 0);
       expect((await repo.loadLadder()).reached, 0);
     });

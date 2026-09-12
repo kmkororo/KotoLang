@@ -159,11 +159,17 @@ class StreakResult {
   const StreakResult(this.advanced, this.from, this.to);
 }
 
-/// Run at start-up. Spends freezes for days missed while the app was closed and
-/// records what happened so the UI can explain it.
+/// Run at start-up. Works out what a gap since the last study day did to the
+/// streak, and records it so home can say so.
+///
+/// There is nothing here that could save a streak any more. The rest day was
+/// a token, a token is a thing to be given and spent, and this app keeps no
+/// balance of anything — so a missed day breaks the chain and the record is
+/// honest about it. What survives is the best streak, which is a fact rather
+/// than a currency.
 Progress reconcileStreak(Progress p, [String? day]) {
   final now = day ?? today();
-  var out = p.copyWith(freezeUsed: 0, streakLostFrom: 0);
+  final out = p.copyWith(streakLostFrom: 0);
 
   if (out.lastStudyDay == null) return out.copyWith(streak: 0);
 
@@ -171,16 +177,6 @@ Progress reconcileStreak(Progress p, [String? day]) {
   if (gap <= 0) return out; // same day, or a clock that moved backwards
   if (gap == 1) return out; // studied yesterday; the chain is still live
 
-  final missed = gap - 1;
-  if (out.freezes >= missed) {
-    // Treat the chain as unbroken by moving the marker to yesterday, so today's
-    // first answer increments normally.
-    return out.copyWith(
-      freezes: out.freezes - missed,
-      freezeUsed: missed,
-      lastStudyDay: addDays(now, -1),
-    );
-  }
   return out.copyWith(streakLostFrom: out.streak, streak: 0);
 }
 
@@ -204,109 +200,49 @@ Progress reconcileStreak(Progress p, [String? day]) {
   return (progress: updated, result: StreakResult(true, from, next));
 }
 
-// ---------------------------------------------------------------- chest
-
-class ChestReward {
-  final String id;
-  final double weight;
-  final String label;
-  final String note;
-  const ChestReward(this.id, this.weight, this.label, this.note);
-}
-
-/// Kept as a constant so the probabilities are visible and tunable. Every
-/// reward has a real effect; none is decorative.
-const chestTable = <ChestReward>[
-  ChestReward('freeze', 30, '🧊 ストリークフリーズ ×1', '休んだ日を1日ぶん肩代わりします'),
-  ChestReward('boost', 30, '⭐ 次のセッションはSeeds2倍', '次に学習したときのSeedsが2倍になります'),
-  ChestReward('seeds20', 40, '🌱 ボーナス +20 Seeds', 'すぐに20 Seedsが加算されます'),
-];
-
-/// How much a chest boost multiplies the next session's Seeds by.
-const chestBoost = 2;
-
-/// The bonus the seed chest pays out immediately.
-const chestSeedBonus = 20;
-
-ChestReward openChest() => weightedPick(chestTable, (r) => r.weight);
-
-Progress applyChest(Progress p, ChestReward reward) {
-  switch (reward.id) {
-    case 'freeze':
-      return p.copyWith(freezes: p.freezes + 1);
-    case 'boost':
-      return p.copyWith(pendingBoost: chestBoost);
-    case 'seeds20':
-      return p.copyWith(seeds: p.seeds + chestSeedBonus);
-    default:
-      return p;
-  }
-}
-
-// ------------------------------------------------------------- koto seeds
+// ---------------------------------------------------------------- opening
 //
-// Seeds are what studying grows. They buy a wider world — another area, a
-// longer daily session — and never the studying itself: a learner with zero
-// Seeds can still do everything they could on day one. Every value here is a
-// named constant precisely so it can be tuned without touching the logic that
-// spends it.
+// What opens, and what opens it. There is one answer to the second question
+// and it is the ladder: a field or a situation opens because the learner can
+// hold a setting they could not hold before, never because a balance reached
+// a number. The v1 model had Koto Seeds, a chest and a price list here; all
+// of it is gone. A second number that goes up invites a shop, and a shop has
+// nothing to do with hearing English.
 
-/// How many realms are usable before any of them has to be paid for. Chosen
-/// at first run; nothing before this needs Seeds at all.
+/// The fields the learner chooses at the end of the first run. Three, so the
+/// choice is a real one without being a morning's work.
 const freeRealmSlots = 3;
 
-/// Flat cost to unlock one realm beyond the free slots. Flat rather than a
-/// curve: simple to reason about, and just as tunable.
-const realmUnlockCost = 100;
-
-/// Flat cost to have the AI write another batch of conversations for a field
-/// that already has some. The first batch in a field costs nothing, so an
-/// opened field is always worth something on its own.
-const sceneAddCost = 50;
+/// Steps of the ladder between one field opening and the next, once the
+/// starting three are chosen. A provisional number, deliberately a constant:
+/// the pace wants to be felt on a device before it is settled.
+const stepsPerField = 6;
 
 /// Conversations answered in a field before its results are worth sending to
 /// the AI. Below this there is not enough there to see a pattern.
 const feedbackAfter = 5;
 
-/// Paid once a session is finished. Flat, because the learner now chooses how
-/// long a session is: paying more for a longer one would make the choice a
-/// price list rather than a preference.
-const sessionBonus = 5;
-const streakBonusEvery = 7;
-const streakBonus = 15;
-const journeyCompleteBonus = 10;
-
-/// How many questions a session holds. Free to change in settings — it is a
-/// preference, not a purchase. `sessionSizeAll` means every question that is
-/// available, for the days someone wants to clear the lot.
+/// How many turns a run holds. A preference, and nothing but: it is never
+/// priced, and every size does the same thing to the ladder. `sessionSizeAll`
+/// means every conversation there is, for the days somebody wants the lot.
 const baseSessionSize = 5;
 const sessionSizeAll = 0;
 const sessionSizes = <int>[3, 5, 10, 20, sessionSizeAll];
 const maxSessionSize = 45;
 
-/// What a further batch of material costs for an area that already has some.
-/// The first batch in each area is free: an area with nothing in it is not
-/// yet an area, and charging twice to open one and then fill it would make
-/// the unlock feel like a down payment.
-const extraMaterialCost = 20;
+/// How many fields are open to a learner whose ladder has reached [reached]
+/// steps: the three they chose, and one more every [stepsPerField] after
+/// that. Never fewer than the three, however the ladder moves.
+int fieldsOpenAt(int reached) =>
+    freeRealmSlots + (reached <= 0 ? 0 : reached ~/ stepsPerField);
 
-/// Seeds earned for one answer. Quality over quantity: an incorrect answer
-/// earns nothing, and the two listening formats — main-idea comprehension and
-/// choosing the right reply — pay triple, because they are what the app is
-/// actually for.
-int seedsFor(QuestionType type, bool correct, {bool firstCorrect = false, bool wasDue = false}) {
-  if (!correct) return 0;
-  var base = (type == QuestionType.gist || type == QuestionType.reply) ? 6 : 2;
-  if (firstCorrect) base += 4;
-  if (wasDue) base += 2;
-  return base;
+/// Steps still to climb before the next field opens, or null once every field
+/// the profile named is already open.
+int? stepsToNextField(int reached, {required int fieldsHeld}) {
+  if (fieldsHeld <= fieldsOpenAt(reached)) return null;
+  final next = (reached ~/ stepsPerField + 1) * stepsPerField;
+  return next - reached;
 }
-
-/// Paid for finishing the session the learner set out to do, whatever length
-/// they chose. Rewarding a longer session more would price the setting rather
-/// than leave it a preference.
-int sessionCompletionBonus(int answered, int target) =>
-    answered > 0 && (target <= 0 || answered >= target) ? sessionBonus : 0;
 
 // ------------------------------------------------------- listening mastery
 //

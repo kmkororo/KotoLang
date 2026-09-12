@@ -476,133 +476,56 @@ class SrsState {
 
 // ---------------------------------------------------------------- progress
 
+/// What the app keeps about the habit, as opposed to the ability.
+///
+/// There is no balance here and nothing to spend. The v1 model had Koto
+/// Seeds, a chest, a boost and a rest day; all of it is gone, because a
+/// second number that goes up invites a shop, and a shop has nothing to do
+/// with hearing English. The only things that open are opened by the ladder,
+/// which is the ability — see `ladder.dart`.
 class Progress {
   final int streak;
   final int bestStreak;
   final String? lastStudyDay;
-  final int freezes;
-  final int pendingBoost;
 
-  /// Set during start-up reconciliation so the home screen can explain what
-  /// happened while the app was closed. Cleared once shown.
-  final int freezeUsed;
+  /// The streak that was running when it broke, set during start-up
+  /// reconciliation so home can say plainly what happened while the app was
+  /// closed. Cleared once shown. There is no longer anything that could have
+  /// saved it — a missed day is a missed day, and the record says so.
   final int streakLostFrom;
-
-  /// Koto Seeds: what studying grows, and the only thing that buys a wider
-  /// world — another area to study, a longer daily session. Studying itself
-  /// never costs any. See `progress_service.dart` `seedsFor`.
-  final int seeds;
-
-  /// The day the "today's journey complete" bonus was last paid, so it is
-  /// never paid twice for the same day.
-  final String? journeyBonusDay;
-
-  /// Items whose breakthrough has already been paid for. Kept as a plain
-  /// list in the same JSON blob as the rest of progress, so it needs no
-  /// schema change — and so a restored backup carries it along.
-  final List<String> breakthroughs;
-
-  /// Ornaments bought and hung on the tree, in the order they were bought.
-  /// Decoration only — they do not change any number the app keeps.
-  final List<String> ornaments;
-
-  /// A new area paid for but not yet imported. The charge happens when the
-  /// prompt is copied, long before the material comes back, so without this
-  /// the app could not tell "already paid, still waiting" from "not paid" —
-  /// and copying the prompt a second time charged all over again.
-  final int realmCredits;
-
-  /// Free field openings used up, out of `freeRealmSlots`. Counted here rather
-  /// than read off the areas, so areas opened by the old flows do not eat
-  /// into the three the learner is promised.
-  final int freeFieldsUsed;
-
-  /// Replies the learner reported having actually used in a real
-  /// conversation, by attempt id. Paid for once each; the list is what makes
-  /// "once" true.
-  final List<String> usedClaims;
 
   const Progress({
     this.streak = 0,
     this.bestStreak = 0,
     this.lastStudyDay,
-    this.freezes = 1, // one in hand, so the first slip is survivable
-    this.pendingBoost = 0,
-    this.freezeUsed = 0,
     this.streakLostFrom = 0,
-    this.seeds = 0,
-    this.journeyBonusDay,
-    this.realmCredits = 0,
-    this.freeFieldsUsed = 0,
-    this.breakthroughs = const [],
-    this.ornaments = const [],
-    this.usedClaims = const [],
   });
 
   Progress copyWith({
     int? streak,
     int? bestStreak,
     String? lastStudyDay,
-    int? freezes,
-    int? pendingBoost,
-    int? freezeUsed,
     int? streakLostFrom,
-    int? seeds,
-    String? journeyBonusDay,
-    List<String>? breakthroughs,
-    List<String>? ornaments,
-    int? realmCredits,
-    int? freeFieldsUsed,
-    List<String>? usedClaims,
   }) =>
       Progress(
-        usedClaims: usedClaims ?? this.usedClaims,
         streak: streak ?? this.streak,
         bestStreak: bestStreak ?? this.bestStreak,
         lastStudyDay: lastStudyDay ?? this.lastStudyDay,
-        freezes: freezes ?? this.freezes,
-        pendingBoost: pendingBoost ?? this.pendingBoost,
-        freezeUsed: freezeUsed ?? this.freezeUsed,
         streakLostFrom: streakLostFrom ?? this.streakLostFrom,
-        seeds: seeds ?? this.seeds,
-        journeyBonusDay: journeyBonusDay ?? this.journeyBonusDay,
-        realmCredits: realmCredits ?? this.realmCredits,
-        freeFieldsUsed: freeFieldsUsed ?? this.freeFieldsUsed,
-        breakthroughs: breakthroughs ?? this.breakthroughs,
-        ornaments: ornaments ?? this.ornaments,
       );
 
   Map<String, dynamic> toJson() => {
         'streak': streak,
         'bestStreak': bestStreak,
         'lastStudyDay': lastStudyDay,
-        'freezes': freezes,
-        'pendingBoost': pendingBoost,
-        'seeds': seeds,
-        'journeyBonusDay': journeyBonusDay,
-        'realmCredits': realmCredits,
-        'freeFieldsUsed': freeFieldsUsed,
-        'breakthroughs': breakthroughs,
-        'ornaments': ornaments,
-        'usedClaims': usedClaims,
       };
 
+  /// Anything the v1 blob carried beyond these three is dropped on the way
+  /// in. There is nowhere left to put a balance.
   factory Progress.fromJson(Map<String, dynamic> j) => Progress(
         streak: (j['streak'] ?? 0) as int,
         bestStreak: (j['bestStreak'] ?? 0) as int,
         lastStudyDay: j['lastStudyDay'] as String?,
-        freezes: (j['freezes'] ?? 1) as int,
-        pendingBoost: (j['pendingBoost'] ?? 0) as int,
-        // Seeds were called Koto Coin. Same balance, read from whichever key
-        // the stored blob happens to carry.
-        seeds: (j['seeds'] ?? j['kotoCoins'] ?? 0) as int,
-        journeyBonusDay: j['journeyBonusDay'] as String?,
-        realmCredits: (j['realmCredits'] ?? 0) as int,
-        freeFieldsUsed: (j['freeFieldsUsed'] ?? 0) as int,
-        breakthroughs:
-            ((j['breakthroughs'] as List?) ?? const []).cast<String>(),
-        ornaments: ((j['ornaments'] as List?) ?? const []).cast<String>(),
-        usedClaims: ((j['usedClaims'] as List?) ?? const []).cast<String>(),
       );
 }
 

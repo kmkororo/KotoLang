@@ -1,6 +1,6 @@
 /// Fields: every scene has one, the built-ins by kind, the learner's own by
-/// the field they were made for; adding a field costs Seeds and never makes
-/// a twin of an area that already exists.
+/// the field they were made for; a field opens because the ladder moved, and
+/// never makes a twin of an area that already exists.
 library;
 
 import 'dart:math';
@@ -15,7 +15,7 @@ import 'package:kotolang/domain/field.dart';
 import 'package:kotolang/domain/progress_service.dart';
 
 import 'repository_test.dart' show profileJson;
-import 'fixtures.dart' show builtScene, pack, realm, scene;
+import 'fixtures.dart' show builtScene, climb, pack, realm, scene;
 
 void main() {
   late AppDatabase db;
@@ -83,68 +83,75 @@ void main() {
         uiLanguage: 'en');
     final realms = await repo.realms();
     expect(realms.where((r) => r.unlocked), isEmpty);
-    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
+    expect(await repo.fieldOpeningsLeft(), freeRealmSlots);
     // Any three, not the top three.
     await repo.chooseFields([realms[4].id, realms[1].id, realms[3].id]);
     final after = await repo.realms();
     expect(after.where((r) => r.unlocked).map((r) => r.name).toSet(), {'Sailing', 'Cycling', 'Chess'});
     expect(fieldsFrom(after, (id) => id).where((f) => !f.builtin), hasLength(freeRealmSlots));
     expect(lockedFieldsFrom(after, (id) => id), hasLength(5 - freeRealmSlots));
-    expect(await repo.freeFieldSlotsLeft(), 0);
+    expect(await repo.fieldOpeningsLeft(), 0);
     // A second import does not hand out more starting picks.
     await repo.importProfile(profileJson(['Nursing', 'Cycling', 'Gardening', 'Chess', 'Sailing', 'Rowing']),
         uiLanguage: 'en');
-    expect(await repo.freeFieldSlotsLeft(), 0);
+    expect(await repo.fieldOpeningsLeft(), 0);
     expect((await repo.realms()).where((r) => r.unlocked), hasLength(freeRealmSlots));
   });
 
-  test('adding a field costs Seeds and needs the balance', () async {
-    expect(await repo.addField('Cooking'), isNull);
-    await repo.saveProgress((await repo.loadProgress()).copyWith(seeds: realmUnlockCost));
-    final realm = await repo.addField('  Cooking ');
-    expect(realm, isNotNull);
-    expect(realm!.unlocked, isTrue);
-    expect(realm.label, 'Cooking');
-    expect((await repo.loadProgress()).seeds, 0);
+  test('a field the learner types still needs room on the ladder', () async {
+    // Three openings are owed from the start, so the first three land; the
+    // fourth waits for the climb rather than for a balance.
+    for (final n in ['Cooking', 'Sailing', 'Rowing']) {
+      expect(await repo.addField(n), isNotNull, reason: n);
+    }
+    expect(await repo.fieldOpeningsLeft(), 0);
+    expect(await repo.addField('Chess'), isNull);
 
-    // The same name again is the same field, and free.
+    await climb(repo, stepsPerField);
+    final more = await repo.addField('Chess');
+    expect(more, isNotNull);
+    expect(more!.unlocked, isTrue);
+
+    // The same name again is the same field, and needs no room.
     final again = await repo.addField('cooking');
-    expect(again?.id, realm.id);
+    expect(again?.label, 'Cooking');
     expect((await repo.realms()).where((r) => r.normKeyValue == 'cooking'), hasLength(1));
   });
 
-  test('the first three fields open for nothing, whenever they are opened', () async {
+  test('three open at the start, and the fourth waits for the ladder', () async {
     for (final n in ['A', 'B', 'C', 'D']) {
       await db.into(db.realms).insertOnConflictUpdate(realmToRow(realm(n).copyWith(unlocked: false)));
     }
-    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
+    expect(await repo.fieldOpeningsLeft(), freeRealmSlots);
     expect(await repo.openField('A'), isTrue);
     expect(await repo.openField('B'), isTrue);
     expect(await repo.openField('C'), isTrue);
-    expect(await repo.freeFieldSlotsLeft(), 0);
-    expect((await repo.loadProgress()).seeds, 0, reason: 'the free ones cost nothing');
-    // The fourth needs Seeds.
+    expect(await repo.fieldOpeningsLeft(), 0);
+
+    // The fourth is not for sale, because nothing is.
     expect(await repo.openField('D'), isFalse);
-    await repo.saveProgress((await repo.loadProgress()).copyWith(seeds: realmUnlockCost));
+    expect(await repo.stepsToNextFieldOpening(), stepsPerField);
+
+    await climb(repo, stepsPerField);
+    expect(await repo.fieldOpeningsLeft(), 1);
     expect(await repo.openField('D'), isTrue);
-    expect((await repo.loadProgress()).seeds, 0);
-    expect(await repo.openField('D'), isTrue, reason: 'already open, nothing charged');
+    expect(await repo.openField('D'), isTrue, reason: 'already open, nothing owed');
   });
 
-  test('fields already open from before do not use up the free ones', () async {
-    // Two realms unlocked the old way (before the counter existed), one not.
+  test('what is already open is counted, so nothing is owed twice', () async {
+    // Two fields open, one not. The room left is what the ladder has earned
+    // less what is standing open — read off the fields themselves, so it
+    // cannot drift.
     for (final n in ['A', 'B']) {
       await db.into(db.realms).insertOnConflictUpdate(realmToRow(realm(n)));
     }
     await db.into(db.realms).insertOnConflictUpdate(realmToRow(realm('C').copyWith(unlocked: false)));
-    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
+    expect(await repo.fieldOpeningsLeft(), freeRealmSlots - 2);
     expect(await repo.openField('C'), isTrue);
-    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 1);
-    expect((await repo.loadProgress()).seeds, 0);
+    expect(await repo.fieldOpeningsLeft(), 0);
   });
 
   test('the prompt names the field the scenes are for', () async {
-    await repo.saveProgress((await repo.loadProgress()).copyWith(seeds: realmUnlockCost));
     final realm = (await repo.addField('Cooking'))!;
     final work = await repo.scenesPromptText(uiLanguage: 'en', field: 'work');
     expect(work, contains('This set is about: English at work'));
@@ -179,7 +186,6 @@ void main() {
   });
 
   test('deleting a field takes its conversations and the record of them', () async {
-    await repo.saveProgress((await repo.loadProgress()).copyWith(seeds: realmUnlockCost));
     final mine = (await repo.addField('Cooking'))!;
     await repo.importScenes(pack([scene('Stew')]), uiLanguage: 'en', field: mine.id);
     await repo.importScenes(pack([scene('Standup')]), uiLanguage: 'en', field: 'work');
@@ -224,40 +230,41 @@ void main() {
     }
     expect(await repo.openField('A'), isTrue);
     expect(await repo.openField('B'), isTrue);
-    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 2);
+    expect(await repo.fieldOpeningsLeft(), freeRealmSlots - 2);
 
     await repo.forgetAnswers();
-    // Seeds and the streak go; the two fields are still open, so the two
-    // openings they cost stay spent.
-    expect((await repo.loadProgress()).seeds, 0);
-    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 2);
+    // The streak and the ladder go. The two fields stay open: the ladder
+    // that opened them is being forgotten as well, and shutting a field
+    // somebody is in the middle of would punish them for tidying up.
+    expect((await repo.loadProgress()).streak, 0);
+    expect(await repo.fieldOpeningsLeft(), freeRealmSlots - 2);
     expect((await repo.realms()).where((r) => r.unlocked), hasLength(2));
   });
 
   test('clearing the profile gives the starting fields back', () async {
     await repo.importProfile(profileJson(['Nursing', 'Cycling']), uiLanguage: 'en');
     await repo.chooseFields([for (final r in await repo.realms()) r.id]);
-    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 2);
+    expect(await repo.fieldOpeningsLeft(), freeRealmSlots - 2);
 
     await repo.resetProfileAndFields();
     expect(await repo.realms(), isEmpty);
     // The next profile must not arrive with its fields already priced.
-    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
+    expect(await repo.fieldOpeningsLeft(), freeRealmSlots);
   });
 
   test('deleting every field gives the starting openings back', () async {
     await repo.importProfile(profileJson(['Nursing', 'Cycling']), uiLanguage: 'en');
     final ids = [for (final r in await repo.realms()) r.id];
     await repo.chooseFields(ids);
-    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 2);
+    expect(await repo.fieldOpeningsLeft(), freeRealmSlots - 2);
 
     await repo.clearField(ids.first, closeField: true);
-    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots - 1);
+    expect(await repo.fieldOpeningsLeft(), freeRealmSlots - 1);
     await repo.clearField(ids.last, closeField: true);
     // Nothing is open, so nothing has been opened: the three are owed again,
     // and both fields are still on the list to be opened with.
     expect((await repo.realms()).where((r) => r.unlocked), isEmpty);
     expect(lockedFieldsFrom(await repo.realms(), (id) => id), hasLength(2));
-    expect(await repo.freeFieldSlotsLeft(), freeRealmSlots);
+    expect(await repo.fieldOpeningsLeft(), freeRealmSlots);
   });
 }

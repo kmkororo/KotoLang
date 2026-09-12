@@ -247,20 +247,6 @@ class Repository {
         .write(const RealmsCompanion(unlocked: Value(true)));
   }
 
-  Future<bool> unlockRealm(String realmId) async {
-    final row =
-        await (db.select(db.realms)..where((t) => t.id.equals(realmId))).getSingleOrNull();
-    if (row == null) return false;
-    if (row.unlocked) return true;
-
-    final progress = await loadProgress();
-    if (progress.seeds < realmUnlockCost) return false;
-
-    await (db.update(db.realms)..where((t) => t.id.equals(realmId)))
-        .write(const RealmsCompanion(unlocked: Value(true)));
-    await saveProgress(progress.copyWith(seeds: progress.seeds - realmUnlockCost));
-    return true;
-  }
   // ---------------------------------------------------------------- reading
 
   Future<List<Realm>> realms() async {
@@ -380,10 +366,11 @@ class Repository {
       await db.delete(db.sceneResults).go();
       await db.delete(db.reviews).go();
     });
-    // The streak and the Seedless progress go; how many fields were opened
-    // for nothing does not, since those fields are still open.
-    final opened = (await loadProgress()).freeFieldsUsed;
-    await saveProgress(Progress(freeFieldsUsed: opened));
+    // The streak counted days of answering that are gone, and the ladder was
+    // a claim about those same answers. The fields stay open: the ladder that
+    // opened them is being forgotten too, and shutting a field the learner is
+    // in the middle of would be a punishment for tidying up.
+    await saveProgress(const Progress());
     await saveLadder(Ladder.empty);
   }
 
@@ -630,65 +617,48 @@ class Repository {
 
   // ------------------------------------------------------------------ fields
 
-  /// How many fields can still be opened for nothing: the first
-  /// [freeRealmSlots] are free, whenever they are opened.
-  Future<int> freeFieldSlotsLeft() async {
-    final used = (await loadProgress()).freeFieldsUsed;
-    // An opening is only spent while the field it opened is still there.
-    // Counting the open fields as well as the tally means deleting a field
-    // hands its opening back, and a phone whose tally drifted before this
-    // rule existed comes right on its own.
+  /// How many fields are open to this learner: the three they chose at the
+  /// end of the first run, and one more for every [stepsPerField] steps of
+  /// the ladder.
+  ///
+  /// The ladder is the only thing that opens anything. It was a balance once,
+  /// and a balance meant a learner could buy their way to a wider world
+  /// without ever having heard it any faster — which is exactly the claim the
+  /// tree would then have grown on.
+  Future<int> fieldsOpen() async => fieldsOpenAt((await loadLadder()).reached);
+
+  /// How many more fields can be opened right now: what the ladder has earned,
+  /// less what is already open. Zero means the next one is a few steps away
+  /// rather than a price away.
+  Future<int> fieldOpeningsLeft() async {
     final open = (await realms()).where((r) => r.unlocked).length;
-    final spent = used < open ? used : open;
-    return (freeRealmSlots - spent).clamp(0, freeRealmSlots);
+    return (await fieldsOpen() - open).clamp(0, freeRealmSlots * 10);
   }
 
-  Future<void> _useFreeFieldSlots(int n) async {
-    if (n <= 0) return;
-    final p = await loadProgress();
-    await saveProgress(p.copyWith(freeFieldsUsed: p.freeFieldsUsed + n));
+  /// Steps still to climb before another field opens, or null when every area
+  /// the profile named is already open.
+  Future<int?> stepsToNextFieldOpening() async {
+    final all = await realms();
+    if (all.every((r) => r.unlocked)) return null;
+    return stepsToNextField((await loadLadder()).reached, fieldsHeld: all.length);
   }
 
-  /// Opens a field: free while free slots remain, for Seeds after that.
-  /// The starting fields, chosen by the learner: opened without charge, and
-  /// counted against the [freeRealmSlots].
+  /// The starting fields, chosen by the learner at the end of the first run.
   Future<void> chooseFields(List<String> realmIds) async {
     if (realmIds.isEmpty) return;
     await markRealmsUnlocked(realmIds);
-    await _useFreeFieldSlots(realmIds.length);
   }
 
-  /// Returns false, spending nothing, when the balance is short.
-  /// What the next batch of conversations costs for this field: nothing the
-  /// first time, [sceneAddCost] once the field already has some. Asked before
-  /// the reply is taken, since afterwards the field always has some.
-  Future<int> sceneAddCostFor(String? fieldId) async {
-    if (fieldId == null) return 0;
-    final own = await scenes(includeDisabled: true);
-    return splitField(own, fieldId).own.isEmpty ? 0 : sceneAddCost;
-  }
-
-  /// Takes Seeds off the balance. False when there are not enough, and then
-  /// nothing is taken.
-  Future<bool> spendSeeds(int n) async {
-    if (n <= 0) return true;
-    final p = await loadProgress();
-    if (p.seeds < n) return false;
-    await saveProgress(p.copyWith(seeds: p.seeds - n));
-    return true;
-  }
-
+  /// Opens a field, if the ladder has earned room for it. Returns false and
+  /// changes nothing when it has not — there is no other way in.
   Future<bool> openField(String realmId) async {
     final all = await realms();
     final row = all.where((r) => r.id == realmId).firstOrNull;
     if (row == null) return false;
     if (row.unlocked) return true;
-    if (await freeFieldSlotsLeft() > 0) {
-      await markRealmsUnlocked([realmId]);
-      await _useFreeFieldSlots(1);
-      return true;
-    }
-    return unlockRealm(realmId);
+    if (await fieldOpeningsLeft() <= 0) return false;
+    await markRealmsUnlocked([realmId]);
+    return true;
   }
 
   /// How a field is described to the AI, in English: the built-in four by
@@ -702,19 +672,18 @@ class Repository {
     return contexts.isEmpty ? realm.name : '${realm.name} (${contexts.join(', ')})';
   }
 
-  /// Adds a field of the learner's own, paid for with Seeds at the same price
-  /// as unlocking an area. Returns the field's realm, or null when the balance
-  /// is short and nothing was spent. A name that matches an existing area
-  /// unlocks that area instead of making a twin.
+  /// Adds a field of the learner's own. It needs the same room on the ladder
+  /// as opening one the profile named: a field the learner types is still a
+  /// field. A name that matches an area already there opens that one instead
+  /// of making a twin.
   Future<Realm?> addField(String label) async {
     final name = clean(label);
     if (name.isEmpty) return null;
     final key = normKey(name);
     final existing = (await realms()).where((r) => r.normKeyValue == key).firstOrNull;
     if (existing != null && existing.unlocked) return existing;
+    if (await fieldOpeningsLeft() <= 0) return null;
 
-    final progress = await loadProgress();
-    if (progress.seeds < realmUnlockCost) return null;
     final realm = existing?.copyWith(unlocked: true) ??
         Realm(
           id: slugId('realm', key),
@@ -723,10 +692,7 @@ class Repository {
           normKeyValue: key,
           unlocked: true,
         );
-    await db.transaction(() async {
-      await db.into(db.realms).insertOnConflictUpdate(realmToRow(realm));
-      await saveProgress(progress.copyWith(seeds: progress.seeds - realmUnlockCost));
-    });
+    await db.into(db.realms).insertOnConflictUpdate(realmToRow(realm));
     return realm;
   }
 

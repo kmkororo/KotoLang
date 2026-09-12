@@ -31,34 +31,13 @@ class FieldScreen extends ConsumerStatefulWidget {
 }
 
 class _FieldScreenState extends ConsumerState<FieldScreen> {
-  /// What another batch would cost here. Nothing the first time.
-  int _cost = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCost();
-  }
-
-  Future<void> _loadCost() async {
-    final cost = await ref.read(repositoryProvider).sceneAddCostFor(widget.field.id);
-    if (mounted) setState(() => _cost = cost);
-  }
-
   void _refresh() {
     ref.invalidate(allScenesProvider);
     ref.invalidate(sceneResultsProvider);
     ref.invalidate(skillStatsProvider);
-    _loadCost();
   }
 
   Future<void> _makeScenes() async {
-    final seeds = ref.read(progressProvider).seeds;
-    if (_cost > 0 && seeds < _cost) {
-      final s = ref.read(stringsProvider);
-      showToast(context, s.t('unlockRealmNeedMore', {'n': _cost - seeds}));
-      return;
-    }
     await Navigator.push(
         context,
         MaterialPageRoute(
@@ -146,12 +125,6 @@ class _FieldScreenState extends ConsumerState<FieldScreen> {
                   onPressed: _makeScenes,
                   child: Text(s.t(scenes.isEmpty ? 'makeOwnScenes' : 'nextScenesMake')),
                 ),
-                if (_cost > 0) ...[
-                  const SizedBox(height: 4),
-                  Text(s.t('seedsCost', {'n': _cost}),
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-                ],
                 // Sending the results back needs enough of them — but never
                 // more than this field holds, or a small field could never
                 // reach it.
@@ -253,22 +226,22 @@ class _FeedbackButton extends StatelessWidget {
 }
 
 
-/// Opens one of the areas the AI read off the profile: as one of the starting
-/// fields while those are still to be chosen, for Seeds after that. When
-/// [toScenes] is set, the scenes screen follows with the field already
-/// chosen — an open field with no scenes is nothing yet. Returns true when
-/// opened.
+/// Opens one of the areas the AI read off the profile, when the ladder has
+/// room for it. When [toScenes] is set, the scenes screen follows with the
+/// field already chosen — an open field with no scenes is nothing yet.
+/// Returns true when opened.
 Future<bool> openLockedField(BuildContext context, WidgetRef ref, Field f,
     {bool toScenes = false}) async {
   final s = ref.read(stringsProvider);
   final repo = ref.read(repositoryProvider);
-  // The starting fields are the learner's to choose; after those, a field
-  // is bought with Seeds, and the dialog says so.
-  final choosing = await repo.freeFieldSlotsLeft() > 0;
+  // Room on the ladder means it simply opens: there is nothing to agree to,
+  // because nothing is being spent. Without room the popup is all that
+  // happens, and all the popup does is say how far off the next one is.
+  final room = await repo.fieldOpeningsLeft() > 0;
   if (!context.mounted) return false;
-  if (!choosing) {
-    final ok = await showLockedFieldDialog(context, ref, f.label);
-    if (!ok || !context.mounted) return false;
+  if (!room) {
+    await showLockedFieldDialog(context, ref, f.label);
+    return false;
   }
   final opened = await repo.openField(f.id);
   if (!context.mounted || !opened) return false;
@@ -276,7 +249,7 @@ Future<bool> openLockedField(BuildContext context, WidgetRef ref, Field f,
   ref.invalidate(realmsProvider);
   ref.invalidate(fieldsProvider);
   ref.invalidate(lockedFieldsProvider);
-  ref.invalidate(freeFieldSlotsProvider);
+  ref.invalidate(fieldOpeningsProvider);
   if (!context.mounted) return true;
   showToast(context, s.t('fieldAdded', {'name': f.label}));
   if (toScenes) {
@@ -286,14 +259,17 @@ Future<bool> openLockedField(BuildContext context, WidgetRef ref, Field f,
   return true;
 }
 
-/// The locked field's popup: what it costs, what the learner has, and — when
-/// the balance covers it — the button that opens it. Returns true only when
-/// that button was pressed.
-Future<bool> showLockedFieldDialog(BuildContext context, WidgetRef ref, String label) async {
+/// The closed field's popup: how many steps of the ladder stand between the
+/// learner and this field.
+///
+/// It only ever appears when the ladder has no room, because room means the
+/// field simply opens. There is no price and no balance, so there is nothing
+/// to agree to — this exists to answer "why not yet", and then to be closed.
+Future<void> showLockedFieldDialog(BuildContext context, WidgetRef ref, String label) async {
   final s = ref.read(stringsProvider);
-  final seeds = ref.read(progressProvider).seeds;
-  final enough = seeds >= realmUnlockCost;
-  final ok = await showDialog<bool>(
+  final steps = await ref.read(repositoryProvider).stepsToNextFieldOpening();
+  if (!context.mounted) return;
+  await showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
       icon: const Icon(Icons.lock_outline),
@@ -301,22 +277,17 @@ Future<bool> showLockedFieldDialog(BuildContext context, WidgetRef ref, String l
       // three lines on a narrow screen.
       titleTextStyle: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
       title: Text(s.t('lockedFieldTitle', {'realm': label})),
-      content: Text(s.t('lockedFieldBody', {'n': realmUnlockCost, 'have': seeds})),
+      content: Text(steps == null
+          ? s.t('fieldLadderLocked')
+          : s.t('fieldLadderSteps', {'n': steps})),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: Text(s.t(enough ? 'cancel' : 'close')),
+          onPressed: () => Navigator.pop(ctx),
+          child: Text(s.t('close')),
         ),
-        if (enough)
-          FilledButton(
-            style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(s.t('seedsCost', {'n': realmUnlockCost})),
-          ),
       ],
     ),
   );
-  return ok ?? false;
 }
 
 /// One field as a card: the name on its own line, so a long one wraps
@@ -405,7 +376,7 @@ class FieldCard extends StatelessWidget {
 Future<void> showOpenFieldSheet(BuildContext context, WidgetRef ref) async {
   final s = ref.read(stringsProvider);
   final locked = await ref.read(lockedFieldsProvider.future);
-  final left = await ref.read(freeFieldSlotsProvider.future);
+  final left = await ref.read(fieldOpeningsProvider.future);
   if (!context.mounted) return;
   final picked = await showModalBottomSheet<Field>(
     context: context,
@@ -418,7 +389,7 @@ Future<void> showOpenFieldSheet(BuildContext context, WidgetRef ref) async {
           Text(s.t('fieldAdd'), style: Theme.of(ctx).textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            left > 0 ? s.t('fieldChooseLeft', {'n': left}) : s.t('fieldAddBody', {'n': realmUnlockCost}),
+            left > 0 ? s.t('fieldChooseLeft', {'n': left}) : s.t('fieldAddLadder'),
             style: Theme.of(ctx).textTheme.bodySmall,
           ),
           const SizedBox(height: 10),
@@ -436,7 +407,7 @@ Future<void> showOpenFieldSheet(BuildContext context, WidgetRef ref) async {
               label: f.label,
               locked: true,
               sub: s.t('fieldFromProfile'),
-              action: left > 0 ? s.t('fieldChooseButton') : s.t('seedsCost', {'n': realmUnlockCost}),
+              action: left > 0 ? s.t('fieldChooseButton') : s.t('fieldLadderLocked'),
               onTap: () => Navigator.pop(ctx, f),
             ),
             const SizedBox(height: 8),

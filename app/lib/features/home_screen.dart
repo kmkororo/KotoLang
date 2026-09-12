@@ -72,7 +72,7 @@ class HomeScreen extends ConsumerWidget {
       scrollCacheExtent: const ScrollCacheExtent.pixels(2000),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
-        // -------- streak / seeds strip --------
+        // -------- the streak, and nothing beside it --------
         Wrap(
           alignment: WrapAlignment.spaceBetween,
           crossAxisAlignment: WrapCrossAlignment.center,
@@ -81,10 +81,10 @@ class HomeScreen extends ConsumerWidget {
           children: [
             Text('KotoLang',
                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-            Wrap(spacing: 8, runSpacing: 4, children: [
-              _Pill(icon: '☀️', text: s.t('streakPill', {'n': progress.streak})),
-              _Pill(icon: '🌱', text: '${progress.seeds} Seeds'),
-            ]),
+            // One pill. There was a balance beside it once; a second number
+            // that goes up is the beginning of a shop, and a shop has nothing
+            // to do with hearing English.
+            _Pill(icon: '☀️', text: s.t('streakPill', {'n': progress.streak})),
           ],
         ),
         const SizedBox(height: 16),
@@ -241,10 +241,9 @@ class _Banner extends ConsumerWidget {
     final theme = Theme.of(context);
 
     String? title, body;
-    if (progress.freezeUsed > 0) {
-      title = s.t('freezeBannerTitle');
-      body = s.t('freezeBannerBody', {'n': progress.freezeUsed, 'streak': progress.streak});
-    } else if (progress.streakLostFrom > 0) {
+    // Nothing could have saved it. A missed day breaks the chain, and the
+    // only decent thing to do is say so plainly.
+    if (progress.streakLostFrom > 0) {
       title = s.t('lostBannerTitle');
       body = s.t('lostBannerBody', {'n': progress.streakLostFrom});
     }

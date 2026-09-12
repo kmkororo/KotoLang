@@ -501,8 +501,17 @@ class _PlainScrollBehavior extends MaterialScrollBehavior {
   ScrollPhysics getScrollPhysics(BuildContext context) => const ClampingScrollPhysics();
 }
 
-/// Fields still openable for nothing.
-final freeFieldSlotsProvider = FutureProvider.autoDispose<int>((ref) async {
+/// Fields the ladder has earned room for and that are not yet open.
+final fieldOpeningsProvider = FutureProvider.autoDispose<int>((ref) async {
   ref.watch(realmsProvider);
-  return ref.watch(repositoryProvider).freeFieldSlotsLeft();
+  ref.watch(ladderProvider);
+  return ref.watch(repositoryProvider).fieldOpeningsLeft();
+});
+
+/// Steps still to climb before another field opens. Null once every area the
+/// profile named is already open — there is nothing left for it to say.
+final stepsToNextFieldProvider = FutureProvider.autoDispose<int?>((ref) async {
+  ref.watch(realmsProvider);
+  ref.watch(ladderProvider);
+  return ref.watch(repositoryProvider).stepsToNextFieldOpening();
 });

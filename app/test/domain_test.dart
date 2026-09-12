@@ -7,6 +7,7 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kotolang/core/util.dart';
 import 'package:kotolang/domain/models.dart';
+import 'package:kotolang/domain/ladder.dart';
 import 'package:kotolang/domain/progress_service.dart';
 
 void main() {
@@ -78,59 +79,62 @@ void main() {
       expect(p.bestStreak, 2);
     });
 
-    test('a freeze covers a missed day', () {
-      var p = Progress(streak: 9, bestStreak: 9, freezes: 2, lastStudyDay: addDays(t, -2));
-      p = reconcileStreak(p, t);
-      expect(p.streak, 9);
-      expect(p.freezes, 1);
-      expect(p.freezeUsed, 1);
-      p = registerStudyDay(p, t).progress;
-      expect(p.streak, 10);
-    });
-
-    test('insufficient freezes break the streak but are not wasted', () {
-      var p = Progress(streak: 20, bestStreak: 20, freezes: 1, lastStudyDay: addDays(t, -4));
+    test('a missed day breaks the chain, and the best of it is kept', () {
+      // There is no token that could have covered the gap. A rest day was a
+      // thing to be given and spent, and this app keeps no balance of
+      // anything — so the honest answer is that the streak went.
+      var p = Progress(streak: 20, bestStreak: 20, lastStudyDay: addDays(t, -4));
       p = reconcileStreak(p, t);
       expect(p.streak, 0);
-      expect(p.freezes, 1, reason: 'a freeze that cannot save the streak is kept');
-      expect(p.streakLostFrom, 20);
+      expect(p.streakLostFrom, 20, reason: 'home says what happened');
       expect(p.bestStreak, 20, reason: 'the best is a record, not a current state');
       p = registerStudyDay(p, t).progress;
       expect(p.streak, 1);
       expect(p.bestStreak, 20);
     });
 
-    test('reconciling twice on the same day spends nothing extra', () {
-      var p = Progress(streak: 4, freezes: 2, lastStudyDay: addDays(t, -2));
+    test('one day missed is still one day missed', () {
+      var p = Progress(streak: 9, bestStreak: 9, lastStudyDay: addDays(t, -2));
       p = reconcileStreak(p, t);
-      final after = p.freezes;
+      expect(p.streak, 0);
+      expect(p.streakLostFrom, 9);
+    });
+
+    test('reconciling twice on the same day says the same thing twice', () {
+      var p = Progress(streak: 4, lastStudyDay: addDays(t, -2));
       p = reconcileStreak(p, t);
-      expect(p.freezes, after);
+      final once = p.streakLostFrom;
+      p = reconcileStreak(p, t);
+      expect(p.streakLostFrom, 0,
+          reason: 'the notice is cleared once it has been shown');
+      expect(once, 4);
     });
   });
 
-  // ============================================================= chest
-  group('chest', () {
-    test('all three chest rewards occur and each has an effect', () {
-      final ids = <String>{};
-      for (var i = 0; i < 3000; i++) {
-        ids.add(openChest().id);
-      }
-      expect(ids.length, 3);
-
-      const p = Progress();
-      expect(applyChest(p, chestTable[0]).freezes, p.freezes + 1);
-      expect(applyChest(p, chestTable[1]).pendingBoost, chestBoost);
-      expect(applyChest(p, chestTable[2]).seeds, p.seeds + chestSeedBonus);
+  // ============================================================= opening
+  group('what opens a field', () {
+    test('the three chosen at the start are there from the start', () {
+      expect(fieldsOpenAt(0), freeRealmSlots);
     });
 
-    test('every reward is denominated in something that still exists', () {
-      // The chest used to pay in XP, which the app no longer has. A reward
-      // nobody can see is worse than no reward at all.
-      for (final r in chestTable) {
-        expect(applyChest(const Progress(), r), isNot(const Progress()),
-            reason: r.id);
+    test('one more opens every few steps of the ladder, and never unopens', () {
+      var last = fieldsOpenAt(0);
+      for (var reached = 0; reached <= ladderSteps; reached++) {
+        final now = fieldsOpenAt(reached);
+        expect(now, greaterThanOrEqualTo(last), reason: 'step $reached');
+        expect(now, greaterThanOrEqualTo(freeRealmSlots), reason: 'step $reached');
+        last = now;
       }
+      expect(fieldsOpenAt(stepsPerField), freeRealmSlots + 1);
+      expect(fieldsOpenAt(stepsPerField * 2), freeRealmSlots + 2);
+    });
+
+    test('it says how far off the next one is, and stops saying it at the end', () {
+      expect(stepsToNextField(0, fieldsHeld: 9), stepsPerField);
+      expect(stepsToNextField(stepsPerField - 1, fieldsHeld: 9), 1);
+      // Everything the profile named is already open: there is nothing left
+      // for the number to be about.
+      expect(stepsToNextField(0, fieldsHeld: freeRealmSlots), isNull);
     });
   });
 

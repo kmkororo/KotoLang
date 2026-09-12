@@ -325,7 +325,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ref.invalidate(realmsProvider);
     ref.invalidate(fieldsProvider);
     ref.invalidate(lockedFieldsProvider);
-    ref.invalidate(freeFieldSlotsProvider);
+    ref.invalidate(fieldOpeningsProvider);
+    ref.invalidate(stepsToNextFieldProvider);
+    ref.invalidate(ladderProvider);
     ref.invalidate(allScenesProvider);
     ref.invalidate(sceneResultsProvider);
     ref.invalidate(skillStatsProvider);

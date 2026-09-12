@@ -7,6 +7,8 @@ library;
 
 import 'dart:convert';
 
+import 'package:kotolang/data/repository.dart';
+import 'package:kotolang/domain/ladder.dart';
 import 'package:kotolang/domain/models.dart';
 import 'package:kotolang/domain/scene.dart';
 
@@ -111,3 +113,23 @@ Scene builtScene(
       realmId: field,
       createdAt: 0,
     );
+
+/// Moves the ladder up by [steps], the way a learner would: by answering.
+///
+/// Every axis is at its own frontier at the start, so a clean run of
+/// [ladderWindow] right answers lifts all five at once — which is exactly
+/// what makes the total move in fives. Tests that only care that the ladder
+/// reached far enough use this and say the number they need.
+Future<void> climb(Repository repo, int steps) async {
+  await repo.importScenes(pack([scene('Climbing')]), uiLanguage: 'en', field: 'work');
+  final id = (await repo.scenes()).last.id;
+  while ((await repo.loadLadder()).reached < steps) {
+    final before = (await repo.loadLadder()).reached;
+    for (var i = 0; i < ladderWindow; i++) {
+      await repo.recordTurn(sceneId: id, turn: 0, correct: true);
+    }
+    if ((await repo.loadLadder()).reached == before) {
+      throw StateError('the ladder stopped moving at $before');
+    }
+  }
+}

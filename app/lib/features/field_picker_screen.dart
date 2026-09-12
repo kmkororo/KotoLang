@@ -46,7 +46,7 @@ class _RealmPickerScreenState extends ConsumerState<RealmPickerScreen> {
   Future<void> _load() async {
     final repo = ref.read(repositoryProvider);
     final list = await repo.realms();
-    final left = await repo.freeFieldSlotsLeft();
+    final left = await repo.fieldOpeningsLeft();
     if (!mounted) return;
     setState(() {
       _realms = list;
@@ -69,7 +69,7 @@ class _RealmPickerScreenState extends ConsumerState<RealmPickerScreen> {
     ref.invalidate(realmsProvider);
     ref.invalidate(fieldsProvider);
     ref.invalidate(lockedFieldsProvider);
-    ref.invalidate(freeFieldSlotsProvider);
+    ref.invalidate(fieldOpeningsProvider);
     await reload(ref);
     if (!mounted) return;
     // As the root, the picker is replaced by home once a field is chosen;
@@ -152,7 +152,7 @@ class _RealmPickerScreenState extends ConsumerState<RealmPickerScreen> {
             label: r.label,
             locked: true,
             sub: '${'★' * r.importance}  ${s.t('importanceLabel', {'n': r.importance})}',
-            action: _left > 0 ? s.t('fieldChooseButton') : s.t('seedsCost', {'n': realmUnlockCost}),
+            action: _left > 0 ? s.t('fieldChooseButton') : s.t('fieldLadderLocked'),
             onTap: () => _open(r),
           ),
           const SizedBox(height: 8),

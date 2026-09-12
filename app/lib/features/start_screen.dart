@@ -29,7 +29,7 @@ class StartOverviewScreen extends ConsumerWidget {
       return;
     }
     // Setup left off after the profile: on to the fields, then the scenes.
-    final left = await repo.freeFieldSlotsLeft();
+    final left = await repo.fieldOpeningsLeft();
     final anyLocked = (await repo.realms()).any((r) => !r.unlocked);
     if (!context.mounted) return;
     if (left > 0 && anyLocked) {

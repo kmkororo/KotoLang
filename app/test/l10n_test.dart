@@ -125,9 +125,10 @@ void main() {
 
   test('substitution fills every placeholder', () {
     final s = S('en');
-    final out = s.t('freezeBannerBody', {'n': 2, 'streak': 9});
+    final out = s.t('sceneResultBreakdown', {'g': 2, 'r': 3, 'n': 4});
     expect(out.contains('2'), isTrue);
-    expect(out.contains('9'), isTrue);
+    expect(out.contains('3'), isTrue);
+    expect(out.contains('4'), isTrue);
     expect(out.contains('{'), isFalse, reason: 'a placeholder was left unfilled');
   });
 
