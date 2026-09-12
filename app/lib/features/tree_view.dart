@@ -375,6 +375,63 @@ class _TreePainter extends CustomPainter {
       ).createShader(rect);
     canvas.drawOval(rect, rim);
     canvas.drawOval(rect.deflate(h * 0.07), earth);
+
+    // And once it is round it is not a clod of earth any more. Ocean under
+    // cloud, land on it, and the far side falling into its own shadow: a
+    // brown ball with a tree on top is a planet in a diagram, and what the
+    // climb ends on should be the thing itself.
+    if (world != null && round > 0.02) {
+      final face = rect.deflate(h * 0.07);
+      canvas.save();
+      canvas.clipPath(Path()..addOval(face));
+      final r = face.width / 2;
+      canvas.drawOval(
+          face,
+          Paint()
+            ..shader = LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF2E7BC4).withValues(alpha: round),
+                const Color(0xFF1B4E86).withValues(alpha: round),
+              ],
+            ).createShader(face));
+      // Land, in lumps that keep their places between visits.
+      final land = Paint()
+        ..color = (dark ? const Color(0xFF3E7A3A) : const Color(0xFF4E9B45))
+            .withValues(alpha: round);
+      for (var i = 0; i < 11; i++) {
+        final a = _wobble(i * 19) * pi;
+        final d = (_wobble(i * 31 + 3) * 0.5 + 0.5) * 0.82;
+        final at = face.center + Offset(cos(a), sin(a)) * (r * d);
+        final w = r * (0.36 + (_wobble(i * 13 + 7) * 0.5 + 0.5) * 0.50);
+        for (var k = 0; k < 3; k++) {
+          canvas.drawOval(
+              Rect.fromCenter(
+                center: at +
+                    Offset(_wobble(i * 53 + k) * w * 0.34,
+                        _wobble(i * 71 + k) * w * 0.26),
+                width: w * (0.64 + 0.24 * k),
+                height: w * (0.44 + 0.16 * k),
+              ),
+              land);
+        }
+      }
+      // The terminator: the far lower right going into night.
+      canvas.drawOval(
+          face,
+          Paint()
+            ..shader = RadialGradient(
+              center: const Alignment(-0.45, -0.5),
+              radius: 1.15,
+              colors: [
+                Colors.transparent,
+                const Color(0xFF05122B).withValues(alpha: 0.62 * round),
+              ],
+              stops: const [0.55, 1],
+            ).createShader(face));
+      canvas.restore();
+    }
     // A lighter band across the top, the way the old picture had it. It
     // shrinks away as the ground rounds, since a world has no near lip.
     final band = Paint()
@@ -461,7 +518,7 @@ class _TreePainter extends CustomPainter {
   /// covered afterwards by the near lip of the mound.
   void _roots(Canvas canvas, double x, double halfWidth, double soil,
       Paint wood) {
-    final spread = halfWidth * (1.1 + 2.2 * _woodiness);
+    final spread = halfWidth * (1.1 + 2.2 * _woodiness) * (1 - 0.75 * _round);
     // A seedling has no buttress at all; the swelling arrives with the bark.
     final crown = soil - 4 - 9 * _woodiness;
     final buried = soil + 11;
@@ -469,9 +526,9 @@ class _TreePainter extends CustomPainter {
     canvas.drawPath(
       Path()
         ..moveTo(x - halfWidth, crown)
-        ..quadraticBezierTo(
-            x - halfWidth, soil - 2, x - halfWidth * (1 + _woodiness), buried)
-        ..lineTo(x + halfWidth * (1 + _woodiness), buried)
+        ..quadraticBezierTo(x - halfWidth, soil - 2,
+            x - halfWidth * (1 + _woodiness * (1 - _round)), buried)
+        ..lineTo(x + halfWidth * (1 + _woodiness * (1 - _round)), buried)
         ..quadraticBezierTo(x + halfWidth, soil - 2, x + halfWidth, crown)
         ..close(),
       wood,
@@ -664,9 +721,8 @@ class _TreePainter extends CustomPainter {
 
     // The roots, coming off the trunk's own foot, round the island and down
     // into the point. What holds the whole thing up.
-    final stem = _stemColour;
     final root = Paint()
-      ..color = Color.lerp(stem, dark ? _barkOnDark : _bark, 0.7)!
+      ..color = Color.lerp(dark ? _barkOnDark : _barkLit, const Color(0xFFD9A870), 0.25)!
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
     const strands = 9;
@@ -685,6 +741,50 @@ class _TreePainter extends CustomPainter {
       path.quadraticBezierTo(g.dx + spread * r * 0.62, g.dy + r * 0.92, end.dx, end.dy);
       canvas.drawPath(
           path, root..strokeWidth = max(1.0, plan.w0 * (0.34 - 0.14 * spread.abs())));
+    }
+  }
+
+  /// The roots on the near face of the world, spreading from the trunk's foot
+  /// and reaching for the rim. Drawn over the world rather than under it,
+  /// because what is wanted is a world held in a hand.
+  void _surfaceRoots(Canvas canvas, _Plan plan) {
+    if (plan.globeR <= 0 || _round <= 0.02) return;
+    final g = plan.globe;
+    final r = plan.globeR;
+    final root = Paint()
+      ..color = Color.lerp(dark ? _barkOnDark : _barkLit, const Color(0xFFD9A870), 0.35)!
+          .withValues(alpha: 0.95 * _round)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    Offset on(double a, double m) => g + Offset(cos(a), sin(a)) * (r * m);
+    const top = -pi / 2;
+    const strands = 13;
+    for (var k = 0; k < strands; k++) {
+      final spread = k / (strands - 1) * 2 - 1;
+      // How far round the face this one reaches. The outer ones go nearly to
+      // the rim, where they meet the ones coming up from underneath.
+      final far = (1.35 + 0.34 * _wobble(k * 17)) * spread;
+      final end = top + far;
+      final mid = top + far * 0.52 + _wobble(k * 37) * 0.10;
+      // Leaving the foot a little to one side already, so thirteen of them do
+      // not all start from the same point and read as one lump.
+      final start = top + far * 0.14;
+      final path = Path()..moveTo(on(start, 0.995).dx, on(start, 0.995).dy);
+      path.quadraticBezierTo(
+          on(mid, 0.995).dx, on(mid, 0.995).dy, on(end, 0.99).dx, on(end, 0.99).dy);
+      canvas.drawPath(
+          path, root..strokeWidth = max(1.2, plan.w0 * (0.17 - 0.09 * spread.abs())));
+
+      // One fork off the back half of each, so the face is netted rather than
+      // combed.
+      final f0 = top + far * 0.55;
+      final f1 = f0 + far * 0.36 + _wobble(k * 91) * 0.18;
+      final fork = Path()..moveTo(on(f0, 0.995).dx, on(f0, 0.995).dy);
+      fork.quadraticBezierTo(on((f0 + f1) / 2, 1.0).dx, on((f0 + f1) / 2, 1.0).dy,
+          on(f1, 0.985).dx, on(f1, 0.985).dy);
+      canvas.drawPath(fork, root..strokeWidth = max(1.0, plan.w0 * 0.13));
     }
   }
 
@@ -767,7 +867,7 @@ class _TreePainter extends CustomPainter {
     // panel a grown tree came out a wand, and on a preview a hundred pixels
     // wide it was a wire. A trunk is the one part of a tree that is allowed
     // to look heavy.
-    final w0 = min(2.6 + 21 * girth, size.width * 0.14);
+    var w0 = min(2.6 + 21 * girth, size.width * 0.14);
     // A crown wider than it is tall: the shape of a tree left to spread. How
     // far it actually reaches is the work done, so a young tree has short
     // boughs rather than a full crown on a short stem.
@@ -777,7 +877,7 @@ class _TreePainter extends CustomPainter {
     final reach = headroom *
         (0.16 + 0.36 * grown) *
         (0.35 + 0.65 * branchReach(shape.answers)) *
-        (1 + 1.1 * beyond);
+        (1 + 0.55 * beyond);
 
     // The world, sized against the crown rather than against the soil. A
     // little smaller than the crown's reach, so that boughs of that length
@@ -785,14 +885,19 @@ class _TreePainter extends CustomPainter {
     // crown meets itself underneath, small enough that the tree on top of it
     // is still a tree and not a sprig on a planet.
     if (_round > 0) {
-      plan.globeR = max(reach * 0.80, _groundH * 0.7);
+      plan.globeR = max(reach * 1.15, _groundH * 0.7);
       plan.globe = Offset(cx, soil + plan.globeR);
     }
 
     plan
       ..base = base
       ..top = top
-      ..w0 = w0
+      // A trunk holding a world up has to look like it could, and everything
+      // is scaled down to fit the world in the panel, so a width measured
+      // against the panel comes out a wire however generous it looked. The
+      // boughs keep the unmeasured one: a bough as thick as that trunk, laid
+      // across a world, is a plank.
+      ..w0 = _round > 0 ? max(w0, plan.globeR * 0.52) : w0
       // The trunk leans and straightens rather than standing to attention.
       ..trunkCtrl = Offset(cx + w0 * 0.55, base.dy - trunkH * 0.45);
 
@@ -1081,6 +1186,7 @@ class _TreePainter extends CustomPainter {
     _underside(canvas, plan);
     _mound(canvas, Offset(plan.cx, plan.groundY), _groundH,
         world: plan.globeR > 0 ? (at: plan.globe, r: plan.globeR) : null);
+    _surfaceRoots(canvas, plan);
 
     // Nothing answered yet: the seed art on its own, sitting in the soil.
     if (shape.isSeed) {
