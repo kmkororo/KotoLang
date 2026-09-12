@@ -126,19 +126,40 @@ class SceneOutcome {
   final List<({String title, String reason})> rejected;
   final bool partial;
 
+  /// What it cost, if anything. Nought for the first batch in a field.
+  final int spent;
+
+  /// Refused for want of Seeds, with the price. Told apart from a reply that
+  /// would not parse, because there is nothing wrong with the reply and
+  /// nothing to do about it but earn.
+  final int shortOf;
+
   const SceneOutcome({
     required this.ok,
     this.errors = const [],
     this.scenes = 0,
     this.rejected = const [],
     this.partial = false,
+    this.spent = 0,
+    this.shortOf = 0,
   });
 
   const SceneOutcome.failure(this.errors)
       : ok = false,
         scenes = 0,
         rejected = const [],
-        partial = false;
+        partial = false,
+        spent = 0,
+        shortOf = 0;
+
+  /// Nothing wrong with the reply; there is just nothing to pay with.
+  const SceneOutcome.tooDear(this.shortOf)
+      : ok = false,
+        errors = const ['too dear'],
+        scenes = 0,
+        rejected = const [],
+        partial = false,
+        spent = 0;
 }
 
 class Repository {
@@ -457,6 +478,15 @@ class Repository {
       );
     }
 
+    // Paid for here rather than on the screen that asks for it, so that a
+    // reply arriving through the share sheet is charged the same as one
+    // pasted in. The first batch in a field is free: a field with nothing in
+    // it is not yet a field.
+    final cost = await sceneAddCostFor(field);
+    if (cost > 0 && !await spendSeeds(cost)) {
+      return SceneOutcome.tooDear(cost - (await loadProgress()).seeds);
+    }
+
     await db.transaction(() async {
       for (final s in norm.scenes) {
         await db.into(db.scenes).insertOnConflictUpdate(sceneToRow(
@@ -473,6 +503,7 @@ class Repository {
       scenes: norm.scenes.length,
       rejected: norm.rejected,
       partial: ex.repaired,
+      spent: cost,
     );
   }
 

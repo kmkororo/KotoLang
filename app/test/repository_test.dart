@@ -274,6 +274,35 @@ void main() {
       expect(await repo.sceneAddCostFor('work'), sceneAddCost);
     });
 
+    test('the second batch in a field is paid for, the first is not', () async {
+      // The price used to be worked out and never charged: the function that
+      // knew it had no caller, so a learner with nothing could fill a field.
+      await repo.importProfile(profileJson(['Nursing']), uiLanguage: 'en');
+      await repo.chooseFields([for (final r in await repo.realms()) r.id]);
+
+      final first = await repo.importScenes(pack([scene('One')]),
+          uiLanguage: 'en', field: 'work');
+      expect(first.ok, isTrue);
+      expect(first.spent, 0, reason: 'a field with nothing in it is not yet a field');
+
+      // Nothing earned yet, so the second batch cannot be paid for.
+      final broke = await repo.importScenes(pack([scene('Two')]),
+          uiLanguage: 'en', field: 'work');
+      expect(broke.ok, isFalse);
+      expect(broke.shortOf, sceneAddCost);
+      expect((await repo.scenes()).length, 1, reason: 'and nothing was taken in');
+
+      // With enough in hand it goes through, and the balance is the poorer.
+      await repo.saveProgress(
+          (await repo.loadProgress()).copyWith(seeds: sceneAddCost + 7));
+      final paid = await repo.importScenes(pack([scene('Three')]),
+          uiLanguage: 'en', field: 'work');
+      expect(paid.ok, isTrue);
+      expect(paid.spent, sceneAddCost);
+      expect((await repo.loadProgress()).seeds, 7);
+      expect((await repo.scenes()).length, 2);
+    });
+
     test('answering quickly is what fills the balance', () async {
       await repo.importScenes(pack([scene('Talk')]), uiLanguage: 'en', field: 'work');
       final id = (await repo.scenes()).single.id;

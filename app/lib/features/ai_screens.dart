@@ -103,6 +103,13 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
   int _ownScenes = 0;
   String? _field;
 
+  /// What another batch costs in the chosen field, and what there is to pay
+  /// it with. Worked out here rather than at the far end: the errand is a
+  /// trip to another app and back, and being told the price on the way home
+  /// is being told it too late.
+  int _cost = 0;
+  int _purse = 0;
+
   @override
   void initState() {
     super.initState();
@@ -114,13 +121,20 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
     final repo = ref.read(repositoryProvider);
     final profile = await repo.loadProfile();
     final own = await repo.scenes(includeDisabled: true);
+    final cost = widget.job == AiJob.scenes ? await repo.sceneAddCostFor(_field) : 0;
+    final purse = (await repo.loadProgress()).seeds;
     if (!mounted) return;
     setState(() {
       _profile = profile;
       _ownScenes = own.length;
+      _cost = cost;
+      _purse = purse;
       _loaded = true;
     });
   }
+
+  /// The price of this errand, and whether it can be paid.
+  bool get _affordable => _cost <= 0 || _purse >= _cost;
 
   String get _lang => ref.read(languageProvider) ?? fallbackLanguage;
 
@@ -236,7 +250,7 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
     final field = _field ?? (fields.isEmpty ? null : fields.first.id);
     _field ??= field;
     final hasProfile = _profile != null;
-    final ready = scenes ? hasProfile && field != null : true;
+    final ready = (scenes ? hasProfile && field != null : true) && _affordable;
 
     final title = switch (widget.job) {
       AiJob.scenes => s.t(_ownScenes == 0 ? 'firstSceneMake' : 'nextScenesMake'),
@@ -349,6 +363,7 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
                           return;
                         }
                         setState(() => _field = v);
+                        _load();
                       },
                     ),
                     const SizedBox(height: 16),
@@ -359,6 +374,27 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
                   // itself — so they were on a screen that was already
                   // leaving. They are on the next one, beside the button
                   // that takes the reply, which is where they are wanted.
+                  // What this batch costs, said before the trip rather than
+                  // after it. The first batch in a field is free.
+                  if (scenes && _cost > 0) ...[
+                    Row(
+                      children: [
+                        const Text('🌱', style: TextStyle(fontSize: 14)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _affordable
+                                ? s.t('sceneAddCostLine', {'n': _cost, 'have': _purse})
+                                : s.t('sceneAddCantAfford',
+                                    {'n': _cost, 'short': _cost - _purse}),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                                color: _affordable ? scheme.onSurfaceVariant : scheme.error),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   BigButton(
                     icon: Icons.copy_all,
                     label: s.t('copyPrompt'),
@@ -507,11 +543,16 @@ class _AiReplyScreenState extends ConsumerState<AiReplyScreen> {
       if (!out.ok) {
         setState(() {
           _showBox = true;
-          _error = out.errors.contains('not a scenes reply')
-              ? s.t('scenePackNotScenes')
-              : s.t('importFailedHint');
+          _error = out.shortOf > 0
+              ? s.t('sceneAddTooDear', {'n': out.shortOf})
+              : out.errors.contains('not a scenes reply')
+                  ? s.t('scenePackNotScenes')
+                  : s.t('importFailedHint');
         });
         return;
+      }
+      if (out.spent > 0) {
+        ref.read(progressProvider.notifier).state = await repo.loadProgress();
       }
       _paste.clear();
       if (!mounted) return;
