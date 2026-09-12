@@ -171,10 +171,6 @@ void main() {
     expect((await repo.loadSettings()).tutorialDone, isFalse);
   });
 
-  // The samples that shipped before were written for a shape the app no
-  // longer has, so there are none to try until they have been written again.
-  // The path is kept here rather than deleted: it is the first thing a new
-  // learner sees, and it has to be walked again the day a sample exists.
   testWidgets('trying a sample first goes through the sample to home', (tester) async {
     _tallScreen(tester);
     final (db, repo) = await pumpApp(tester, seed: (r) => r.saveUiLanguage('en'));
@@ -183,9 +179,11 @@ void main() {
 
     await tester.tap(find.text(s.t('startSample')));
     await tester.pumpAndSettle();
-    // The sample scene, with the guide on it. Leaving it early still leads on.
+    // The sample scene, with the guide on it — and the guide's first word is
+    // to read the replies, because that is what comes first. Leaving it early
+    // still leads on.
     expect(find.byType(SceneScreen), findsOneWidget);
-    expect(find.text(s.t('tutListen')), findsOneWidget);
+    expect(find.text(s.t('tutRead')), findsOneWidget);
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
 
@@ -195,8 +193,7 @@ void main() {
     expect(find.text(s.t('ownScenesCardTitle')), findsOneWidget);
     expect(find.text(s.t('homeSampleScenes')), findsOneWidget);
     expect(find.text(s.t('interest_work')), findsNothing);
-    // Skipped, not deleted: it comes back with the samples.
-  }, skip: true);
+  });
 
   testWidgets('a learner with a scene lands on home and can start it', (tester) async {
     _tallScreen(tester);
@@ -223,20 +220,19 @@ void main() {
     expect(await repo.turnResults(), isEmpty);
   });
 
-  testWidgets('with nothing to play yet, home leads to making the first scenes',
+  testWidgets('with only the samples, home leads to making the first own scenes',
       (tester) async {
     _tallScreen(tester);
     final (db, _) = await pumpApp(tester, seed: (r) => seedLearner(r, withScene: false));
     addTearDown(db.close);
     final s = S('en');
 
-    // Nothing to start, so the one button is the trip to their own AI. The
-    // fields button stays beside it, because it is also the only way to open
-    // another area from the profile.
-    expect(find.text(s.t('todayScene')), findsNothing);
-    expect(find.text(s.t('homeFieldScenes')), findsOneWidget);
+    // The samples are there to play, and the card to the learner's own AI
+    // stays up until an own scene arrives.
+    expect(find.text(s.t('todaySceneSample')), findsOneWidget);
+    expect(find.text(s.t('homeSampleScenes')), findsOneWidget);
 
-    await tester.tap(find.text(s.t('firstSceneMake')).first);
+    await tester.tap(find.text(s.t('makeOwnScenes')).first);
     await tester.pumpAndSettle();
     expect(find.byType(AiPromptScreen), findsOneWidget);
     // The profile is there, so the prompt is ready to copy.
@@ -255,7 +251,7 @@ void main() {
     addTearDown(db.close);
     final s = S('en');
 
-    await tester.tap(find.text(s.t('firstSceneMake')).first);
+    await tester.tap(find.text(s.t('makeOwnScenes')).first);
     await tester.pumpAndSettle();
     expect(find.text(s.t('scenePackNeedProfile')), findsOneWidget);
     final copy = find.widgetWithText(FilledButton, s.t('copyPrompt'));
