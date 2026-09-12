@@ -127,7 +127,26 @@ class _RealmPickerScreenState extends ConsumerState<RealmPickerScreen> {
         ),
       ];
 
+  /// The profile is where fields come from, so an empty list leads there
+  /// rather than nowhere.
+  Future<void> _makeProfile() async {
+    await Navigator.push(context,
+        MaterialPageRoute(builder: (_) => const AiPromptScreen(job: AiJob.profile)));
+    if (!mounted) return;
+    ref.invalidate(realmsProvider);
+    await _load();
+  }
+
   List<Widget> _listBody(S s, TextStyle? muted, List<Realm> open, List<Realm> locked) => [
+        if (_realms.isEmpty) ...[
+          Text(s.t('fieldNoProfile'), style: muted),
+          const SizedBox(height: 16),
+          BigButton(
+            icon: Icons.person_outline,
+            label: s.t('scenePackProfileButton'),
+            onPressed: _makeProfile,
+          ),
+        ],
         if (_left > 0 && locked.isNotEmpty) ...[
           Text(s.t('fieldChooseLeft', {'n': _left}), style: muted),
           const SizedBox(height: 12),

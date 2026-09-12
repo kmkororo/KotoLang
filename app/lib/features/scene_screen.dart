@@ -77,6 +77,10 @@ enum _Phase {
   /// The window is open.
   open,
 
+  /// The window closed and nothing was chosen. The clock is stopped: the
+  /// replies are still there to be taken, and one press hears the line again.
+  waiting,
+
   /// The line is coming again, once.
   restating,
 
@@ -121,8 +125,14 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   /// True while the answer given is the right one.
   bool _right = false;
 
-  /// The line was said a second time before this was answered.
+  /// The line was heard a second time before this was answered.
   bool _restated = false;
+
+  /// The first window closed with nothing chosen. Kept apart from
+  /// [_restated]: a learner can let the window go and then answer without
+  /// asking to hear it again, and that is still not an answer inside the
+  /// window.
+  bool _windowGone = false;
 
   int _rightCount = 0;
   bool _saving = false;
@@ -152,8 +162,18 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   /// The window, drained as a bar so the time left is felt rather than read.
   late final AnimationController _window;
 
-  /// The seed's flight from the reply to the counter.
+  /// The seed's flight from the reply that was taken to the counter.
   late final AnimationController _seedFlight;
+
+  /// Where it flies from and to, in the coordinates of the whole screen.
+  /// Worked out at the moment of the answer, because the reply it starts from
+  /// is whichever one was tapped.
+  Offset? _seedFrom;
+  Offset? _seedTo;
+
+  final _bodyKey = GlobalKey();
+  final _counterKey = GlobalKey();
+  final _replyKeys = [for (var i = 0; i < repliesPerTurn; i++) GlobalKey()];
   Timer? _beat;
 
   SceneCard get _card => _cards[_index];
@@ -188,8 +208,33 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     super.dispose();
   }
 
+  /// Works out where the seed flies from and to.
+  ///
+  /// From the reply that was actually tapped, because that is the thing the
+  /// learner just did; to the counter, because that is where it lands. Both
+  /// are read off the widgets rather than guessed, so the flight still points
+  /// at the right row when the replies are different lengths or the list has
+  /// been scrolled.
+  void _aimSeed(int? picked) {
+    final body = _bodyKey.currentContext?.findRenderObject();
+    final counter = _counterKey.currentContext?.findRenderObject();
+    final reply = picked == null
+        ? null
+        : _replyKeys[picked].currentContext?.findRenderObject();
+    if (body is! RenderBox || counter is! RenderBox || reply is! RenderBox) {
+      _seedFrom = null;
+      _seedTo = null;
+      return;
+    }
+    Offset centreIn(RenderBox b) =>
+        body.globalToLocal(b.localToGlobal(b.size.center(Offset.zero)));
+    _seedFrom = centreIn(reply);
+    _seedTo = centreIn(counter);
+  }
+
   /// Keeps the newest turn in view. Called after the thread grows and after a
   /// line is revealed, both of which make it taller.
+
   void _toBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
@@ -255,33 +300,43 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   }
 
   /// The window closed with nothing chosen.
+  ///
+  /// Nothing is spoken here. A voice that started on its own, saying a
+  /// sentence the learner had just failed to catch, arrived while they were
+  /// still working out what had happened — so the clock stops instead, and
+  /// the second hearing waits for them to ask for it.
   Future<void> _windowClosed() async {
     if (_phase != _Phase.open) return;
+    _windowGone = true;
     if (_replayAllowed && !_restated) {
-      _restated = true;
-      setState(() => _phase = _Phase.restating);
       _buzz(HapticFeedback.selectionClick);
-      // A beat, so the notice is read before the voice starts again. The
-      // same sentence, not another way of putting it: somebody who missed it
-      // needs the thing they missed, and a different sentence would be a new
-      // problem rather than a second chance.
-      await Future<void>.delayed(const Duration(milliseconds: 700));
-      if (!mounted || _phase != _Phase.restating) return;
-      if (_speech.available) {
-        await _speech.speak(_turn.line, rate: _rate);
-      } else {
-        await Future<void>.delayed(const Duration(milliseconds: 900));
-      }
-      if (!mounted || _phase != _Phase.restating) return;
-      _openWindow();
+      setState(() => _phase = _Phase.waiting);
       return;
     }
-    // Out of chances. Counted as missed, and the conversation moves on.
+    // No second hearing at this rung of the ladder. Counted as missed.
     await _answer(null);
   }
 
+  /// The same line again, once, because they asked for it.
+  Future<void> _replay() async {
+    if (_phase != _Phase.waiting || _restated) return;
+    _restated = true;
+    setState(() => _phase = _Phase.restating);
+    if (_speech.available) {
+      await _speech.speak(_turn.line, rate: _rate);
+    } else {
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+    }
+    if (!mounted || _phase != _Phase.restating) return;
+    _openWindow();
+  }
+
   Future<void> _answer(int? i) async {
-    if (_phase != _Phase.open && _phase != _Phase.reading) return;
+    if (_phase != _Phase.open &&
+        _phase != _Phase.reading &&
+        _phase != _Phase.waiting) {
+      return;
+    }
     // How much of the window was left, read before it is stopped. Speed is
     // what the seeds are for, so this is the number they are worked out from.
     final left = _phase == _Phase.open ? (1 - _window.value) : 0.0;
@@ -309,7 +364,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
           turn: _card.index,
           correct: right,
           missedSlot: i == null ? null : _turn.replies[i].missedSlot,
-          inWindow: right && !_restated,
+          inWindow: right && !_windowGone,
           review: _card.review,
           windowLeft: left,
         );
@@ -326,7 +381,10 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     });
     if (out.seeds > 0) {
       ref.read(progressProvider.notifier).state = await repo.loadProgress();
-      if (mounted) _seedFlight.forward(from: 0);
+      if (mounted) {
+        _aimSeed(i);
+        _seedFlight.forward(from: 0);
+      }
     }
 
     // Nothing moves on by itself. What is on screen now is the only
@@ -349,6 +407,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
       _index++;
       _picked = null;
       _restated = false;
+      _windowGone = false;
       _phase = _Phase.reading;
     });
     _toBottom();
@@ -412,7 +471,10 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
       },
       child: Scaffold(
         body: SafeArea(
-          child: _phase == _Phase.result
+          child: Stack(
+            key: _bodyKey,
+            children: [
+              _phase == _Phase.result
               ? _result(s, theme)
               : Column(
                   children: [
@@ -446,7 +508,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
                                   const SizedBox(height: 10),
                                 ],
                                 if (_card.review) _reviewTag(s, theme),
-                                if (_restated && _phase != _Phase.done)
+                                if (_windowGone && _phase != _Phase.done)
                                   _restateNote(s, theme),
                                 _them(s, theme),
                               ],
@@ -474,6 +536,15 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
                     _bottom(s, e, theme),
                   ],
                 ),
+
+              // The seed, crossing the screen. It needs a layer of its own:
+              // it leaves a reply near the bottom and lands on a counter in
+              // the corner, and nothing both of those sit inside is big
+              // enough to fly it across.
+              if (_seedFrom != null && _seedTo != null)
+                _SeedInFlight(from: _seedFrom!, to: _seedTo!, flight: _seedFlight),
+            ],
+          ),
         ),
       ),
     );
@@ -490,7 +561,8 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
           // What this run has earned. It sits here because it is where the
           // seeds fly to, and a number that is flown at has to be somewhere
           // the eye can find without leaving the conversation.
-          _SeedCounter(total: _seedRun, flight: _seedFlight, paid: _paid),
+          _SeedCounter(
+              key: _counterKey, total: _seedRun, flight: _seedFlight, paid: _paid),
           const SizedBox(width: 10),
           // The run: shown from two, and it grows on the spot.
           AnimatedSwitcher(
@@ -809,7 +881,10 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   /// part of the conversation.
   Widget _replies(S s, S e, ThemeData theme) {
     final scheme = theme.colorScheme;
-    final live = _phase == _Phase.open;
+    // Answerable while the window is open, and while it has closed and the
+    // clock is stopped: letting the moment go is not the same as giving up.
+    final live = _phase == _Phase.open || _phase == _Phase.waiting;
+    final ticking = _phase == _Phase.open;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -827,6 +902,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
         const SizedBox(height: 8),
         for (var i = 0; i < _turn.replies.length; i++) ...[
           _Option(
+            key: _replyKeys[i],
             text: _turn.replies[i].text,
             sub: _phase == _Phase.done && _translationAfter != null
                 ? _turn.replies[i].native
@@ -843,7 +919,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
         // there would be one more thing to watch instead of listen to.
         SizedBox(
           height: 4,
-          child: live
+          child: ticking
               ? AnimatedBuilder(
                   animation: _window,
                   builder: (context, _) => LinearProgressIndicator(
@@ -880,6 +956,12 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
         _Phase.open => Center(
             child: Text(e.t('sceneYourTurn'),
                 style: theme.textTheme.bodyMedium?.copyWith(color: scheme.primary)),
+          ),
+        // The clock is stopped. Nothing happens until they ask for it.
+        _Phase.waiting => FilledButton.icon(
+            onPressed: _replay,
+            icon: const Icon(Icons.replay),
+            label: Text(s.t('sceneHearAgain')),
           ),
         _ => Column(
             mainAxisSize: MainAxisSize.min,
@@ -978,49 +1060,96 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     }
   }
 
+  /// The end of a conversation.
+  ///
+  /// It used to be a score and two buttons on an empty screen, which is a
+  /// strange thing to be handed after a conversation. What is here now is
+  /// what was just done: the whole exchange, readable from the top — it was
+  /// on screen a moment ago and there is no reason to take it away — with the
+  /// score, what it earned, and anything the ladder did above it.
   Widget _result(S s, ThemeData theme) {
     final scheme = theme.colorScheme;
     final stageUp =
         treeName(_ladder.reached) > treeName(_ladder.reached - _promoted.length);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-      child: Column(
-        children: [
-          Text('$_rightCount / ${_cards.length}', style: theme.textTheme.displaySmall),
-          const SizedBox(height: 10),
-          if (_bestComboHere >= 3)
-            Text('✦ ${s.t('comboLabel', {'n': _bestComboHere})}',
-                style: theme.textTheme.titleSmall?.copyWith(color: scheme.primary)),
-          const SizedBox(height: 18),
-          if (_promoted.isNotEmpty) ...[
-            Text(s.t('ladderUp'),
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 4),
-            Text(
-              [for (final a in _promoted) s.t('axis_${a.name}')].join(' · '),
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 14),
-          ],
-          if (stageUp)
-            Text(s.t('treeStageUp', {'name': s.t('treeStage${treeName(_ladder.reached)}')}),
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-          const Spacer(),
-          FilledButton(
-            onPressed: () => _leave(again: true),
-            child: Text(s.t('sceneNext')),
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            children: [
+              Row(
+                children: [
+                  Text('$_rightCount / ${_cards.length}',
+                      style: theme.textTheme.displaySmall),
+                  const Spacer(),
+                  if (_seedRun > 0)
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text('🌱 +$_seedRun',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                              color: scheme.primary, fontWeight: FontWeight.w800)),
+                    ),
+                ],
+              ),
+              if (_bestComboHere >= 3) ...[
+                const SizedBox(height: 6),
+                Text('✦ ${s.t('comboLabel', {'n': _bestComboHere})}',
+                    style: theme.textTheme.titleSmall?.copyWith(color: scheme.primary)),
+              ],
+              if (_promoted.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(s.t('ladderUp'),
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 2),
+                Text([for (final a in _promoted) s.t('axis_${a.name}')].join(' · '),
+                    style: theme.textTheme.bodyMedium),
+              ],
+              if (stageUp) ...[
+                const SizedBox(height: 10),
+                Text(
+                    s.t('treeStageUp',
+                        {'name': s.t('treeStage${treeName(_ladder.reached)}')}),
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+              ],
+              const SizedBox(height: 18),
+              Text(s.t('sceneReadBack'),
+                  style: theme.textTheme.labelMedium
+                      ?.copyWith(color: scheme.onSurfaceVariant)),
+              const SizedBox(height: 8),
+              // The conversation itself, from the top: every turn, with what
+              // was said, what went back, and what would have fitted.
+              for (final past in _thread) ...[
+                _pastTurn(s, theme, past),
+                const SizedBox(height: 10),
+              ],
+            ],
           ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () => _leave(again: false),
-            child: Text(s.t('finishSession')),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              FilledButton(
+                onPressed: () => _leave(again: true),
+                child: Text(s.t('sceneNext')),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () => _leave(again: false),
+                child: Text(s.t('finishSession')),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -1078,6 +1207,7 @@ class _Option extends StatelessWidget {
   final bool wrong;
   final VoidCallback? onTap;
   const _Option({
+    super.key,
     required this.text,
     this.sub = '',
     this.dim = false,
@@ -1202,16 +1332,14 @@ Future<void> startScene(
   }
 }
 
-/// The seeds earned in this run, with the newest one flying in.
-///
-/// The flight is the whole point of putting it here. A number that only
-/// changes is a number nobody watches; one that is thrown at, and lands,
-/// makes answering quickly feel like it did something — which it did.
+
+/// The seeds earned in this run. It swells for a moment as one lands on it.
 class _SeedCounter extends StatelessWidget {
   final int total;
   final int paid;
   final Animation<double> flight;
-  const _SeedCounter({required this.total, required this.paid, required this.flight});
+  const _SeedCounter(
+      {super.key, required this.total, required this.paid, required this.flight});
 
   @override
   Widget build(BuildContext context) {
@@ -1222,50 +1350,76 @@ class _SeedCounter extends StatelessWidget {
     return AnimatedBuilder(
       animation: flight,
       builder: (context, _) {
-        final t = flight.value;
-        final flying = paid > 0 && t > 0 && t < 1;
-        return Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.centerRight,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: scheme.primary.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('🌱', style: TextStyle(fontSize: 12)),
-                  const SizedBox(width: 4),
-                  Text(
-                    '$total',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: scheme.primary,
-                      fontWeight: FontWeight.w800,
-                      // The count swells a little as the seed lands on it.
-                      fontSize: 13 + 3 * (flying ? 0.0 : ((1 - t) * t * 4).clamp(0.0, 1.0)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // The seed itself, thrown from below the counter and rising into
-            // it. It exists only while it is in the air.
-            if (flying)
-              Positioned(
-                right: 6,
-                bottom: -34 * (1 - Curves.easeOut.transform(t)),
-                child: Opacity(
-                  opacity: (1 - t * t).clamp(0.0, 1.0),
-                  child: Text('🌱',
-                      style: TextStyle(fontSize: 12 + 8 * (1 - t))),
+        // The swell begins as the seed arrives and settles just after it.
+        final landing = ((flight.value - 0.75) / 0.25).clamp(0.0, 1.0);
+        final swell = paid > 0 ? sin(landing * pi) : 0.0;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: scheme.primary.withValues(alpha: 0.12 + 0.10 * swell),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('🌱', style: TextStyle(fontSize: 12)),
+              const SizedBox(width: 4),
+              Text(
+                '$total',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13 + 4 * swell,
                 ),
               ),
-          ],
+            ],
+          ),
         );
       },
     );
   }
+}
+
+/// One seed, on its way from the reply that earned it to the counter.
+///
+/// In an arc rather than a straight line, bowed towards the top of the
+/// screen: a straight line between two points that are nearly one above the
+/// other reads as a jump rather than as something thrown.
+class _SeedInFlight extends StatelessWidget {
+  final Offset from;
+  final Offset to;
+  final Animation<double> flight;
+  const _SeedInFlight(
+      {required this.from, required this.to, required this.flight});
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: flight,
+        builder: (context, _) {
+          final t = flight.value;
+          if (t <= 0 || t >= 1) return const SizedBox.shrink();
+          final e = Curves.easeInOut.transform(t);
+          // The control point: between the two, lifted by a third of the
+          // distance there is to cover.
+          final lift = (from - to).distance * 0.33;
+          final ctrl = Offset((from.dx + to.dx) / 2, min(from.dy, to.dy) - lift);
+          final a = from + (ctrl - from) * e;
+          final b = ctrl + (to - ctrl) * e;
+          final at = a + (b - a) * e;
+          // Shrinks as it goes, the way something thrown away from you does,
+          // and fades only at the very end so it is seen to arrive.
+          final size = 26 - 12 * e;
+          final fade = 1 - ((t - 0.85) / 0.15).clamp(0.0, 1.0);
+          return Positioned(
+            left: at.dx - size / 2,
+            top: at.dy - size / 2,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: fade,
+                child: Text('🌱', style: TextStyle(fontSize: size)),
+              ),
+            ),
+          );
+        },
+      );
 }

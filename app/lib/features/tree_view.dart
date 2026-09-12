@@ -578,6 +578,18 @@ class _TreePainter extends CustomPainter {
   /// near lip of the mound, painted afterwards, cannot clip it.
   static const _clearance = 10.0;
 
+  /// How many boughs a trunk of this height can carry. One to begin with,
+  /// and one more at each of these fractions of full growth.
+  static const _boughAt = <double>[0.06, 0.16, 0.30, 0.46, 0.64, 0.84];
+
+  int _boughsAt(double grown) {
+    var n = 1;
+    for (final at in _boughAt) {
+      if (grown >= at) n++;
+    }
+    return n;
+  }
+
   /// How tall the ground picture is drawn. It widens a little with the trunk,
   /// so a full-grown tree is not standing on a seedling's patch of soil.
   double get _groundH => 44 + 9 * girth;
@@ -619,10 +631,24 @@ class _TreePainter extends CustomPainter {
 
     // With a bough in focus the others are left out: the field screen shows
     // one field alone, and a tap on the legend does the same on home.
-    final branches = focus == null
+    final chosen = focus == null
         ? shape.branches
         : [for (final b in shape.branches) if (b.realmId == focus) b];
+
+    // How many boughs the trunk is tall enough to carry.
+    //
+    // The count used to be the number of fields with anything in them, which
+    // on the first day is four — four green boughs, each leafy from the
+    // bottom, all the same height on a stem of thirty pixels. That is not a
+    // seedling; that is a clump of grass, and it is what somebody looking at
+    // it said. A tree puts out one bough, then another, as it gets tall
+    // enough to hold them, so the fields wait their turn: which fields are
+    // there decides what the tree becomes, the ladder decides when.
+    final branches = focus == null
+        ? chosen.take(_boughsAt(grown)).toList()
+        : chosen;
     if (branches.isEmpty) return plan;
+
 
     final busiest =
         branches.map((b) => b.answers).fold<int>(0, (a, b) => a > b ? a : b);

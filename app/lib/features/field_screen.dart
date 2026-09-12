@@ -384,7 +384,18 @@ Future<void> showOpenFieldSheet(BuildContext context, WidgetRef ref) async {
   final s = ref.read(stringsProvider);
   final locked = await ref.read(lockedFieldsProvider.future);
   final left = await ref.read(fieldOpeningsProvider.future);
+  // Nothing to open and nothing ever named: the profile has not been made
+  // yet. An empty sheet here is a dead end â the fields are written by the
+  // AI off the profile, so that is where this has to lead.
+  final noProfile = (await ref.read(realmsProvider.future)).isEmpty;
   if (!context.mounted) return;
+  if (noProfile) {
+    await Navigator.push(context,
+        MaterialPageRoute(builder: (_) => const AiPromptScreen(job: AiJob.profile)));
+    if (!context.mounted) return;
+    ref.invalidate(realmsProvider);
+    return;
+  }
   final picked = await showModalBottomSheet<Field>(
     context: context,
     showDragHandle: true,

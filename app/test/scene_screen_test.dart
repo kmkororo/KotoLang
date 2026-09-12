@@ -171,7 +171,7 @@ void main() {
     expect(find.text(en.t('sceneQ2')), findsOneWidget);
   });
 
-  testWidgets('a window that closes says why the next voice is different',
+  testWidgets('a window that closes waits, and the second hearing is asked for',
       (tester) async {
     tall(tester);
     final (_, s) = await open(tester, turns: 1);
@@ -182,15 +182,22 @@ void main() {
     await tester.pump();
     await tester.pump(Duration(milliseconds: s.windowMs + 100));
 
-    // What plays next is a different sentence, on purpose. Without a word of
-    // warning it is heard as a new line the learner has already fallen behind
-    // on, so the notice has to be up before the voice starts.
+    // Nothing starts on its own. A voice arriving while the learner is still
+    // working out what happened is heard as a new line they have already
+    // fallen behind on, so the clock stops and the offer waits to be taken.
+    expect(find.text(ja.t('sceneHearAgain')), findsOneWidget);
     expect(find.text(ja.t('sceneRestateNote')), findsOneWidget);
-    expect(find.text(en.t('sceneAgain')), findsOneWidget);
+    expect(find.text(en.t('sceneAgain')), findsNothing);
 
-    // And it stays up through the second window, to be read while choosing.
-    await tester.pump(const Duration(seconds: 2));
-    expect(find.text(ja.t('sceneRestateNote')), findsOneWidget);
+    // Waiting is waiting: however long they take, the offer is still there.
+    await tester.pump(const Duration(seconds: 5));
+    expect(find.text(ja.t('sceneHearAgain')), findsOneWidget);
+
+    // Asked for, it plays â the same line again, not another one.
+    await tester.tap(find.text(ja.t('sceneHearAgain')));
+    await tester.pump();
+    expect(find.text(en.t('sceneAgain')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
 
     await tester.tap(find.text(first.replies[first.answer].text));
     await tester.pump();

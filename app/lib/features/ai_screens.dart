@@ -354,17 +354,16 @@ class _AiPromptScreenState extends ConsumerState<AiPromptScreen> {
                     const SizedBox(height: 16),
                   ],
 
+                  // One button, and nothing else to press. The links to the
+                  // assistants used to sit here too, and copying moves on by
+                  // itself — so they were on a screen that was already
+                  // leaving. They are on the next one, beside the button
+                  // that takes the reply, which is where they are wanted.
                   BigButton(
                     icon: Icons.copy_all,
                     label: s.t('copyPrompt'),
                     onPressed: ready ? _copy : null,
                   ),
-                  const SizedBox(height: 10),
-                  AiLinks(
-                      s: s,
-                      enabled: ready,
-                      prompt: _prompt,
-                      onOpened: widget.job == AiJob.feedback ? null : _toReply),
                   const SizedBox(height: 24),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -429,6 +428,27 @@ class _AiReplyScreenState extends ConsumerState<AiReplyScreen> {
   }
 
   String get _lang => ref.read(languageProvider) ?? fallbackLanguage;
+
+  /// The same text the copy screen put on the clipboard. Rebuilt here so the
+  /// "open the assistant" link can sit beside the paste box, on the one screen
+  /// the errand actually ends on.
+  Future<String> _prompt() async {
+    if (widget.job == AiJob.profile) return prompts.profilePrompt(uiLanguage: _lang);
+    if (widget.job == AiJob.feedback) {
+      final all = await ref.read(fieldsProvider.future);
+      return ref.read(repositoryProvider).feedbackPromptText(
+            uiLanguage: _lang,
+            fieldId: widget.field ?? '',
+            fieldLabel: all.where((f) => f.id == widget.field).firstOrNull?.label ?? '',
+          );
+    }
+    return ref.read(repositoryProvider).scenesPromptText(
+          uiLanguage: _lang,
+          extraTopics: builtinTopics(),
+          lookup: {for (final s in builtinScenes(_lang)) s.id: s},
+          field: widget.field,
+        );
+  }
 
   Future<void> _import() async {
     final s = ref.read(stringsProvider);
@@ -563,6 +583,10 @@ class _AiReplyScreenState extends ConsumerState<AiReplyScreen> {
               Text(s.t('replyStepHint'), style: muted),
               const SizedBox(height: 16),
             ],
+            // Both halves of the errand on one screen: open the assistant
+            // with the prompt already copied, come back, take the reply.
+            AiLinks(s: s, enabled: true, prompt: _prompt),
+            const SizedBox(height: 16),
             BigButton(
               icon: Icons.download,
               label: s.t('scenePasteButton'),
