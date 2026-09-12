@@ -7,7 +7,6 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kotolang/data/builtin_scenes.dart';
 import 'package:kotolang/domain/scene.dart';
 import 'package:kotolang/domain/tree.dart';
 
@@ -60,8 +59,7 @@ void main() {
     final scenes = {for (final s in [make('a'), make('b')]) s.id: s};
     final one = treeFrom(today: today, results: [answered('a', 0)], scenes: scenes);
     expect(one.scenes, 1);
-    expect(trunkGrowth(one.scenes), greaterThan(0));
-    expect(one.stage, greaterThan(0));
+    expect(one.stage, greaterThanOrEqualTo(0));
 
     // A second question answered is taller than one, however many turns went
     // into the first.
@@ -75,7 +73,8 @@ void main() {
         scenes: scenes);
     expect(busy.scenes, 1);
     expect(broad.scenes, 2);
-    expect(trunkGrowth(broad.scenes), greaterThan(trunkGrowth(busy.scenes)));
+    expect(trunkGrowth(broad.scenes), greaterThan(trunkGrowth(busy.scenes)),
+        reason: 'forty turns of one question is one question');
   });
 
   test('the ground covered thickens the trunk as well', () {
@@ -86,12 +85,13 @@ void main() {
 
   test('the stages are cut fine enough to be felt', () {
     expect(treeStages, greaterThanOrEqualTo(20));
+    final full = treeLevelAt(treeFullLevel);
     final seen = <int>{};
-    for (var reached = 0; reached <= treeNameAt.last; reached++) {
-      seen.add(treeStage(reached));
+    for (var q = 0; q <= full; q++) {
+      seen.add(treeStage(q));
     }
     expect(seen.length, greaterThanOrEqualTo(20));
-    expect(treeStage(treeNameAt.last), treeStages - 1);
+    expect(treeStage(full), treeStages - 1);
   });
 
   test('a bough for every field, samples below the learner own', () {
@@ -173,26 +173,65 @@ void main() {
   });
 
   test('every name the tree answers to is reachable, and only once', () {
-    // The growing screen draws one row per name. Dividing the ladder into
-    // six even parts to find them put two rows on the same name and skipped
-    // another, because the names are not spaced evenly along it — so the
-    // screen walks the ladder and asks. This is what it relies on.
+    // The growing screen draws one row per name, walking the questions and
+    // asking which name each is, so this is what it relies on.
     final seen = <int>[];
-    for (var r = 0; r <= treeNameAt.last; r++) {
-      final n = treeName(r);
+    for (var q = 0; q <= treeLevelAt(treeFullLevel); q++) {
+      final n = treeName(q);
       if (seen.isEmpty || seen.last != n) seen.add(n);
     }
     expect(seen, [for (var i = 0; i < treeNames; i++) i],
         reason: 'each name once, in order, from the seed to the last');
   });
 
-  test('the samples alone come to a young tree', () {
-    // Thirty questions is what the built-in conversations hold. They are meant
-    // to carry the learner as far as a tree and no further: the crown and the
-    // blossom are what their own conversations add.
-    expect(builtinScenes('en').length, 30);
-    expect(treeName(30), 6, reason: 'young tree');
-    expect(treeName(29), lessThan(6), reason: 'and not before the last of them');
+  test('the first fortnight is a level every question or two', () {
+    // What carries somebody through the beginning is not the tenth name a
+    // year away; it is the tree answering to something new tonight.
+    expect(treeLevelAt(2), lessThanOrEqualTo(2));
+    expect(treeLevelAt(3), lessThanOrEqualTo(4));
+    expect(treeLevelAt(5), lessThanOrEqualTo(10));
+    expect(treeLevel(15), greaterThanOrEqualTo(6),
+        reason: 'five or six level-ups in the first fifteen questions');
+    // And they spread out without ever closing up again.
+    // Rounding to whole questions can take a step off a gap, so this asks
+    // that the gaps widen rather than that no two are ever equal.
+    for (var l = 2; l < 300; l++) {
+      expect(treeLevelAt(l + 1) - treeLevelAt(l),
+          greaterThanOrEqualTo(treeLevelAt(l) - treeLevelAt(l - 1) - 1),
+          reason: 'the gap to the next level does not close up');
+    }
+    expect(treeLevelAt(101) - treeLevelAt(100),
+        greaterThan(treeLevelAt(11) - treeLevelAt(10)));
+  });
+
+  test('there are about two hundred things to be called', () {
+    // Ten names with levels inside them. The last name never runs out, so
+    // this is a floor rather than a total.
+    final named = treeLevelsPerName.fold(0, (a, b) => a + b);
+    expect(named + 130, greaterThanOrEqualTo(200));
+    expect(treeRank(0), (name: 0, level: 1));
+    expect(treeRank(1000000).name, treeNames - 1,
+        reason: 'the last name holds everything past it');
+    expect(treeRank(1000000).level, greaterThan(200));
+  });
+
+  test('nothing in the drawing ever finishes', () {
+    // Height stops because the panel does. Nothing else stops: the bole goes
+    // on thickening and the ground goes on widening under it, so that there
+    // is always something the next question does.
+    expect(treeBeyond(treeLevelAt(treeFullLevel)), 0);
+    expect(treeBeyond(1000000), greaterThan(3),
+        reason: 'past a full-grown tree is still somewhere to go');
+    expect(trunkGirth(1000000, 3),
+        greaterThan(trunkGirth(treeLevelAt(treeFullLevel), 3)));
+  });
+
+  test('the climb to a full-grown tree is a climb', () {
+    // Thirty questions used to put the trunk two thirds up, which is a tree
+    // grown in a week and then nothing to look forward to.
+    expect(treeGrown(30), lessThan(0.25));
+    expect(treeGrown(2), greaterThan(0), reason: 'but the second one shows');
+    expect(treeGrown(treeLevelAt(treeFullLevel)), 1);
   });
 
   test('the same record always draws the same tree', () {

@@ -80,41 +80,73 @@ int treeStage(int scenes) {
   return step.clamp(1, treeStages - 1);
 }
 
-/// The names the tree answers to, as the number of questions each is earned
-/// at.
+/// What the tree is called: ten names, each with levels inside it — "sapling
+/// Lv.3". Ten names alone is ten things to look forward to across a year of
+/// work, and the ninth of them is a year away; a level inside the name is
+/// something the next few questions can reach.
 ///
-/// Close together at the bottom and further apart at the top, the way a tree
-/// actually changes: a seedling looks different every week and an old tree
-/// looks the same for years. Names spread evenly gave the opposite — one name
-/// for the whole of the beginning, when there is least to show for the work
-/// and a name is worth most, then several in a row near the top where the
-/// picture barely moves.
-///
-/// The samples are thirty questions and they land exactly on "young tree":
-/// the work that comes with the app is meant to carry the learner as far as a
-/// tree, and leave the crown to the conversations their own AI writes.
-const treeNameAt = <int>[0, 2, 4, 7, 12, 19, 30, 60, 120, 250];
+/// How many levels each of the first nine names holds. The tenth never runs
+/// out: the great tree goes on gaining levels for as long as there are
+/// questions, so there is no last one to arrive at.
+const treeLevelsPerName = <int>[2, 3, 3, 4, 5, 7, 10, 14, 22];
 
 /// How many names the tree answers to.
-int get treeNames => treeNameAt.length;
+int get treeNames => treeLevelsPerName.length + 1;
 
-/// Where the tree stands between nothing and full grown, for [scenes]
-/// questions answered. A log curve: the first few questions move it plainly,
-/// and after that it slows, which is both how a tree grows and the only way
-/// a number with no ceiling can drive a drawing that has one.
+/// Questions needed to reach global level [l], counting from one.
+///
+/// The shape of this is the whole point. The first levels come one or two
+/// questions apart, so somebody who has just started sees the tree answer
+/// almost every time they finish one; the gaps then widen without ever
+/// closing, so the hundredth level is a long way off and the two hundredth is
+/// further, and neither is the last.
+int treeLevelAt(int l) => l <= 1 ? 0 : (0.5 * pow(l, 1.85)).ceil();
+
+/// The level [scenes] questions have earned: one and upwards, for ever.
+int treeLevel(int scenes) {
+  if (scenes <= 0) return 1;
+  final l = pow(scenes / 0.5, 1 / 1.85).floor();
+  return l < 1 ? 1 : l;
+}
+
+/// The name, and which level of that name, for [scenes] questions answered.
+({int name, int level}) treeRank(int scenes) {
+  var l = treeLevel(scenes);
+  for (var i = 0; i < treeLevelsPerName.length; i++) {
+    if (l <= treeLevelsPerName[i]) return (name: i, level: l);
+    l -= treeLevelsPerName[i];
+  }
+  return (name: treeLevelsPerName.length, level: l);
+}
+
+/// The global level at which the last named tree begins, and the height of
+/// the drawing is reached.
+int get treeFullLevel =>
+    treeLevelsPerName.fold(0, (a, b) => a + b) + 1;
+
+/// Where the tree stands between nothing and its full drawn height.
+///
+/// Read from the level rather than from the questions, so that every level is
+/// a visible change in the picture and not only a change in the words.
 double treeGrown(int scenes) {
-  if (scenes <= 0) return 0;
-  return (log(scenes + 1) / log(treeNameAt.last + 1)).clamp(0.0, 1.0);
+  final l = treeLevel(scenes);
+  return ((l - 1) / (treeFullLevel - 1)).clamp(0.0, 1.0);
+}
+
+/// How far past a full-grown tree the learner is, from 0 upwards, with no
+/// ceiling.
+///
+/// Height has to stop because the panel does; nothing else does. The bole
+/// goes on thickening, the crown on filling, and the ground widens under it
+/// until what is showing is the curve of it.
+double treeBeyond(int scenes) {
+  final l = treeLevel(scenes);
+  if (l <= treeFullLevel) return 0;
+  return (l - treeFullLevel) / (treeFullLevel - 1);
 }
 
 /// Which name [scenes] questions answered has earned.
-int treeName(int scenes) {
-  var n = 0;
-  for (var i = 0; i < treeNameAt.length; i++) {
-    if (scenes >= treeNameAt[i]) n = i;
-  }
-  return n;
-}
+int treeName(int scenes) => treeRank(scenes).name;
 
 class TreeShape {
   /// Questions answered at least once. The height and girth of the trunk, and
@@ -157,10 +189,14 @@ double trunkGrowth(int scenes) => treeGrown(scenes);
 /// How thick it is. The questions answered again, and the ground covered with
 /// them: a tree holding up six fields carries a stouter bole than one holding
 /// up a single field, at the same number of questions.
+///
+/// Unlike the height this has no ceiling. Once the crown is at the top of the
+/// panel the bole is the thing that still says a question was answered.
 double trunkGirth(int scenes, int fields) {
   if (scenes <= 0) return 0;
   final spread = 0.88 + 0.04 * fields.clamp(0, 6);
-  return pow(treeGrown(scenes), 0.8).toDouble() * 1.6 * spread;
+  return pow(treeGrown(scenes), 0.8).toDouble() * 1.6 * spread *
+      (1 + 0.55 * treeBeyond(scenes));
 }
 
 double branchGrowth(int answers, int busiest) {

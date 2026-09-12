@@ -23,6 +23,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
+import '../core/l10n/strings.dart';
 import '../core/util.dart';
 import '../domain/scene.dart' show TurnType;
 import '../domain/tree.dart';
@@ -49,7 +50,19 @@ final treeArtProvider = FutureProvider<TreeArt>((ref) async => TreeArt(
     ));
 
 /// Everything the tree needs, gathered in one read.
+/// What the tree is called right now: the name and the level inside it.
+///
+/// One place rather than three, because it is shown on home, at the end of a
+/// conversation, and on the growing screen, and a tree called one thing on
+/// one screen and another on the next is not a name.
+String rankName(S s, int scenes) {
+  final r = treeRank(scenes);
+  return s.t('treeRankLabel',
+      {'name': s.t('treeStage${r.name}'), 'n': r.level});
+}
+
 class TreeData {
+
   final TreeShape shape;
   const TreeData({required this.shape});
 }
@@ -197,6 +210,7 @@ class _TreePanelState extends ConsumerState<TreePanel>
             art: art.value!,
             grown: grown,
             girth: trunkGirth(shape.scenes, shape.fields),
+            beyond: treeBeyond(shape.scenes),
             dark: theme.brightness == Brightness.dark,
             breeze: _breeze,
           ),
@@ -250,6 +264,12 @@ class _TreePainter extends CustomPainter {
   /// Girth carries on past the point where height stops.
   final double girth;
 
+  /// How far past a full-grown tree this is, from 0 upwards and never capped.
+  /// Height has to stop because the panel does; this is what carries on
+  /// instead — the ground widening under the tree until what is showing is
+  /// the curve of it, and the sky behind it going dark.
+  final double beyond;
+
   /// The wind. Read at paint time rather than copied in, because it is also
   /// what drives the repaint.
   final _Breeze breeze;
@@ -264,6 +284,7 @@ class _TreePainter extends CustomPainter {
     required this.art,
     required this.grown,
     required this.girth,
+    this.beyond = 0,
     required this.breeze,
     required this.dark,
   }) : super(repaint: breeze);
@@ -326,7 +347,10 @@ class _TreePainter extends CustomPainter {
   /// earth with a darker rim, in the app's own cartoon line. No grass — the
   /// leaves are the only green, and they belong to the tree.
   void _mound(Canvas canvas, Offset centre, double h) {
-    final w = h * 3.4;
+    // Past a full-grown tree the mound goes on widening, and its rim leaves
+    // the panel: what is left across the bottom of the picture is an arc, and
+    // an arc under a tree that tall is a horizon.
+    final w = h * (3.4 + 5.0 * beyond);
     final rect = Rect.fromCenter(center: centre, width: w, height: h);
     final rim = Paint()..color = dark ? const Color(0xFF3A2A1E) : const Color(0xFF4A3323);
     final earth = Paint()
@@ -524,9 +548,41 @@ class _TreePainter extends CustomPainter {
   }
 
 
+  /// Night, and what is in it. Nothing until the tree is full grown, and then
+  /// it comes on slowly: a tree with its head this far up is not standing in
+  /// the same afternoon it started in.
+  void _sky(Canvas canvas, Size size) {
+    final depth = (beyond * 0.75).clamp(0.0, 0.92);
+    if (depth <= 0.01) return;
+    final rect = Offset.zero & size;
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF0B1026).withValues(alpha: depth),
+            const Color(0xFF16204A).withValues(alpha: depth * 0.55),
+            const Color(0xFF16204A).withValues(alpha: 0),
+          ],
+          stops: const [0, 0.55, 1],
+        ).createShader(rect),
+    );
+    // Stars, seeded by position so they keep their places between visits.
+    final star = Paint()..color = Colors.white.withValues(alpha: depth);
+    for (var i = 0; i < 40; i++) {
+      final x = (_wobble(i * 31) * 0.5 + 0.5) * size.width;
+      final y = (_wobble(i * 57 + 9) * 0.5 + 0.5) * size.height * 0.62;
+      final r = 0.6 + (_wobble(i * 13 + 3) * 0.5 + 0.5) * 1.1;
+      canvas.drawCircle(Offset(x, y), r, star);
+    }
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final shape = data.shape;
+    _sky(canvas, size);
 
     // Laid out once without drawing, so the extent is known before anything is
     // committed, then scaled to fit. The tree used to be clipped to the panel,
@@ -561,7 +617,8 @@ class _TreePainter extends CustomPainter {
     for (final at in _boughAt) {
       if (grown >= at) n++;
     }
-    return n;
+    // A tree that has outgrown the panel can hold anything it has.
+    return beyond > 0 ? n + beyond.ceil() * 2 : n;
   }
 
   /// How tall the ground picture is drawn. It widens a little with the trunk,
@@ -933,6 +990,7 @@ class _TreePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TreePainter old) =>
+      old.beyond != beyond ||
       old.grown != grown ||
       old.girth != girth ||
       old.data != data ||
@@ -1043,6 +1101,7 @@ class TreeStill extends ConsumerWidget {
           art: art,
           grown: trunkGrowth(shape.scenes),
           girth: trunkGirth(shape.scenes, shape.fields),
+          beyond: treeBeyond(shape.scenes),
           dark: Theme.of(context).brightness == Brightness.dark,
           breeze: _stillAir,
         ),

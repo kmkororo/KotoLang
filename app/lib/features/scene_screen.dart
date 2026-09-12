@@ -29,8 +29,8 @@ import '../core/speech.dart';
 import '../domain/ladder.dart';
 import '../domain/progress_service.dart';
 import '../domain/scene.dart';
-import '../domain/tree.dart' show treeName;
-import 'tree_view.dart' show treeDataProvider;
+import '../domain/tree.dart' show treeLevel;
+import 'tree_view.dart' show rankName, treeDataProvider;
 
 /// A turn that has been answered, kept so it can stay in the conversation
 /// above the one being taken. [picked] is null when the window closed on it.
@@ -1131,9 +1131,11 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
   Widget _result(S s, ThemeData theme) {
     final scheme = theme.colorScheme;
     // Only a question never answered before adds to the count, so only one of
-    // those can rename the tree.
+    // those can move the tree along. A level is worth saying as much as a
+    // name: the levels are what make the first fortnight worth turning up
+    // for, and they arrive every question or two at the start.
     final grownTo = _scenesBefore + (_firstTimeHere ? 1 : 0);
-    final stageUp = treeName(grownTo) > treeName(_scenesBefore);
+    final stageUp = treeLevel(grownTo) > treeLevel(_scenesBefore);
     return Column(
       children: [
         Expanded(
@@ -1176,7 +1178,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
               if (stageUp) ...[
                 const SizedBox(height: 10),
                 Text(
-                    s.t('treeStageUp', {'name': s.t('treeStage${treeName(grownTo)}')}),
+                    s.t('treeStageUp', {'name': rankName(s, grownTo)}),
                     style: theme.textTheme.bodyMedium
                         ?.copyWith(fontWeight: FontWeight.w700)),
               ],

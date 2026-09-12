@@ -16,7 +16,6 @@ import '../app.dart';
 import '../domain/models.dart';
 import '../domain/scene.dart';
 import '../domain/skills.dart';
-import '../domain/tree.dart';
 import 'field_screen.dart';
 import 'listen_screen.dart';
 import 'ai_screens.dart';
@@ -106,7 +105,7 @@ class HomeScreen extends ConsumerWidget {
               Text(
                 stats.scenes == 0
                     ? s.t(hasOwn ? 'treeSproutHintOwn' : 'treeSproutHint')
-                    : '${s.t('treeStage${treeName(tree.value?.shape.scenes ?? 0)}')} · ${s.t('treeGrownScenes', {'n': stats.scenes})}',
+                    : '${rankName(s, tree.value?.shape.scenes ?? 0)} · ${s.t('treeGrownScenes', {'n': stats.scenes})}',
                 textAlign: TextAlign.center,
                 style: muted,
               ),

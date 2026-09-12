@@ -20,21 +20,30 @@ import 'tree_view.dart';
 ///
 /// Read off [treeName] rather than worked out from the table, so that the
 /// screen and the tree can never disagree about where a name begins.
-List<({int entry, int draw})> get _stages {
+List<({int entry, int draw, int? levels})> get _stages {
   final entry = <int>[];
   var last = -1;
-  for (var r = 0; r <= treeNameAt.last; r++) {
+  for (var r = 0; r <= treeLevelAt(treeFullLevel); r++) {
     final n = treeName(r);
     if (n != last) {
       entry.add(r);
       last = n;
     }
   }
-  // Drawn at the step it is earned at, not at the top of its band: the row
-  // then shows what the learner will be looking at on the day the name
+  // Drawn at the question it is earned at, not at the top of its band: the
+  // row then shows what the learner will be looking at on the day the name
   // arrives, and the number beside it is the number that drew it. Drawn at
   // the top, the first row came out a small tree rather than a seed.
-  return [for (final e in entry) (entry: e, draw: e)];
+  return [
+    for (var i = 0; i < entry.length; i++)
+      (
+        entry: entry[i],
+        draw: entry[i],
+        // The last name has no last level: it goes on for as long as there
+        // are questions, which is the point of it.
+        levels: i < treeLevelsPerName.length ? treeLevelsPerName[i] : null,
+      )
+  ];
 }
 
 /// A tree made up for the picture: the questions it takes to earn the name,
@@ -54,7 +63,7 @@ TreeShape _imagined(int scenes, {int fields = 3}) {
           answers: (answers / fields).round(),
           twigs: const {TurnType.keyword: 1},
           learned: 1,
-          flowers: scenes >= treeNameAt[4] ? 1 : 0,
+          flowers: treeName(scenes) >= 4 ? 1 : 0,
         ),
     ],
   );
@@ -108,6 +117,7 @@ class TreeGrowthScreen extends ConsumerWidget {
               _Stage(
                 shape: _imagined(stage.draw),
                 name: s.t('treeStage${treeName(stage.draw)}'),
+                levels: stage.levels,
                 need: s.t('treeStageNeed', {'n': stage.entry}),
                 // The one the learner is standing in, marked rather than
                 // written about: they can count the rest themselves.
@@ -176,12 +186,17 @@ class _Rule extends StatelessWidget {
 class _Stage extends StatelessWidget {
   final TreeShape shape;
   final String name;
+
+  /// How many levels this name holds, or null for the last one, which holds
+  /// as many as there are questions.
+  final int? levels;
   final String need;
   final bool now;
   final String nowLabel;
   const _Stage({
     required this.shape,
     required this.name,
+    required this.levels,
     required this.need,
     required this.now,
     required this.nowLabel,
@@ -210,7 +225,8 @@ class _Stage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(name, style: theme.textTheme.titleSmall),
+                  Text(levels == null ? '$name  Lv.1 -' : '$name  Lv.1-$levels',
+                      style: theme.textTheme.titleSmall),
                   const SizedBox(height: 2),
                   Text(need,
                       style: theme.textTheme.bodySmall
