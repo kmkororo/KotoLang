@@ -52,17 +52,11 @@ void main() {
     final t = treeFrom(today: today);
     expect(t.isSeed, isTrue);
     expect(t.branches, isEmpty);
-    expect(t.stage, 0);
   });
 
-  test('height and girth are the questions answered', () {
+  test('the size is the questions answered, not the turns', () {
     final scenes = {for (final s in [make('a'), make('b')]) s.id: s};
-    final one = treeFrom(today: today, results: [answered('a', 0)], scenes: scenes);
-    expect(one.scenes, 1);
-    expect(one.stage, greaterThanOrEqualTo(0));
-
-    // A second question answered is taller than one, however many turns went
-    // into the first.
+    // Forty turns of one question is one question.
     final busy = treeFrom(
         today: today,
         results: [for (var i = 0; i < 40; i++) answered('a', i % 2)],
@@ -73,25 +67,58 @@ void main() {
         scenes: scenes);
     expect(busy.scenes, 1);
     expect(broad.scenes, 2);
-    expect(trunkGrowth(broad.scenes), greaterThan(trunkGrowth(busy.scenes)),
-        reason: 'forty turns of one question is one question');
   });
 
-  test('the ground covered thickens the trunk as well', () {
-    // The same questions, spread over more fields, carry a stouter bole.
-    expect(trunkGirth(30, 6), greaterThan(trunkGirth(30, 1)));
-    expect(trunkGirth(0, 6), 0, reason: 'nothing answered is no trunk');
-  });
-
-  test('the stages are cut fine enough to be felt', () {
-    expect(treeStages, greaterThanOrEqualTo(20));
-    final full = treeLevelAt(treeFullLevel);
-    final seen = <int>{};
-    for (var q = 0; q <= full; q++) {
-      seen.add(treeStage(q));
+  test('every level is bigger than the one before, by the same proportion', () {
+    for (var l = 1; l < treeTopLevel; l++) {
+      expect(treeSizeAt(l + 1.0), greaterThan(treeSizeAt(l.toDouble())));
     }
-    expect(seen.length, greaterThanOrEqualTo(20));
-    expect(treeStage(full), treeStages - 1);
+    final step = treeSizeAt(3) / treeSizeAt(2);
+    expect(treeSizeAt(151) / treeSizeAt(150), closeTo(step, 1e-9));
+    expect(treeSizeAt(treeTopLevel.toDouble()), closeTo(2.5 * worldRadius, 1e-6),
+        reason: 'at the top the tree is two and a half worlds across');
+  });
+
+  test('the shape follows the name', () {
+    // Maturity only ever goes up, and each name starts further along.
+    var last = -1.0;
+    for (var l = 1; l <= treeTopLevel; l++) {
+      final m = treeMaturityAt(l.toDouble());
+      expect(m, greaterThanOrEqualTo(last));
+      last = m;
+    }
+    expect(treeMaturityAt(1), 0);
+    expect(treeMaturityAt(treeTopLevel.toDouble()), 1);
+    var entry = 1;
+    for (var i = 0; i < treeLevelsPerName.length; i++) {
+      final next = entry + treeLevelsPerName[i];
+      expect(treeMaturityAt(next.toDouble()), greaterThan(treeMaturityAt(entry.toDouble())),
+          reason: 'name ${i + 1} looks older than name $i');
+      entry = next;
+    }
+  });
+
+  test('the camera pulls back without a jump, and ends on the whole world', () {
+    TreeView? prev;
+    for (var x = 1.0; x <= treeTopLevel; x += 0.25) {
+      final v = treeViewAt(x);
+      expect(v.top, greaterThan(worldRadius), reason: 'the tree is in view');
+      expect(v.bottom, lessThan(worldRadius), reason: 'so is the ground');
+      if (prev != null) {
+        expect(v.span, greaterThan(prev.span), reason: 'the view only widens');
+        expect(v.toGlobe, greaterThanOrEqualTo(prev.toGlobe));
+        expect(v.altitude, greaterThanOrEqualTo(prev.altitude));
+        expect(v.span / prev.span, lessThan(1.1), reason: 'no sudden zoom at $x');
+      }
+      prev = v;
+    }
+    // Close up, the ground is a plain: the view is a sliver of the world.
+    expect(treeViewAt(1).span, lessThan(worldRadius * 0.02));
+    expect(treeViewAt(treeFullLevel.toDouble()).toGlobe, 0,
+        reason: 'a full-grown tree still stands on a plain');
+    final top = treeViewAt(treeTopLevel.toDouble());
+    expect(top.toGlobe, 1);
+    expect(top.bottom, lessThan(-worldRadius), reason: 'the whole world in view');
   });
 
   test('a bough for every field, samples below the learner own', () {
@@ -213,30 +240,6 @@ void main() {
     expect(treeRank(1000000).name, treeNames - 1,
         reason: 'the last name holds everything past it');
     expect(treeRank(1000000).level, greaterThan(200));
-  });
-
-  test('growing carries on past the height, and stops at a world gone round', () {
-    // Height stops because the panel does, and everything else carries on
-    // from there — the bole thickening, the ground curving under it — until
-    // the crown has gone round the world, which is as far as a tree goes.
-    expect(treeBeyond(treeLevelAt(treeFullLevel)), 0);
-    expect(treeBeyond(treeLevelAt(treeFullLevel + 1)), greaterThan(0),
-        reason: 'the first question past a full-grown tree still does something');
-    expect(treeBeyond(treeLevelAt(treeTopLevel)), 1);
-    expect(treeBeyond(1000000), 1, reason: 'and no further');
-
-    expect(trunkGirth(treeLevelAt(treeTopLevel), 3),
-        greaterThan(trunkGirth(treeLevelAt(treeFullLevel), 3)));
-    expect(trunkGirth(1000000, 3), trunkGirth(treeLevelAt(treeTopLevel), 3),
-        reason: 'the top is a top');
-  });
-
-  test('the climb to a full-grown tree is a climb', () {
-    // Thirty questions used to put the trunk two thirds up, which is a tree
-    // grown in a week and then nothing to look forward to.
-    expect(treeGrown(30), lessThan(0.25));
-    expect(treeGrown(2), greaterThan(0), reason: 'but the second one shows');
-    expect(treeGrown(treeLevelAt(treeFullLevel)), 1);
   });
 
   test('the same record always draws the same tree', () {

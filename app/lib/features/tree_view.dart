@@ -1,68 +1,53 @@
 /// The growth tree: the first thing the app shows, and a picture of every
 /// answer that has ever been given.
 ///
-/// The tree itself is drawn rather than assembled from pictures. A real tree
-/// forks over and over, its limbs curve, and its leaves are spread along the
-/// branches rather than bunched on the ends; a trunk with a few stamped leaf
-/// images on it reads as a diagram no matter how good the images are. Drawing
-/// it also lets the shape follow the data — a learner with two areas and a
-/// learner with seven cannot share a picture.
-///
-/// The things that hang on the tree — fruit, a bud, decorations, the ground —
-/// stay as artwork, because those are fixed objects rather than structure.
+/// It is drawn on one rule. The ground was always a world, and all that
+/// changes is how far away the camera is: there is one sphere of a fixed
+/// size, a tree standing on its pole, and a frame that pulls back as the tree
+/// grows. Close up the ground is a plain; the horizon bends a little at a
+/// time; at the last level the whole world is in view with the roots round
+/// it. How big the tree is and what shape it has grow separately — see
+/// [treeSizeAt] and [treeMaturityAt].
 library;
 
 import 'dart:async';
 import 'dart:math';
+import 'dart:typed_data' show Float64List;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
 import '../core/l10n/strings.dart';
 import '../core/util.dart';
-import '../domain/scene.dart' show TurnType;
 import '../domain/tree.dart';
 
-/// The fixed objects the tree carries. Loaded once and held: they are a
-/// handful of small files and the tree redraws on every answer.
-class TreeArt {
-  final ui.Image bud;
-  final ui.Image fruit;
-  final ui.Image sprout;
-  const TreeArt({required this.bud, required this.fruit, required this.sprout});
-}
-
-Future<ui.Image> _load(String name) async {
-  final data = await rootBundle.load('assets/tree/$name.png');
-  final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
-  return (await codec.getNextFrame()).image;
-}
-
-final treeArtProvider = FutureProvider<TreeArt>((ref) async => TreeArt(
-      bud: await _load('bud'),
-      fruit: await _load('fruit'),
-      sprout: await _load('sprout'),
-    ));
-
-/// Everything the tree needs, gathered in one read.
 /// What the tree is called right now: the name and the level inside it.
 ///
 /// One place rather than three, because it is shown on home, at the end of a
-/// conversation, and on the growing screen, and a tree called one thing on
-/// one screen and another on the next is not a name.
+/// question, and on the growing screen, and a tree called one thing on one
+/// screen and another on the next is not a name.
 String rankName(S s, int scenes) {
   final r = treeRank(scenes);
   return s.t('treeRankLabel',
       {'name': s.t('treeStage${r.name}'), 'n': r.level});
 }
 
-class TreeData {
+/// Where [scenes] questions answered put the tree, between whole levels: the
+/// level earned plus how far towards the next. So every question finished
+/// makes the tree a little bigger, not only the ones that level up.
+double treeLevelExact(int scenes) {
+  final l = treeLevel(scenes);
+  final from = treeLevelAt(l), to = treeLevelAt(l + 1);
+  final part = to > from ? ((scenes - from) / (to - from)).clamp(0.0, 1.0) : 0.0;
+  return min(treeTopLevel.toDouble(), l + part);
+}
 
+/// Everything the tree needs, gathered in one read.
+class TreeData {
   final TreeShape shape;
   const TreeData({required this.shape});
 }
@@ -173,55 +158,47 @@ class _TreePanelState extends ConsumerState<TreePanel>
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
     final theme = Theme.of(context);
-    final art = ref.watch(treeArtProvider);
     final data = ref.watch(treeDataProvider);
 
     // Answering changes the tree, and the tree should be seen to notice.
     ref.listen(treeDataProvider, (_, _) => _breeze.stir());
     _apply();
 
-    if (art.value == null || data.value == null) {
-      return const SizedBox(height: 200);
-    }
+    final height = widget.compact
+        ? 140.0
+        // Capped against the screen: on a short phone a tall panel pushes
+        // the start button below the fold, which is the one thing this
+        // screen must never do.
+        : min(250.0, MediaQuery.sizeOf(context).height * 0.28);
+
+    if (data.value == null) return SizedBox(height: height);
 
     final shape = data.value!.shape;
+    final level = treeLevelExact(shape.scenes);
     final canvas = SizedBox(
-      // Capped against the screen as well as the tree: on a short phone a
-      // tall panel pushes the start button below the fold, which is the
-      // one thing this screen must never do.
-      height: widget.compact
-          ? 140
-          : min(150 + 130 * trunkGrowth(shape.scenes),
-              MediaQuery.sizeOf(context).height * 0.28),
+      height: height,
       width: double.infinity,
-      child: TweenAnimationBuilder<double>(
-        // Grows into place rather than appearing at full size. The tween
-        // runs off the questions answered, so a question finished visibly
-        // adds to it.
-        tween: Tween(begin: 0, end: trunkGrowth(shape.scenes)),
-        duration: const Duration(milliseconds: 900),
-        curve: Curves.easeOutCubic,
-        builder: (context, grown, _) => CustomPaint(
-          // The breeze repaints the painter directly rather than rebuilding
-          // the widget: nothing above the canvas changes when the wind
-          // blows, so nothing above the canvas needs to be built again.
-          painter: _TreePainter(
-            data: data.value!,
-            art: art.value!,
-            grown: grown,
-            girth: trunkGirth(shape.scenes, shape.fields),
-            beyond: treeBeyond(shape.scenes),
-            dark: theme.brightness == Brightness.dark,
-            breeze: _breeze,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: TweenAnimationBuilder<double>(
+          // Grows into place rather than appearing at full size, and a
+          // question finished is seen to add to it.
+          tween: Tween(begin: max(1.0, level - 1.5), end: level),
+          duration: const Duration(milliseconds: 900),
+          curve: Curves.easeOutCubic,
+          builder: (context, at, _) => CustomPaint(
+            // The breeze repaints the painter directly rather than
+            // rebuilding the widget: nothing above the canvas changes when
+            // the wind blows, so nothing above it needs building again.
+            painter: _WorldPainter(level: at, breeze: _breeze),
           ),
         ),
       ),
     );
 
-    final stack = Stack(
+    return Stack(
       children: [
-        // What gets shared is exactly what is on screen: the tree and the
-        // line under it, on the page colour so the picture is not see-through.
+        // What gets shared is exactly what is on screen.
         RepaintBoundary(
           key: _shot,
           child: ColoredBox(
@@ -231,1097 +208,452 @@ class _TreePanelState extends ConsumerState<TreePanel>
         ),
         if (!shape.isSeed && !widget.compact)
           Positioned(
-            top: 0,
-            right: 0,
+            top: 2,
+            right: 2,
             child: IconButton(
               tooltip: s.t('shareTree'),
-              icon: Icon(Icons.ios_share, size: 20, color: theme.colorScheme.onSurfaceVariant),
+              icon: const Icon(Icons.ios_share, size: 20, color: Colors.white),
               onPressed: _share,
             ),
           ),
       ],
     );
-    return stack;
   }
+}
+
+// ------------------------------------------------------------------ drawing
+
+double _lerp(double a, double b, double t) => a + (b - a) * t;
+double _ease(double t) {
+  final x = t.clamp(0.0, 1.0);
+  return x * x * (3 - 2 * x);
 }
 
 /// A deterministic wobble in -1..1, seeded by position in the tree rather than
 /// by a random number generator: the tree must not rearrange itself between
 /// visits, or it is decoration rather than a record.
-double _wobble(int seed) {
+double _wob(num seed) {
   final x = sin(seed * 12.9898) * 43758.5453;
   return (x - x.floorToDouble()) * 2 - 1;
 }
 
-/// A limb, kept so its leaves can be hung once all the wood is down.
-typedef _Limb = ({Offset from, Offset ctrl, Offset to, int seed, bool tip, bool own});
+Color _mix(List<int> a, List<int> b, double t) => Color.fromARGB(
+    255,
+    _lerp(a[0].toDouble(), b[0].toDouble(), t).round(),
+    _lerp(a[1].toDouble(), b[1].toDouble(), t).round(),
+    _lerp(a[2].toDouble(), b[2].toDouble(), t).round());
 
-class _TreePainter extends CustomPainter {
-  final TreeData data;
-  final TreeArt art;
-  final double grown;
+/// The picture at one level and one size, recorded once: the world behind,
+/// the tree (which the breeze moves), and the cloud in front.
+class _Scene {
+  final ui.Picture back, tree, front;
 
-  /// Girth carries on past the point where height stops.
-  final double girth;
+  /// Where the foot of the tree is on the canvas, for the sway to pivot on.
+  final Offset base;
 
-  /// How far past a full-grown tree this is, from 0 upwards and never capped.
-  /// Height has to stop because the panel does; this is what carries on
-  /// instead — the ground widening under the tree until what is showing is
-  /// the curve of it, and the sky behind it going dark.
-  final double beyond;
+  /// How far the breeze may lean the tree: young trees give more.
+  final double give;
 
-  /// The wind. Read at paint time rather than copied in, because it is also
-  /// what drives the repaint.
-  final _Breeze breeze;
-  double get phase => breeze.phase;
-  double get gust => breeze.gust;
+  _Scene(this.back, this.tree, this.front, this.base, this.give);
+}
 
-  /// Bark the colour of real bark disappears against a near-black screen.
-  final bool dark;
+/// A handful of recent scenes. The home tree repaints the same one on every
+/// breath of wind, and the growing screen scrolls back and forth over a few.
+final _scenes = <(double, double, double), _Scene>{};
 
-  _TreePainter({
-    required this.data,
-    required this.art,
-    required this.grown,
-    required this.girth,
-    this.beyond = 0,
-    required this.breeze,
-    required this.dark,
-  }) : super(repaint: breeze);
-
-  static const _bark = Color(0xFF4A3226);
-  static const _barkOnDark = Color(0xFF7A5540);
-
-  /// A seedling is a green stem, not a thin trunk. Bark arrives gradually as
-  /// the stem thickens: going straight from a sprout to a brown bole was the
-  /// step that read as a swap rather than as growth.
-  static const _stem = Color(0xFF4C8C3A);
-  static const _stemOnDark = Color(0xFF6FA85C);
-
-  /// Green at the start, fully barked a few hundred answers in. It used to
-  /// finish inside fifty, which is a couple of days.
-  ///
-  /// Height counts too, and for a plain reason: a stem that stands that tall
-  /// has to be wood to stand at all. Left to the answer count alone, someone
-  /// who climbed the ladder quickly — which the samples do, since every clean
-  /// answer moves all five axes at once — ended up half a tree tall and
-  /// entirely green, which is a bush.
-  double get _woodiness =>
-      max(grown, ((data.shape.answers - 8) / 240).clamp(0.0, 1.0));
-
-  Color get _stemColour => Color.lerp(dark ? _stemOnDark : _stem,
-      dark ? _barkOnDark : _bark, _woodiness)!;
-
-  // The lit side of the trunk. One band, not a gradient: enough to say where
-  // the light is coming from without turning the drawing into a render.
-  static const _barkLit = Color(0xFF6B4A37);
-  static const _barkLitOnDark = Color(0xFF9A6E52);
-
-  static const _leafShades = [
-    Color(0xFF4E9B3F),
-    Color(0xFF66B04C),
-    Color(0xFF3D7F33),
-  ];
-  static const _dryShades = [
-    Color(0xFFA9BC9C),
-    Color(0xFFBECEB3),
-    Color(0xFF93A788),
-  ];
-
-  /// A five-petalled flower, drawn rather than pasted: it has to sit on a
-  /// twig end at any scale and read against both the light and the dark
-  /// ground, which a fixed bitmap did not.
-  void _flower(Canvas canvas, Offset at, double r) {
-    final petal = Paint()
-      ..color = dark ? const Color(0xFFE58AA0) : const Color(0xFFF4A7B9);
-    final centre = Paint()
-      ..color = dark ? const Color(0xFFFFE08A) : const Color(0xFFFFD25E);
-    for (var i = 0; i < 5; i++) {
-      final a = -pi / 2 + i * 2 * pi / 5;
-      canvas.drawCircle(at + Offset(cos(a), sin(a)) * r, r * 0.62, petal);
-    }
-    canvas.drawCircle(at, r * 0.42, centre);
+_Scene _sceneFor(double level, Size size) {
+  final key = ((level * 1000).roundToDouble() / 1000, size.width, size.height);
+  final hit = _scenes.remove(key);
+  if (hit != null) return _scenes[key] = hit;
+  final made = _compose(key.$1, size);
+  _scenes[key] = made;
+  while (_scenes.length > 24) {
+    final old = _scenes.remove(_scenes.keys.first)!;
+    old.back.dispose();
+    old.tree.dispose();
+    old.front.dispose();
   }
+  return made;
+}
 
-  /// The mound the tree stands in, drawn rather than pasted: a low ellipse of
-  /// earth with a darker rim, in the app's own cartoon line. No grass — the
-  /// leaves are the only green, and they belong to the tree.
-  /// [world] is the globe the ground has closed into, or null while it is
-  /// still flat.
-  void _mound(Canvas canvas, Offset centre, double h,
-      {({Offset at, double r})? world}) {
-    // Past a full-grown tree the mound widens and then, as the crown comes
-    // round it, closes: a flat ellipse at the start, a horizon in the middle
-    // of the climb, and by the end a world with the tree standing on it.
-    final round = _round;
-    final flatW = h * (3.4 + 4.0 * beyond);
-    final rect = world == null
-        ? Rect.fromCenter(center: centre, width: flatW, height: h)
-        : Rect.fromCenter(
-            center: world.at,
-            // Round at the end, and on the way there still wider than it is
-            // tall, so the horizon closes rather than inflating.
-            width: world.r * 2 + (flatW - world.r * 2) * (1 - round),
-            height: world.r * 2,
-          );
-    final rim = Paint()..color = dark ? const Color(0xFF3A2A1E) : const Color(0xFF4A3323);
-    final earth = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: dark
-            ? const [Color(0xFF8A5A36), Color(0xFF6E4629)]
-            : const [Color(0xFFB07A48), Color(0xFF8F5E36)],
-      ).createShader(rect);
-    canvas.drawOval(rect, rim);
-    canvas.drawOval(rect.deflate(h * 0.07), earth);
+_Scene _compose(double level, Size size) {
+  final w = size.width, h = size.height;
+  const r = worldRadius;
+  final view = treeViewAt(level);
+  final m = treeMaturityAt(level);
+  final big = view.size;
+  final scale = h / view.span;
+  double X(double x) => w / 2 + x * scale;
+  double Y(double y) => (view.top - y) * scale;
+  final frame = Offset.zero & size;
 
-    // And once it is round it is not a clod of earth any more. Ocean under
-    // cloud, land on it, and the far side falling into its own shadow: a
-    // brown ball with a tree on top is a planet in a diagram, and what the
-    // climb ends on should be the thing itself.
-    if (world != null && round > 0.02) {
-      final face = rect.deflate(h * 0.07);
-      canvas.save();
-      canvas.clipPath(Path()..addOval(face));
-      final r = face.width / 2;
-      canvas.drawOval(
-          face,
-          Paint()
-            ..shader = LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFF2E7BC4).withValues(alpha: round),
-                const Color(0xFF1B4E86).withValues(alpha: round),
-              ],
-            ).createShader(face));
-      // Land, in lumps that keep their places between visits.
-      final land = Paint()
-        ..color = (dark ? const Color(0xFF3E7A3A) : const Color(0xFF4E9B45))
-            .withValues(alpha: round);
-      for (var i = 0; i < 11; i++) {
-        final a = _wobble(i * 19) * pi;
-        final d = (_wobble(i * 31 + 3) * 0.5 + 0.5) * 0.82;
-        final at = face.center + Offset(cos(a), sin(a)) * (r * d);
-        final w = r * (0.36 + (_wobble(i * 13 + 7) * 0.5 + 0.5) * 0.50);
-        for (var k = 0; k < 3; k++) {
-          canvas.drawOval(
-              Rect.fromCenter(
-                center: at +
-                    Offset(_wobble(i * 53 + k) * w * 0.34,
-                        _wobble(i * 71 + k) * w * 0.26),
-                width: w * (0.64 + 0.24 * k),
-                height: w * (0.44 + 0.16 * k),
-              ),
-              land);
-        }
-      }
-      // The terminator: the far lower right going into night.
-      canvas.drawOval(
-          face,
-          Paint()
-            ..shader = RadialGradient(
-              center: const Alignment(-0.45, -0.5),
-              radius: 1.15,
-              colors: [
-                Colors.transparent,
-                const Color(0xFF05122B).withValues(alpha: 0.62 * round),
-              ],
-              stops: const [0.55, 1],
-            ).createShader(face));
-      canvas.restore();
-    }
-    // A lighter band across the top, the way the old picture had it. It
-    // shrinks away as the ground rounds, since a world has no near lip.
-    final band = Paint()
-      ..color = (dark ? const Color(0xFF9E6C43) : const Color(0xFFC08D5C))
-          .withValues(alpha: 0.8 * (1 - round));
-    if (round < 0.98) {
-      canvas.drawOval(
-          Rect.fromCenter(
-              center: rect.center.translate(-rect.width * 0.06, -h * 0.12),
-              width: rect.width * 0.62,
-              height: h * 0.30),
-          band);
-    }
-  }
-
-  void _image(Canvas canvas, ui.Image img, Offset at, double height,
-      {double opacity = 1, double angle = 0}) {
-    final scale = height / img.height;
-    final w = img.width * scale;
-    final paint = Paint();
-    if (opacity < 1) paint.color = Colors.white.withValues(alpha: opacity);
-    canvas.save();
-    if (angle != 0) {
-      canvas.translate(at.dx, at.dy);
-      canvas.rotate(angle);
-      canvas.translate(-at.dx, -at.dy);
-    }
-    canvas.drawImageRect(
-      img,
-      Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
-      Rect.fromLTWH(at.dx - w / 2, at.dy - height / 2, w, height),
-      paint,
-    );
-    canvas.restore();
-  }
-
-  Offset _at(Offset a, Offset c, Offset b, double t) {
-    final u = 1 - t;
-    return a * (u * u) + c * (2 * u * t) + b * (t * t);
-  }
-
-  /// The direction the curve is heading at [t].
-  Offset _heading(Offset a, Offset c, Offset b, double t) {
-    final d = _at(a, c, b, min(t + 0.02, 1)) - _at(a, c, b, max(t - 0.02, 0));
-    final len = d.distance;
-    return len == 0 ? const Offset(0, -1) : d / len;
-  }
-
-  /// A limb as a curved, tapering shape: sampled along its centre line and
-  /// given a width that shrinks towards the tip. A straight line of constant
-  /// width with round caps is a stick.
-  Path _woodPath(Offset a, Offset c, Offset b, double w0, double w1) {
-    const steps = 16;
-    final left = <Offset>[];
-    final right = <Offset>[];
-    for (var i = 0; i <= steps; i++) {
-      final t = i / steps;
-      final p = _at(a, c, b, t);
-      final h = _heading(a, c, b, t);
-      final n = Offset(-h.dy, h.dx);
-      // Tapering fastest near the tip is what gives a branch its whip.
-      final w = (w0 + (w1 - w0) * (t * t * 0.6 + t * 0.4)) / 2;
-      left.add(p + n * w);
-      right.add(p - n * w);
-    }
-    final path = Path()..moveTo(left.first.dx, left.first.dy);
-    for (final p in left.skip(1)) {
-      path.lineTo(p.dx, p.dy);
-    }
-    for (final p in right.reversed) {
-      path.lineTo(p.dx, p.dy);
-    }
-    return path..close();
-  }
-  /// Where the trunk meets the soil, widening as it goes down and putting out
-  /// a couple of roots to either side. Everything below the soil line is
-  /// covered afterwards by the near lip of the mound, so only the spread shows.
-  /// The foot of the tree: a swelling where the trunk reaches the soil and a
-  /// few roots splaying out of it into the ground.
-  ///
-  /// A trunk with parallel sides ends on the soil line in a straight cut and
-  /// reads as a post pushed in. Roots crossing that line at an angle read as
-  /// going into it, which is the whole trick. Everything below the line is
-  /// covered afterwards by the near lip of the mound.
-  void _roots(Canvas canvas, double x, double halfWidth, double soil,
-      Paint wood) {
-    final spread = halfWidth * (1.1 + 2.2 * _woodiness) * (1 - 0.75 * _round);
-    // A seedling has no buttress at all; the swelling arrives with the bark.
-    final crown = soil - 4 - 9 * _woodiness;
-    final buried = soil + 11;
-
-    canvas.drawPath(
-      Path()
-        ..moveTo(x - halfWidth, crown)
-        ..quadraticBezierTo(x - halfWidth, soil - 2,
-            x - halfWidth * (1 + _woodiness * (1 - _round)), buried)
-        ..lineTo(x + halfWidth * (1 + _woodiness * (1 - _round)), buried)
-        ..quadraticBezierTo(x + halfWidth, soil - 2, x + halfWidth, crown)
-        ..close(),
-      wood,
-    );
-
-    if (_woodiness < 0.3) return;
-    for (final at in const [-1.0, -0.5, 0.55, 1.0]) {
-      final from = Offset(x + halfWidth * at * 0.8, crown + 2);
-      final to = Offset(x + spread * at, buried);
-      canvas.drawPath(
-        _woodPath(
-          from,
-          Offset((from.dx + to.dx) / 2 + spread * at * 0.35, soil - 1),
-          to,
-          halfWidth * 0.62,
-          halfWidth * 0.16,
-        ),
-        wood,
-      );
-    }
-  }
-
-  /// One leaf: a pointed oval on a short stalk.
-  Path _leaf(Offset stem, double angle, double len) {
-    final dir = Offset(cos(angle), sin(angle));
-    final n = Offset(-dir.dy, dir.dx);
-    final base = stem + dir * (len * 0.16);
-    final tip = stem + dir * len;
-    final w = len * 0.31;
-    return Path()
-      ..moveTo(base.dx, base.dy)
-      ..quadraticBezierTo(base.dx + dir.dx * len * 0.4 + n.dx * w,
-          base.dy + dir.dy * len * 0.4 + n.dy * w, tip.dx, tip.dy)
-      ..quadraticBezierTo(base.dx + dir.dx * len * 0.4 - n.dx * w,
-          base.dy + dir.dy * len * 0.4 - n.dy * w, base.dx, base.dy)
-      ..close();
-  }
-
-  /// Leaves all the way along a limb, alternating sides, rather than a clump
-  /// stuck on the end. This is the difference between a tree and a lollipop,
-  /// and it is how a branch actually carries them.
-  void _leaves(Canvas canvas, _Limb limb, double size, bool dry, double start) {
-    final shades = dry ? _dryShades : _leafShades;
-    const count = 11;
-    for (var k = 0; k < count; k++) {
-      final w = _wobble(limb.seed * 31 + k * 11);
-      // Gaps. Foliage that covers a branch evenly reads as a pipe cleaner; a
-      // real canopy comes in clumps with sky between them. A young tree keeps
-      // nearly all of its leaves though — it has few enough already, and
-      // thinning those reads as dying rather than as dappled.
-      if (_wobble(limb.seed * 137 + k * 23) > 0.95 - 0.45 * grown) continue;
-
-      // Bunched rather than spaced: the jitter is what makes the clumps.
-      final t = (start + (1 - start) * (k / (count - 1)) + w * 0.06)
-          .clamp(0.0, 1.0);
-      final p = _at(limb.from, limb.ctrl, limb.to, t);
-      final h = _heading(limb.from, limb.ctrl, limb.to, t);
-      final along = atan2(h.dy, h.dx);
-      final side = k.isEven ? 1.0 : -1.0;
-
-      // Leaves point outward and forward, leaning further out nearer the tip.
-      // The last term is the breeze: every leaf on its own phase, or the whole
-      // tree waves like a single flag.
-      final angle = along +
-          side * (0.95 - 0.35 * t) +
-          w * 0.22 +
-          sin(phase + limb.seed * 0.7 + k * 0.9) * 0.16 * gust;
-      final len = size * (0.72 + 0.42 * ((k % 3) / 2)) * (1 + w * 0.18);
-      final stalk = p + Offset(cos(angle), sin(angle)) * (size * 0.10);
-      canvas.drawPath(_leaf(stalk, angle, len),
-          Paint()..color = _leafShade(shades, angle, limb.seed + k));
-    }
-
-    // A few at the very end, so a branch finishes in leaves, not in a point.
-    for (var k = 0; k < 3; k++) {
-      final h = _heading(limb.from, limb.ctrl, limb.to, 1);
-      final angle = atan2(h.dy, h.dx) +
-          (k - 1) * 0.55 +
-          _wobble(limb.seed * 53 + k) * 0.2 +
-          sin(phase + limb.seed * 0.7 + k) * 0.16 * gust;
-      canvas.drawPath(_leaf(limb.to, angle, size * (0.85 + 0.2 * (k % 2))),
-          Paint()..color = _leafShade(shades, angle, limb.seed + k + 1));
-    }
-  }
-
-  /// Which green a leaf takes. The light comes from the upper left, so a leaf
-  /// turned up towards it is paler and one hanging underneath is darker. This
-  /// is the cheapest thing that stops a canopy looking like flat cut paper.
-  Color _leafShade(List<Color> shades, double angle, int seed) {
-    final up = -sin(angle) * 0.7 - cos(angle) * 0.3;
-    if (up > 0.35) return shades[1];
-    if (up < -0.35) return shades[2];
-    return shades[seed % shades.length];
-  }
-
-
-  /// Night, and what is in it. Nothing until the tree is full grown, and then
-  /// it comes on slowly: a tree with its head this far up is not standing in
-  /// the same afternoon it started in.
-  void _sky(Canvas canvas, Size size) {
-    final depth = beyond.clamp(0.0, 1.0);
-    if (depth <= 0.01) return;
-    final rect = Offset.zero & size;
-    canvas.drawRect(
-      rect,
+  // ---- sky: day, then dusk, then space ----------------------------------
+  final back = ui.PictureRecorder();
+  final c = Canvas(back, frame);
+  const day = [[111, 168, 220], [207, 230, 245]];
+  const dusk = [[40, 52, 110], [214, 160, 150]];
+  const night = [[6, 9, 26], [24, 34, 74]];
+  final a = view.altitude;
+  Color pick(int i) =>
+      a < 0.5 ? _mix(day[i], dusk[i], a / 0.5) : _mix(dusk[i], night[i], (a - 0.5) / 0.5);
+  c.drawRect(
+      frame,
       Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            const Color(0xFF0B1026).withValues(alpha: depth),
-            const Color(0xFF16204A).withValues(alpha: depth * 0.55),
-            const Color(0xFF16204A).withValues(alpha: 0),
-          ],
-          stops: const [0, 0.55, 1],
-        ).createShader(rect),
-    );
-    // Stars, seeded by position so they keep their places between visits.
-    final star = Paint()..color = Colors.white.withValues(alpha: depth);
-    for (var i = 0; i < 40; i++) {
-      final x = (_wobble(i * 31) * 0.5 + 0.5) * size.width;
-      final y = (_wobble(i * 57 + 9) * 0.5 + 0.5) * size.height * 0.62;
-      final r = 0.6 + (_wobble(i * 13 + 3) * 0.5 + 0.5) * 1.1;
-      canvas.drawCircle(Offset(x, y), r, star);
+        ..shader = ui.Gradient.linear(Offset.zero, Offset(0, h), [pick(0), pick(1)]));
+  if (a > 0.55) {
+    final star = Paint()..color = Colors.white.withValues(alpha: 0.9 * (a - 0.55) / 0.45);
+    for (var i = 0; i < 60; i++) {
+      c.drawCircle(
+          Offset((_wob(i * 31) * .5 + .5) * w, (_wob(i * 57 + 9) * .5 + .5) * h),
+          (0.5 + (_wob(i * 13 + 3) * .5 + .5)) * max(w, h) / 400,
+          star);
     }
   }
 
-  /// Cloud, below the island and drifting under it. A world with cloud
-  /// beneath it is not a planet: it is something floating, which is the whole
-  /// of the difference.
-  void _clouds(Canvas canvas, Size size) {
-    final show = _round;
-    if (show <= 0.01) return;
-    final paint = Paint()
-      ..color = (dark ? const Color(0xFFB9C6E8) : Colors.white)
-          .withValues(alpha: 0.30 * show);
-    for (var i = 0; i < 7; i++) {
-      final t = _wobble(i * 41) * 0.5 + 0.5;
-      final x = ((t + phase * 0.012 + i * 0.14) % 1.2 - 0.1) * size.width;
-      final y = size.height * (0.58 + (_wobble(i * 67 + 5) * 0.5 + 0.5) * 0.40);
-      final w = size.width * (0.22 + (_wobble(i * 23 + 2) * 0.5 + 0.5) * 0.26);
-      final h = w * 0.30;
-      // Three overlapping lumps, which is a cloud and not a pill.
-      for (var k = -1; k <= 1; k++) {
-        canvas.drawOval(
-            Rect.fromCenter(
-                center: Offset(x + k * w * 0.26, y - (k == 0 ? h * 0.22 : 0)),
-                width: w * (k == 0 ? 0.62 : 0.54),
-                height: h * (k == 0 ? 1.25 : 1.0)),
-            paint);
-      }
+  // ---- the world --------------------------------------------------------
+  final gx = X(0), gy = Y(0), gr = r * scale;
+  // Half the width in view, in world units. While that is a sliver of the
+  // world the ground is drawn as the arc in view, not as a disc a hundred
+  // thousand pixels across, which the rasteriser cannot hold precisely.
+  final half = w / 2 / scale;
+  final near = half < r * 0.25;
+  final ground = Path();
+  if (near) {
+    const n = 32;
+    ground.moveTo(0, h + 10);
+    for (var i = 0; i <= n; i++) {
+      final x = -half * 1.1 + i / n * half * 2.2;
+      ground.lineTo(X(x), Y(sqrt(r * r - x * x)));
     }
+    ground.lineTo(w, h + 10);
+    ground.close();
+  } else {
+    ground.addOval(Rect.fromCircle(center: Offset(gx, gy), radius: gr));
+  }
+  c.drawPath(ground, Paint()..color = const Color(0xFF2E7BC4));
+  c.save();
+  c.clipPath(ground);
+  c.clipRect(frame);
+
+  // The home continent, under the tree: everything above a wavy coast.
+  final capY = r * cos(0.62);
+  double coast(double x) => capY + r * (0.05 * sin(x / r * 7) + 0.03 * sin(x / r * 17 + 1));
+  const land = Color(0xFF5C9A3E);
+  if (Y(capY + r * 0.09) > h + 2) {
+    // The coast is below the bottom of the frame: all the ground is land.
+    c.drawRect(frame, Paint()..color = land);
+  } else {
+    final span = min(r * 1.2, half * 1.1);
+    final cap = Path()
+      ..moveTo(X(-span), -10)
+      ..lineTo(X(span), -10);
+    for (var i = 0; i <= 48; i++) {
+      final x = span - i / 48 * span * 2;
+      cap.lineTo(X(x), Y(coast(x)));
+    }
+    cap.close();
+    c.drawPath(cap, Paint()..color = land);
   }
 
-  /// The roots on the face of the world, spreading from the trunk's foot and
-  /// going round it. Drawn over the world rather than under it, because what
-  /// is wanted is a world held in a hand.
-  ///
-  /// Each one is laid out on the sphere rather than on the picture of it: how
-  /// far down from the pole it has got, and how far round. A root drawn as a
-  /// curve on the flat disc looks painted on; one drawn in the sphere's own
-  /// two angles crowds towards the rim the way a line on a ball does, and
-  /// goes out of sight round the back when it gets there.
-  ///
-  /// Three thick ones that wander a long way, a dozen fine ones between them,
-  /// and whiskers off the thick ones — which is what a root system does: a
-  /// few that go somewhere and a great many that hold on.
-  void _surfaceRoots(Canvas canvas, _Plan plan) {
-    if (plan.globeR <= 0 || _round <= 0.02) return;
-    final g = plan.globe;
-    final r = plan.globeR;
-    canvas.save();
-    canvas.clipPath(Path()..addOval(Rect.fromCircle(center: g, radius: r)));
-
-    // [u] is the angle down from the pole the trunk stands on; [v] is the
-    // angle round. Orthographic, so the pole is the top of the circle.
-    Offset at(double u, double v) =>
-        Offset(g.dx + r * sin(u) * sin(v), g.dy - r * cos(u));
-
-    final bark = Color.lerp(
-        dark ? _barkOnDark : _barkLit, const Color(0xFFD9A870), 0.30)!;
-
-    void root({
-      required double v0,
-      required double amp,
-      required double waves,
-      required double phase,
-      required double uFrom,
-      required double uTo,
-      required double w,
-      double fade = 1,
-    }) {
-      const steps = 30;
-      final paint = Paint()
-        ..color = bark.withValues(alpha: fade * _round)
-        ..strokeCap = StrokeCap.round;
-      var prev = at(uFrom, v0 + amp * sin(uFrom * waves + phase));
-      for (var i = 1; i <= steps; i++) {
-        final t = i / steps;
-        final u = uFrom + (uTo - uFrom) * t;
-        final v = v0 + amp * sin(u * waves + phase);
-        final p = at(u, v);
-        // Round the back: stop drawing rather than let it come out the far
-        // side, which is what makes the ball read as a ball.
-        if (cos(v) > 0.03) {
-          canvas.drawLine(prev, p, paint..strokeWidth = max(0.7, w * (1 - 0.60 * t)));
+  // The other continents, laid out on the sphere so they foreshorten
+  // towards the rim. Only once the camera is far enough out to see them.
+  if (!near) {
+    const continents = [
+      (1.05, -0.9, 0.42), (1.25, 0.95, 0.38), (1.95, -0.35, 0.46),
+      (2.40, 0.60, 0.30), (1.60, 0.10, 0.22),
+    ];
+    final paint = Paint()..color = const Color(0xFF4E8A34);
+    List<double> cross(List<double> p, List<double> q) =>
+        [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]];
+    for (var ci = 0; ci < continents.length; ci++) {
+      final (u, v, cr) = continents[ci];
+      final cen = [sin(u) * sin(v), cos(u), sin(u) * cos(v)];
+      final ax = cen[1].abs() < 0.9 ? const [0.0, 1.0, 0.0] : const [1.0, 0.0, 0.0];
+      var e1 = cross(cen, ax);
+      final len = sqrt(e1[0] * e1[0] + e1[1] * e1[1] + e1[2] * e1[2]);
+      e1 = [for (final x in e1) x / len];
+      final e2 = cross(cen, e1);
+      final p = Path();
+      for (var i = 0; i <= 40; i++) {
+        final th = i / 40 * pi * 2;
+        final rr = cr * (1 + 0.14 * sin(th * 3 + ci * 1.7) + 0.08 * sin(th * 5 + ci * 2.3));
+        final dx = cen[0] * cos(rr) + (e1[0] * cos(th) + e2[0] * sin(th)) * sin(rr);
+        final dy = cen[1] * cos(rr) + (e1[1] * cos(th) + e2[1] * sin(th)) * sin(rr);
+        if (i == 0) {
+          p.moveTo(X(dx * r), Y(dy * r));
+        } else {
+          p.lineTo(X(dx * r), Y(dy * r));
         }
-        prev = p;
+      }
+      p.close();
+      c.drawPath(p, paint);
+    }
+    // Night on the far side: one flat crescent, not a shaded ball.
+    if (view.toGlobe > 0) {
+      final dark = Path()
+        ..fillType = PathFillType.evenOdd
+        ..addOval(Rect.fromCircle(center: Offset(gx, gy), radius: gr))
+        ..addOval(Rect.fromCircle(
+            center: Offset(gx - gr * 0.38, gy - gr * 0.32), radius: gr * 0.97));
+      c.drawPath(dark, Paint()..color = Color.fromRGBO(6, 18, 44, 0.42 * view.toGlobe));
+    }
+  }
+  c.restore();
+
+  // ---- roots over the world ---------------------------------------------
+  // They come on as the tree gets big against the world, not at a switch:
+  // how far round they reach and how thick they are both follow its size.
+  final reach = ((big - 0.25 * r) / (2.3 * r - 0.25 * r)).clamp(0.0, 1.0);
+  final trunkW = big * _lerp(0.03, 0.11, _ease((m - 0.2) / 0.8));
+  if (reach > 0 && !near) {
+    c.save();
+    c.clipPath(ground);
+    final uMax = 0.10 + 2.75 * reach;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    void rootLine(double v0, double amp, double waves, double phase, double u0,
+        double u1, double width, double alpha) {
+      paint.color = Color.fromRGBO(160, 112, 70, alpha);
+      Offset? prev;
+      for (var i = 0; i <= 36; i++) {
+        final t = i / 36, u = _lerp(u0, u1, t), v = v0 + amp * sin(u * waves + phase);
+        final z = sin(u) * cos(v);
+        final s = Offset(X(r * sin(u) * sin(v)), Y(r * cos(u)));
+        if (prev != null && z > 0.02) {
+          paint.strokeWidth = max(0.6, width * (1 - 0.7 * t) * scale);
+          c.drawLine(prev, s, paint);
+        }
+        prev = s;
       }
     }
 
-    final w0 = plan.w0;
-    // Three that go somewhere.
-    for (var k = 0; k < 3; k++) {
-      final v0 = (k - 1) * 0.78;
-      root(
-        v0: v0,
-        amp: 0.40,
-        waves: 2.05 + 0.3 * _wobble(k * 11),
-        phase: _wobble(k * 23) * pi,
-        uFrom: 0.05,
-        uTo: 2.55,
-        w: w0 * 0.30,
-      );
-      // Whiskers off it, three each, leaving at different heights.
+    for (var k = 0; k < 5; k++) {
+      final v0 = (k - 2) * 0.55;
+      rootLine(v0, 0.40, 2.1 + 0.3 * _wob(k * 11), _wob(k * 23) * pi, 0.01, uMax,
+          trunkW * 0.42, 0.95);
       for (var j = 0; j < 3; j++) {
-        final start = 0.55 + j * 0.62;
-        root(
-          v0: v0 + (j.isEven ? 0.26 : -0.26),
-          amp: 0.20,
-          waves: 3.6,
-          phase: _wobble(k * 31 + j * 7) * pi,
-          uFrom: start,
-          uTo: start + 0.85,
-          w: w0 * 0.075,
-          fade: 0.88,
-        );
+        final s0 = 0.5 + j * 0.7;
+        if (s0 > uMax - 0.2) continue;
+        rootLine(v0 + (j.isOdd ? -0.24 : 0.24), 0.2, 3.6, _wob(k * 31 + j) * pi, s0,
+            min(uMax, s0 + 0.9), trunkW * 0.08, 0.85);
       }
     }
-    // And a dozen fine ones through the gaps.
     for (var k = 0; k < 12; k++) {
-      root(
-        v0: -1.30 + k * (2.60 / 11),
-        amp: 0.24,
-        waves: 3.1 + 0.5 * _wobble(k * 17),
-        phase: _wobble(k * 41) * pi,
-        uFrom: 0.05,
-        uTo: 2.40,
-        w: w0 * 0.105,
-        fade: 0.9,
-      );
+      rootLine(-1.35 + k * 2.7 / 11, 0.24, 3.1 + 0.5 * _wob(k * 17), _wob(k * 41) * pi,
+          0.01, uMax * 0.94, trunkW * 0.15, 0.85);
     }
-    canvas.restore();
+    c.restore();
   }
+
+  // ---- the tree -----------------------------------------------------------
+  final treeRec = ui.PictureRecorder();
+  final tc = Canvas(treeRec, frame);
+  final leafPaths = [Path(), Path(), Path()];
+  const leafColours = [Color(0xFF4E9B3F), Color(0xFF66B04C), Color(0xFF3E7A3A)];
+  final bark = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..color = m < 0.2
+        ? const Color(0xFF4C8C3A)
+        : _mix(const [76, 140, 58], const [74, 50, 38], _ease((m - 0.2) / 0.25));
+  // One leaf is an ellipse turned about its stalk end. The paths are built up
+  // leaf by leaf and filled once per colour at the end.
+  void leaf(double x, double y, double s, double ang, int i) {
+    final len = s * scale;
+    final cx = X(x), cy = Y(y);
+    final ca = cos(-ang), sa = sin(-ang);
+    final p = leafPaths[i.abs() % 3];
+    const n = 12;
+    for (var j = 0; j <= n; j++) {
+      final th = j / n * 2 * pi;
+      final ex = len * 0.5 + len * 0.55 * cos(th), ey = len * 0.26 * sin(th);
+      final px = cx + ex * ca - ey * sa, py = cy + ex * sa + ey * ca;
+      if (j == 0) {
+        p.moveTo(px, py);
+      } else {
+        p.lineTo(px, py);
+      }
+    }
+    p.close();
+  }
+
+  void stroke(double x0, double y0, double x1, double y1, double width) {
+    bark.strokeWidth = max(0.8, width * scale);
+    tc.drawLine(Offset(X(x0), Y(y0)), Offset(X(x1), Y(y1)), bark);
+  }
+
+  final flowers = <Offset>[];
+  var flowerR = 0.0;
+  const bx = 0.0, by = r;
+
+  if (m < 0.06) {
+    // A sprout: a short stem and two seed leaves.
+    final sh = big * 0.55;
+    stroke(bx, by, bx + big * 0.03, by + sh, big * 0.05);
+    leaf(bx + big * 0.03, by + sh, big * 0.34, 0.35, 1);
+    leaf(bx + big * 0.03, by + sh, big * 0.34, pi - 0.35, 2);
+  } else if (m < 0.2) {
+    // A seedling: one stem, true leaves up it by turns, no branches yet.
+    final k = (m - 0.06) / 0.14;
+    final sh = big * 0.92;
+    final n = 2 + (k * 6).round();
+    final lean = big * 0.05;
+    for (var i = 0; i < 12; i++) {
+      final t0 = i / 12, t1 = (i + 1) / 12;
+      stroke(bx + lean * t0 * t0, by + sh * t0, bx + lean * t1 * t1, by + sh * t1,
+          big * _lerp(0.05, 0.02, t0));
+    }
+    for (var i = 0; i < n; i++) {
+      final t = 0.35 + 0.65 * (i / max(1, n - 1));
+      leaf(bx + lean * t * t, by + sh * t, big * _lerp(0.30, 0.20, t),
+          i.isOdd ? 0.55 : pi - 0.55, i);
+    }
+    leaf(bx + lean, by + sh, big * 0.18, pi / 2, 9);
+  } else {
+    // A tree. Everything below eases from sapling to great tree.
+    final k = (m - 0.2) / 0.8;
+    final trunkH = big * _lerp(0.62, 0.40, _ease(k));
+    final primaries = _lerp(3, 9, k).round();
+    final depth = _lerp(1, 5, _ease(k)).round();
+    final spread = _lerp(0.38, 1.12, _ease(k));
+    final primLen = big * _lerp(0.30, 0.52, _ease(k));
+    final leafSize = big * _lerp(0.075, 0.022, _ease(k));
+    final lean = big * 0.03;
+
+    Offset trunkAt(double t) => Offset(bx + lean * sin(t * pi), by + trunkH * t);
+    for (var i = 0; i < 16; i++) {
+      final p0 = trunkAt(i / 16), p1 = trunkAt((i + 1) / 16);
+      stroke(p0.dx, p0.dy, p1.dx, p1.dy, trunkW * (1 - 0.6 * (i / 16)));
+    }
+    // Buttress roots flaring into the ground once the trunk has weight.
+    if (k > 0.35) {
+      final fl = _ease((k - 0.35) / 0.4);
+      for (final s in const [-1.0, -0.45, 0.5, 1.0]) {
+        stroke(bx + s * trunkW * 0.3, by + trunkW * 0.5,
+            bx + s * trunkW * (1.1 + 0.6 * fl), by - trunkW * 0.05, trunkW * 0.28 * fl);
+      }
+    }
+
+    final tips = <(double, double, double, int)>[];
+    // [ang] is measured from vertical, positive to the right.
+    void branch(double x, double y, double ang, double len, double bw, int d, int seed) {
+      final bend = 0.18 * _wob(seed * 7);
+      final mx = x + sin(ang + bend * 0.5) * len * 0.5, my = y + cos(ang + bend * 0.5) * len * 0.5;
+      final ex = x + sin(ang + bend) * len, ey = y + cos(ang + bend) * len;
+      stroke(x, y, mx, my, bw);
+      stroke(mx, my, ex, ey, bw * 0.7);
+      if (d <= 0) {
+        tips.add((ex, ey, ang + bend, seed));
+        return;
+      }
+      // Forking part way along, fanning round the direction it was going,
+      // and bending back towards the light so the crown stays a crown.
+      final fx = x + sin(ang + bend * 0.7) * len * 0.62, fy = y + cos(ang + bend * 0.7) * len * 0.62;
+      tips.add((ex, ey, ang + bend, seed + 1));
+      final fan = _lerp(0.42, 0.55, k);
+      final pull = ang.sign * 0.32 * 0.5;
+      branch(fx, fy, (ang + bend) - fan + _wob(seed * 3) * 0.12 - pull, len * 0.70, bw * 0.62,
+          d - 1, seed * 3 + 1);
+      branch(fx, fy, (ang + bend) + fan + _wob(seed * 5) * 0.12 - pull, len * 0.66, bw * 0.58,
+          d - 1, seed * 3 + 2);
+    }
+
+    for (var i = 0; i < primaries; i++) {
+      final t = primaries == 1 ? 0.5 : i / (primaries - 1);
+      final side = i.isOdd ? 1 : -1;
+      final p = trunkAt(_lerp(_lerp(0.5, 0.30, k), 0.92, t));
+      // Low branches spread widest, high ones stand up: a crown, not a fan.
+      final ang = side * spread * _lerp(1.0, 0.32, t) + _wob(i * 19) * 0.12;
+      final len = primLen * _lerp(1.0, 0.84, t) * (1 + _wob(i * 23) * 0.1);
+      branch(p.dx, p.dy, ang, len, trunkW * _lerp(0.55, 0.30, t), depth, i * 10 + 3);
+    }
+    // The leader, carrying on up the middle.
+    final top = trunkAt(1);
+    branch(top.dx, top.dy, _wob(71) * 0.08, primLen * 0.92, trunkW * 0.40, depth, 777);
+
+    for (final (x, y, ang, seed) in tips) {
+      final count = k < 0.3 ? 3 : 5;
+      for (var j = 0; j < count; j++) {
+        final la = ang + (j - (count - 1) / 2) * 0.6 + _wob(seed * 13 + j) * 0.3;
+        leaf(x, y, leafSize * (0.8 + 0.4 * (_wob(seed * 17 + j) * .5 + .5)), pi / 2 - la,
+            seed + j);
+      }
+    }
+    // Flowers scattered over the crown, never in one place.
+    if (m > 0.55) {
+      for (var i = 0; i < tips.length; i++) {
+        final (x, y, _, seed) = tips[i];
+        if (_wob(seed * 91 + i) > 0.86) flowers.add(Offset(X(x), Y(y)));
+      }
+      flowerR = max(1.2, leafSize * 0.45 * scale);
+    }
+  }
+  for (var i = 0; i < 3; i++) {
+    tc.drawPath(leafPaths[i], Paint()..color = leafColours[i]);
+  }
+  final bloom = Paint()..color = const Color(0xFFF2A7BA);
+  for (final f in flowers) {
+    tc.drawCircle(f, flowerR, bloom);
+  }
+
+  // ---- cloud, round the world once it is seen from far enough out -------
+  final frontRec = ui.PictureRecorder();
+  final fc = Canvas(frontRec, frame);
+  if (view.toGlobe > 0.05 && !near) {
+    final puff = Paint()..color = Colors.white.withValues(alpha: 0.30 * view.toGlobe);
+    for (var i = 0; i < 7; i++) {
+      final side = i.isOdd ? 1 : -1;
+      final u = _lerp(0.9, 2.5, _wob(i * 29) * .5 + .5);
+      final rr = r * 1.06;
+      final x = side * rr * sin(u), y = rr * cos(u);
+      final cw = r * (0.34 + 0.20 * (_wob(i * 7) * .5 + .5));
+      for (var j = -1; j <= 1; j++) {
+        fc.drawOval(
+            Rect.fromCenter(
+                center: Offset(X(x + j * cw * 0.35), Y(y + (j == 0 ? cw * 0.12 : 0))),
+                width: 2 * cw * (j == 0 ? 0.46 : 0.36) * scale,
+                height: 2 * cw * (j == 0 ? 0.13 : 0.10) * scale),
+            puff);
+      }
+    }
+  }
+
+  return _Scene(back.endRecording(), treeRec.endRecording(), frontRec.endRecording(),
+      Offset(X(bx), Y(by)), _lerp(0.035, 0.008, m));
+}
+
+class _WorldPainter extends CustomPainter {
+  final double level;
+  final _Breeze breeze;
+
+  _WorldPainter({required this.level, required this.breeze}) : super(repaint: breeze);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final shape = data.shape;
-    _sky(canvas, size);
-    _clouds(canvas, size);
-
-    // Laid out once without drawing, so the extent is known before anything is
-    // committed, then scaled to fit. The tree used to be clipped to the panel,
-    // and a crown with a piece missing does not read as a big tree.
-    final plan = _layout(shape, size);
-    canvas.save();
-    canvas.translate(plan.offset.dx, plan.offset.dy);
-    canvas.scale(plan.scale);
-    _draw(canvas, plan);
-    canvas.restore();
-  }
-
-  /// Where the soil surface sits inside the ground picture, as a fraction of
-  /// its height. Measured from the art itself: the mound is opaque from 16%
-  /// of the way down, and everything above that is transparent sky. Planting
-  /// the trunk on the middle of the picture left it standing on air.
-  static const _soilTop = 0.16;
-
-  /// How far above the soil the lowest leaf or bud is kept. Enough that the
-  /// near lip of the mound, painted afterwards, cannot clip it.
-  static const _clearance = 10.0;
-
-  /// How many boughs a trunk of this height can carry. One to begin with,
-  /// and one more at each of these fractions of full growth.
-  /// The heights at which the trunk can carry another bough. The first three
-  /// come almost at once — three fields are what everyone starts with, and a
-  /// tree that would not show them is not showing the learner.
-  static const _boughAt = <double>[0.00, 0.05, 0.16, 0.38, 0.60, 0.84];
-
-  int _boughsAt(double grown) {
-    var n = 1;
-    for (final at in _boughAt) {
-      if (grown >= at) n++;
+    if (size.isEmpty) return;
+    canvas.clipRect(Offset.zero & size);
+    final scene = _sceneFor(level.clamp(1.0, treeTopLevel.toDouble()), size);
+    canvas.drawPicture(scene.back);
+    // The breeze leans the whole tree about its foot, a little: the roots and
+    // the world stay where they are.
+    final lean = scene.give * breeze.gust * sin(breeze.phase);
+    if (lean == 0) {
+      canvas.drawPicture(scene.tree);
+    } else {
+      canvas.save();
+      canvas.translate(scene.base.dx, scene.base.dy);
+      canvas.transform(Float64List.fromList(
+          [1, 0, 0, 0, -lean, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]));
+      canvas.translate(-scene.base.dx, -scene.base.dy);
+      canvas.drawPicture(scene.tree);
+      canvas.restore();
     }
-    // A tree that has outgrown the panel can hold anything it has.
-    return beyond > 0 ? n + beyond.ceil() * 2 : n;
-  }
-
-  /// How tall the ground picture is drawn. It widens a little with the trunk,
-  /// so a full-grown tree is not standing on a seedling's patch of soil.
-  double get _groundH => 44 + 9 * girth;
-
-  /// How far the ground has closed into a world: nothing for most of the
-  /// climb, then rounding over the last stretch of it.
-  double get _round => ((beyond - 0.45) / 0.55).clamp(0.0, 1.0);
-
-  /// Works out where every limb goes, and how much of the panel that needs.
-  _Plan _layout(TreeShape shape, Size size) {
-    final groundY = size.height - 22;
-    final cx = size.width / 2;
-    final headroom = groundY - 10;
-    // The line the soil actually reaches at the centre of the mound.
-    final soil = groundY - _groundH / 2 + _groundH * _soilTop;
-
-    final plan = _Plan(groundY: groundY, cx: cx, soil: soil);
-    if (shape.isSeed) return plan;
-
-    // A young stem is short but not invisible, and grows from there. The
-    // first term is the part that is buried, added back so that what shows
-    // above the soil is the same at every size — without it a seedling stood
-    // with its crown in the earth.
-    final trunkH = 13 + headroom * (0.16 + 0.50 * grown);
-    // The foot is buried: the mound's near lip is painted over it afterwards,
-    // so the stem goes into the ground instead of resting on top of it.
-    final base = Offset(cx + 3, soil + 13);
-    final top = Offset(cx - 2, base.dy - trunkH);
-    // Girth has to stay in proportion to the mound it grows out of: a trunk
-    // wider than its own ground reads as a stump, not as an old tree. It also
-    // has to start as a stem rather than as a thin trunk — a seedling with a
-    // woody bole is the thing that made the early stages look wrong.
-    // Thicker than it was. The cap is what did it: at a fifteenth of the
-    // panel a grown tree came out a wand, and on a preview a hundred pixels
-    // wide it was a wire. A trunk is the one part of a tree that is allowed
-    // to look heavy.
-    var w0 = min(2.6 + 21 * girth, size.width * 0.14);
-    // A crown wider than it is tall: the shape of a tree left to spread. How
-    // far it actually reaches is the work done, so a young tree has short
-    // boughs rather than a full crown on a short stem.
-    // The crown reaches further and further as the ground rounds under it,
-    // until the boughs are coming down past the sides of the world. That is
-    // as far as a tree goes.
-    final reach = headroom *
-        (0.16 + 0.36 * grown) *
-        (0.35 + 0.65 * branchReach(shape.answers)) *
-        (1 + 0.55 * beyond);
-
-    // The world, sized against the crown rather than against the soil. A
-    // little smaller than the crown's reach, so that boughs of that length
-    // come round more than a quarter of it each: wide enough that a full
-    // crown meets itself underneath, small enough that the tree on top of it
-    // is still a tree and not a sprig on a planet.
-    if (_round > 0) {
-      plan.globeR = max(reach * 1.15, _groundH * 0.7);
-      plan.globe = Offset(cx, soil + plan.globeR);
-    }
-
-    plan
-      ..base = base
-      ..top = top
-      // A trunk holding a world up has to look like it could, and everything
-      // is scaled down to fit the world in the panel, so a width measured
-      // against the panel comes out a wire however generous it looked. The
-      // boughs keep the unmeasured one: a bough as thick as that trunk, laid
-      // across a world, is a plank.
-      ..w0 = _round > 0 ? max(w0, plan.globeR * 0.30) : w0
-      // The trunk leans and straightens rather than standing to attention.
-      ..trunkCtrl = Offset(cx + w0 * 0.55, base.dy - trunkH * 0.45);
-
-    // One bough per field, as many as the trunk is tall enough to carry.
-    //
-    // The count used to be simply the number of fields with anything in
-    // them, which on the first day is four — four green boughs, each leafy
-    // from the bottom, all the same height on a stem of thirty pixels. That
-    // is not a seedling; that is a clump of grass, and it is what somebody
-    // looking at it said. So the first few come cheap and the rest wait for
-    // height: widening out is what opening a field does, and a tree still
-    // cannot hold a bough where it has no wood.
-    final branches = shape.branches.take(_boughsAt(grown)).toList();
-    if (branches.isEmpty) return plan;
-
-
-    final busiest =
-        branches.map((b) => b.answers).fold<int>(0, (a, b) => a > b ? a : b);
-
-    Offset onTrunk(double t) => _at(base, plan.trunkCtrl, top, t);
-    double lengthOf(Branch b) =>
-        reach * (0.58 + 0.42 * branchGrowth(b.answers, busiest));
-
-    void limb(Offset from, double angle, double len, double wa, double wb,
-        int depth, int seed, double leafSize, bool dry, bool own) {
-      if (len < 4) return;
-      final dir = Offset(cos(angle), sin(angle));
-      final to = from + dir * len;
-      // Branches sweep: they leave the trunk heading out and finish heading up.
-      final ctrl = from +
-          dir * (len * 0.55) +
-          Offset(_wobble(seed * 7) * len * 0.08, -len * 0.30);
-      final l = (from: from, ctrl: ctrl, to: to, seed: seed, tip: depth == 0, own: own);
-      plan.wood.add((l, wa, wb));
-      // Where a limb leaves its parent it swells. Without the collar the join
-      // looks like one stick laid across another.
-      plan.collars.add((from, wa * 0.62));
-
-      if (depth == 0) {
-        plan.leafy.add((l, leafSize, dry));
-        return;
-      }
-      plan.leafy.add((l, leafSize * 0.85, dry));
-
-      // Thickness is shared out rather than halved twice over: a parent limb
-      // carries about as much wood as its children put together.
-      final childW = wb * 0.76;
-      final lean = _wobble(seed * 43) * 0.14;
-      final at = _at(from, ctrl, to, 0.86);
-      final head = _heading(from, ctrl, to, 0.86);
-      for (var k = 0; k < 2; k++) {
-        final side = k == 0 ? -1.0 : 1.0;
-        limb(
-          at,
-          atan2(head.dy, head.dx) +
-              side * (0.34 + _wobble(seed * 71 + k).abs() * 0.26) +
-              lean,
-          len * (k == 0 ? 0.66 : 0.60) * (1 + _wobble(seed * 89 + k) * 0.12),
-          childW,
-          childW * 0.58,
-          depth - 1,
-          seed * 3 + k + 1,
-          leafSize * 0.92,
-          dry,
-          own,
-        );
-      }
-    }
-
-    // Two sides of one tree. The samples grow lower on the trunk, shorter and
-    // nearer level, and stop at leaves; the learner's own scenes grow above
-    // them and make the crown, where the flowers and fruit are.
-    //
-    // The samples used to be held down far enough that working through all of
-    // them left a bare trunk with four twigs at its foot — which is not what
-    // sixty turns of work looks like, and not the young tree the ladder by
-    // then calls it. They are a smaller branch than the learner's own, not a
-    // different order of thing; what the learner's own conversations add that
-    // the samples cannot is the crown, and the blossom on it.
-    final low = [for (final b in branches) if (!b.own) b];
-    final high = [for (final b in branches) if (b.own) b];
-
-    // [own] is what the bough carries — only the learner's own conversations
-    // blossom. [crown] is where it goes, which is a separate question: with
-    // nothing of their own on the tree yet, the samples are the tree, and
-    // holding them to the foot of the trunk puts every leaf round the ankles
-    // of a bare stem. That is a shrub, not a young tree.
-    void bough(Branch b, int i, int n, {required bool own, required bool crown}) {
-      final spread = n == 1 ? 0.5 : i / (n - 1);
-      final t =
-          crown ? (n == 1 ? 0.72 : 0.50 + 0.45 * spread) : (n == 1 ? 0.36 : 0.26 + 0.24 * spread);
-      final side = i.isEven ? -1.0 : 1.0;
-      final angle = -pi / 2 +
-          0.08 +
-          side *
-              (crown
-                  ? (1.02 - 0.44 * t + _wobble(i * 17) * 0.10)
-                  : (1.28 + _wobble(i * 19) * 0.06));
-      final from = onTrunk(t);
-      final width = (w0 * (1 - 0.55 * t)) * (crown ? 0.66 : 0.58);
-      final len = lengthOf(b) * (crown ? 1.0 : 0.80);
-      final seedBase = (own ? 1000 : 0) + i * 100;
-
-      final live = TurnType.values.where((x) => (b.twigs[x] ?? 0) > 0).toList();
-      if (live.isEmpty) {
-        // Nothing caught here yet: a bare twig with a bud on the end.
-        final dir = Offset(cos(angle), sin(angle));
-        final to = from + dir * (len * 0.8);
-        plan.wood.add((
-          (
-            from: from,
-            ctrl: from + dir * (len * 0.4) + const Offset(0, -6),
-            to: to,
-            seed: seedBase,
-            tip: true,
-            own: own
-          ),
-          width * 0.7,
-          width * 0.3
-        ));
-        plan.buds.add((to, angle + pi / 2));
-        return;
-      }
-
-      // Every six turns the bough forks once more, up to three times: the
-      // change is visible within a week rather than a season.
-      final depth = min(3, b.answers ~/ 6);
-      final leafSize = 10.5 + min(b.growing, 10) * 0.5;
-      for (var j = 0; j < live.length; j++) {
-        final off = live.length == 1 ? 0.0 : (j / (live.length - 1)) - 0.5;
-        limb(
-          from,
-          angle + off * 0.52,
-          len * (0.72 + 0.28 * branchGrowth(b.twigs[live[j]]!, busiest)),
-          width,
-          width * 0.42,
-          depth,
-          seedBase + j * 7 + 3,
-          leafSize,
-          b.thirsty,
-          own,
-        );
-      }
-    }
-
-    // The samples hold the crown until there is something of the learner's
-    // own to take it from them.
-    final samplesAreTheTree = high.isEmpty;
-    for (var i = 0; i < low.length; i++) {
-      bough(low[i], i, low.length, own: false, crown: samplesAreTheTree);
-    }
-    for (var i = 0; i < high.length; i++) {
-      bough(high[i], i, high.length, own: true, crown: true);
-    }
-
-    // The leader: the trunk carries on above the boughs and ends in leaves.
-    final totalGrowing = branches.fold<int>(0, (a, b) => a + b.growing);
-    limb(top, -pi / 2 + 0.06, reach * 0.5, w0 * 0.5, w0 * 0.18, 1, 5,
-        10.5 + min(totalGrowing, 10) * 0.5, branches.every((b) => b.thirsty), high.isNotEmpty);
-
-    // Nothing that grows is allowed below the soil line.
-    //
-    // A bough low on the trunk, angled outward and down, can put its tip —
-    // and the bud or the leaves on that tip — into the earth. The lip of the
-    // mound is then painted over half of it, which reads as a plant sunk in
-    // the ground rather than standing on it. Lifting the tip and its control
-    // point together keeps the curve, so a bough that wanted to droop simply
-    // levels out at the ground instead of going through it.
-    // On a world there is no soil line to stay above — the surface is under
-    // the boughs wherever they have got to — so this only applies while the
-    // ground is still flat.
-    Offset above(Offset p) => _round <= 0 && p.dy > plan.soil - _clearance
-        ? Offset(p.dx, plan.soil - _clearance)
-        : p;
-    _Limb lift(_Limb l) => (
-          from: l.from,
-          ctrl: above(l.ctrl),
-          to: above(l.to),
-          seed: l.seed,
-          tip: l.tip,
-          own: l.own,
-        );
-    for (var i = 0; i < plan.wood.length; i++) {
-      final (l, wa, wb) = plan.wood[i];
-      plan.wood[i] = (lift(l), wa, wb);
-    }
-    for (var i = 0; i < plan.leafy.length; i++) {
-      final (l, size, dry) = plan.leafy[i];
-      plan.leafy[i] = (lift(l), size, dry);
-    }
-    for (var i = 0; i < plan.buds.length; i++) {
-      final (at, tilt) = plan.buds[i];
-      plan.buds[i] = (above(at), tilt);
-    }
-
-    // Round the world.
-    //
-    // Everything above is laid out flat, as though the ground went on for
-    // ever sideways. Once it has closed into a world that is a lie the eye
-    // catches at once: a bough reaching out horizontally leaves the surface
-    // behind and hangs in the sky. So every point is carried round instead —
-    // how far out from the trunk it went becomes how far round the world it
-    // goes, at the same height above the surface it had. A crown wide enough
-    // meets itself underneath.
-    if (_round > 0) {
-      final g = (centre: plan.globe, radius: plan.globeR);
-      Offset round(Offset p) {
-        final r = (p - g.centre).distance;
-        if (r < 0.5) return p;
-        // Straight up from the centre is where the trunk stands; the angle is
-        // the arc that this point's distance from the trunk subtends.
-        final a = -pi / 2 + ((p.dx - plan.cx) / g.radius) * _round;
-        return g.centre + Offset(cos(a), sin(a)) * r;
-      }
-
-      _Limb bend(_Limb l) => (
-            from: round(l.from),
-            ctrl: round(l.ctrl),
-            to: round(l.to),
-            seed: l.seed,
-            tip: l.tip,
-            own: l.own,
-          );
-      for (var i = 0; i < plan.wood.length; i++) {
-        final (l, wa, wb) = plan.wood[i];
-        plan.wood[i] = (bend(l), wa, wb);
-      }
-      for (var i = 0; i < plan.leafy.length; i++) {
-        final (l, size, dry) = plan.leafy[i];
-        plan.leafy[i] = (bend(l), size, dry);
-      }
-      for (var i = 0; i < plan.buds.length; i++) {
-        final (at, tilt) = plan.buds[i];
-        plan.buds[i] = (round(at), tilt);
-      }
-      for (var i = 0; i < plan.collars.length; i++) {
-        final (at, w) = plan.collars[i];
-        plan.collars[i] = (round(at), w);
-      }
-      plan.top = round(plan.top);
-    }
-
-    // What all of that needs, leaf tips included, against what there is.
-
-    var minX = plan.base.dx, maxX = plan.base.dx;
-    // The ground counts towards what has to fit, and once it has closed into
-    // a world that is most of the picture: left out, the world ran off the
-    // bottom of the panel and the thing the boughs had gone round could not
-    // be seen at all.
-    var minY = plan.top.dy;
-    var maxY = plan.globeR > 0
-        ? plan.globe.dy + plan.globeR
-        : plan.groundY + _groundH / 2;
-    if (plan.globeR > 0) {
-      minX = min(minX, plan.globe.dx - plan.globeR);
-      maxX = max(maxX, plan.globe.dx + plan.globeR);
-    }
-    for (final (l, leafSize, _) in plan.leafy) {
-      for (final p in [l.from, l.ctrl, l.to]) {
-        minX = min(minX, p.dx - leafSize * 1.6);
-        maxX = max(maxX, p.dx + leafSize * 1.6);
-        minY = min(minY, p.dy - leafSize * 1.6);
-        maxY = max(maxY, p.dy + leafSize * 1.6);
-      }
-    }
-    final needW = maxX - minX, needH = maxY - minY;
-    plan.scale =
-        min(1.0, min(size.width / max(needW, 1), size.height / max(needH, 1)));
-    if (plan.scale < 1) {
-      // Centred on what is actually there, with the ground kept on the floor
-      // of the panel. Scaling about the middle instead would lift the trunk
-      // off its own shadow.
-      plan.offset = Offset(
-        size.width / 2 - (minX + maxX) / 2 * plan.scale,
-        size.height - 2 - maxY * plan.scale,
-      );
-    }
-    return plan;
-  }
-
-  /// Paints what the layout worked out. Wood first, then everything that hangs
-  /// on it, so a leaf is never cut in half by a branch drawn later.
-  void _draw(Canvas canvas, _Plan plan) {
-    final shape = data.shape;
-
-    _mound(canvas, Offset(plan.cx, plan.groundY), _groundH,
-        world: plan.globeR > 0 ? (at: plan.globe, r: plan.globeR) : null);
-    _surfaceRoots(canvas, plan);
-
-    // Nothing answered yet: the seed art on its own, sitting in the soil.
-    if (shape.isSeed) {
-      _image(canvas, art.sprout, Offset(plan.cx, plan.soil - 14), 34);
-      return;
-    }
-
-    // No cast shadow at the foot. One was tried and taken out again: the
-    // trunk is already planted inside the mound, and an ellipse over the
-    // painted ground read as a pale smear rather than as shade.
-
-    final stem = _stemColour;
-    final wood = Paint()..color = stem;
-    // The lit band starts out the same colour as the stem, so a green seedling
-    // has no bark highlight down it, and gains one as the bark arrives.
-    final lit = Paint()
-      ..color = Color.lerp(
-          stem, dark ? _barkLitOnDark : _barkLit, _woodiness)!;
-
-    // The trunk spreads where it reaches the soil. Without this the stem ends
-    // on the straight line where the mound's near lip covers it, and the tree
-    // reads as a post pushed into the ground rather than as something grown
-    // out of it. A green seedling gets none of it — seedlings have no buttress.
-    _roots(canvas, plan.base.dx, plan.w0 * 0.75, plan.soil, wood);
-
-    canvas.drawPath(
-        _woodPath(plan.base, plan.trunkCtrl, plan.top, plan.w0 * 1.5,
-            plan.w0 * 0.5),
-        wood);
-    // Light from the upper left: a band down the lit side of the trunk, offset
-    // and tapered in the same proportion as the trunk itself so it can never
-    // slide out past the silhouette and cut a wedge out of it.
-    canvas.drawPath(
-        _woodPath(
-            plan.base + Offset(-plan.w0 * 1.5 * 0.20, 0),
-            plan.trunkCtrl + Offset(-plan.w0 * 1.0 * 0.20, 0),
-            plan.top + Offset(-plan.w0 * 0.5 * 0.20, 0),
-            plan.w0 * 1.5 * 0.30,
-            plan.w0 * 0.5 * 0.30),
-        lit);
-
-    for (final (from, r) in plan.collars) {
-      canvas.drawCircle(from, r, wood);
-    }
-    for (final (l, wa, wb) in plan.wood) {
-      canvas.drawPath(_woodPath(l.from, l.ctrl, l.to, wa, wb), wood);
-    }
-
-    for (final (at, tilt) in plan.buds) {
-      _image(canvas, art.bud, at, 14, angle: tilt);
-    }
-
-    for (final (l, leafSize, dry) in plan.leafy) {
-      // A young stem carries leaves nearly all the way down; a grown branch
-      // keeps its inner length bare, the way a real bough does.
-      final inner = 0.55 * _woodiness;
-      _leaves(canvas, l, leafSize, dry, l.tip ? 0.22 * _woodiness : inner);
-    }
-
-    // Fruit: one per expression learned outright, spread across the twig ends
-    // rather than piled on the first branch.
-    // Fruit: one per scene of the learner's own answered entirely right, on
-    // the twig ends of their own boughs.
-    final fruit = shape.fruit;
-    final ends = [for (final (l, s, _) in plan.leafy) if (l.tip && l.own) (l, s)];
-    if (fruit > 0 && ends.isNotEmpty) {
-      final show = min(fruit, min(ends.length, 9));
-      for (var k = 0; k < show; k++) {
-        final (l, leafSize) = ends[(k * 7 + 1) % ends.length];
-        _image(canvas, art.fruit, l.to + Offset(0, leafSize * 0.6), 15);
-      }
-    }
-
-    // Flowers: one per reply answered on a scene of the learner's own. The
-    // samples grow leaves but never flower — that is the difference the tree
-    // shows between practising on what came with the app and on what the
-    // learner's own AI wrote for them.
-    final flowers = shape.flowers;
-    if (flowers > 0 && ends.isNotEmpty) {
-      final show = min(flowers, min(ends.length, 12));
-      for (var k = 0; k < show; k++) {
-        final (l, leafSize) = ends[(k * 5 + 3) % ends.length];
-        _flower(canvas, l.to + Offset(_wobble(k * 13) * 4, -leafSize * 0.3),
-            4.2 + (k % 3) * 0.6);
-      }
-    }
-
-
-    // The near lip of the mound, painted over the roots. This is the only
-    // depth in the picture and the one place it is needed: the roots have to
-    // be seen going into the ground rather than stopping on top of it.
-    //
-    // Only as wide as the roots. It used to be repainted across the whole
-    // panel, which buried everything that hung below the soil line — and on
-    // a young tree that is the leaves, which sit barely above it.
-    final lip = plan.w0 * 0.75 * (1.1 + 2.2 * _woodiness) * 1.35 + 10;
-    canvas.save();
-    canvas.clipRect(Rect.fromLTRB(plan.cx - lip, plan.soil + 2,
-        plan.cx + lip, plan.groundY + _groundH));
-    _mound(canvas, Offset(plan.cx, plan.groundY), _groundH,
-        world: plan.globeR > 0 ? (at: plan.globe, r: plan.globeR) : null);
-    canvas.restore();
+    canvas.drawPicture(scene.front);
   }
 
   @override
-  bool shouldRepaint(_TreePainter old) =>
-      old.beyond != beyond ||
-      old.grown != grown ||
-      old.girth != girth ||
-      old.data != data ||
-      old.dark != dark;
-}
-
-/// Where every part of one tree goes, worked out before anything is drawn.
-class _Plan {
-  final double groundY;
-  final double cx;
-  /// The line the soil surface reaches at the middle of the mound.
-  final double soil;
-
-  Offset base = Offset.zero;
-  Offset top = Offset.zero;
-  Offset trunkCtrl = Offset.zero;
-  double w0 = 0;
-
-  /// The world under the tree, once the ground has closed into one. Its size
-  /// is set against the crown rather than against the soil: a world the crown
-  /// cannot get round is not a world the tree has gone round.
-  Offset globe = Offset.zero;
-  double globeR = 0;
-
-  double scale = 1;
-  Offset offset = Offset.zero;
-
-  final List<(_Limb, double, double)> wood = [];
-  final List<(Offset, double)> collars = [];
-  final List<(_Limb, double, bool)> leafy = [];
-  final List<(Offset, double)> buds = [];
-
-  _Plan({required this.groundY, required this.cx, required this.soil});
+  bool shouldRepaint(_WorldPainter old) => old.level != level || old.breeze != breeze;
 }
 
 /// Whether the tree is allowed to move. A provider rather than a constant so
@@ -1333,8 +665,8 @@ final treeMotionProvider = Provider<bool>((ref) => true);
 /// is, and how hard it is blowing.
 ///
 /// Driven by a timer rather than a ticker, and deliberately not at the screen
-/// refresh rate. Leaves rocking at 24 frames a second look exactly like leaves
-/// rocking at 120, and this canvas redraws every leaf on the tree.
+/// refresh rate: a tree swaying at 24 frames a second looks exactly like one
+/// swaying at 120.
 class _Breeze extends ChangeNotifier {
   static const _tick = Duration(milliseconds: 42);
 
@@ -1382,35 +714,21 @@ class _Breeze extends ChangeNotifier {
 
 /// A breeze that never blows. The still trees share one: it exists only
 /// because the painter repaints off a notifier, and this one never notifies.
-final _stillAir = _Breeze();
+final _stillAir = _Breeze()..gust = 0;
 
-/// One tree, drawn at a size of your choosing and held still.
+/// The tree at one [level], drawn at a size of your choosing and held still.
 ///
 /// For showing what the tree *becomes* rather than what it is: the growing
-/// screen draws the same tree at six heights, so the thing being climbed
-/// towards is a picture and not a promise.
-class TreeStill extends ConsumerWidget {
-  final TreeShape shape;
+/// screen draws it at every level, so the thing being climbed towards is a
+/// picture and not a promise.
+class TreeStill extends StatelessWidget {
+  final double level;
   final double height;
-  const TreeStill({super.key, required this.shape, required this.height});
+  const TreeStill({super.key, required this.level, required this.height});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final art = ref.watch(treeArtProvider).value;
-    if (art == null) return SizedBox(height: height);
-    return SizedBox(
-      height: height,
-      child: CustomPaint(
-        painter: _TreePainter(
-          data: TreeData(shape: shape),
-          art: art,
-          grown: trunkGrowth(shape.scenes),
-          girth: trunkGirth(shape.scenes, shape.fields),
-          beyond: treeBeyond(shape.scenes),
-          dark: Theme.of(context).brightness == Brightness.dark,
-          breeze: _stillAir,
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => SizedBox(
+        height: height,
+        child: CustomPaint(painter: _WorldPainter(level: level, breeze: _stillAir)),
+      );
 }

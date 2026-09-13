@@ -69,17 +69,6 @@ class Branch {
   });
 }
 
-/// How finely the tree is cut. Many stages rather than a few, so that the
-/// work shows a change often enough to be felt.
-const treeStages = 24;
-
-/// Which stage [scenes] questions answered has grown to.
-int treeStage(int scenes) {
-  if (scenes <= 0) return 0;
-  final step = (treeGrown(scenes) * (treeStages - 1)).ceil();
-  return step.clamp(1, treeStages - 1);
-}
-
 /// What the tree is called: ten names, each with levels inside it — "sapling
 /// Lv.3". Ten names alone is ten things to look forward to across a year of
 /// work, and the ninth of them is a year away; a level inside the name is
@@ -127,15 +116,6 @@ int treeLevel(int scenes) {
 int get treeFullLevel =>
     treeLevelsPerName.fold(0, (a, b) => a + b) + 1;
 
-/// Where the tree stands between nothing and its full drawn height.
-///
-/// Read from the level rather than from the questions, so that every level is
-/// a visible change in the picture and not only a change in the words.
-double treeGrown(int scenes) {
-  final l = treeLevel(scenes);
-  return ((l - 1) / (treeFullLevel - 1)).clamp(0.0, 1.0);
-}
-
 /// The last level there is.
 ///
 /// Growing stops somewhere, and this is a better somewhere than a number that
@@ -143,20 +123,104 @@ double treeGrown(int scenes) {
 /// and the crown has gone round it. There is nothing left to be bigger than.
 const treeTopLevel = 200;
 
-/// How far past a full-grown tree the learner is: 0 at the top of the panel,
-/// 1 when the tree has gone round the world, and no further.
-///
-/// Height has to stop because the panel does, and everything else carries on
-/// from there — the bole thickening, the crown filling, the ground curving
-/// under it — until it has nowhere left to go.
-double treeBeyond(int scenes) {
-  final l = treeLevel(scenes);
-  if (l <= treeFullLevel) return 0;
-  return ((l - treeFullLevel) / (treeTopLevel - treeFullLevel)).clamp(0.0, 1.0);
-}
-
 /// Which name [scenes] questions answered has earned.
 int treeName(int scenes) => treeRank(scenes).name;
+
+// ---------------------------------------------------------------- the picture
+//
+// The tree is drawn on one rule: the ground was always a world, and what
+// changes is how far away the camera is. There is one sphere of a fixed size
+// and a tree standing on its pole. Close up the ground is a plain; as the
+// tree grows the camera pulls back, the horizon bends, and at the last level
+// the whole world is in view with the roots round it.
+//
+// Two things grow and they grow separately. Size is how big the tree is
+// against the world, and it is what moves the camera. Maturity is what shape
+// the tree has — a seedling is not a small old tree — and it is what the
+// names are about.
+
+/// The world's radius, in the units the tree is measured in.
+const worldRadius = 100.0;
+
+/// How big the tree is at [level], against a world of [worldRadius]: a
+/// sprout half a unit high at the start, two and a half world radii at the
+/// last level. Exponential, so every level is the same proportion bigger, and
+/// taking a fractional level so the growth between two can be animated.
+double treeSizeAt(double level) =>
+    0.5 * pow(500, (level - 1) / (treeTopLevel - 1)).toDouble();
+
+/// Maturity at the level each name begins, so the drawing and the name
+/// agree: seed leaves for the sprout, a stem with leaves for the seedling, a
+/// spindly sapling, a crown for the young tree, spreading from there.
+const _maturityAt = <(int, double)>[
+  (1, 0.00), (3, 0.05), (6, 0.10), (9, 0.16), (13, 0.24), (18, 0.32),
+  (25, 0.42), (35, 0.54), (49, 0.66), (71, 0.78), (200, 1.00),
+];
+
+/// What shape the tree has at [level], from 0 (a sprout) to 1 (a great tree).
+double treeMaturityAt(double level) {
+  for (var i = 1; i < _maturityAt.length; i++) {
+    final (l1, m1) = _maturityAt[i];
+    final (l0, m0) = _maturityAt[i - 1];
+    if (level <= l1) {
+      final t = ((level - l0) / (l1 - l0)).clamp(0.0, 1.0);
+      return m0 + (m1 - m0) * t;
+    }
+  }
+  return 1;
+}
+
+double _smooth(double t) {
+  final x = t.clamp(0.0, 1.0);
+  return x * x * (3 - 2 * x);
+}
+
+/// Where the camera is for the tree at [level]: the band of the world, in
+/// world units, that fills the height of the picture.
+class TreeView {
+  /// How big the tree is, in world units.
+  final double size;
+
+  /// The top and bottom of what is in view, in world units, measured up
+  /// from the centre of the world.
+  final double top;
+  final double bottom;
+
+  /// How far the camera has pulled back towards seeing the whole world,
+  /// from 0 to 1. The ground is round all along; this is how much of it the
+  /// frame takes in.
+  final double toGlobe;
+
+  /// How high up the camera is, from 0 to 1, for the colour of the sky.
+  final double altitude;
+
+  const TreeView({
+    required this.size,
+    required this.top,
+    required this.bottom,
+    required this.toGlobe,
+    required this.altitude,
+  });
+
+  /// The height of the view, in world units.
+  double get span => top - bottom;
+}
+
+TreeView treeViewAt(double level) {
+  final h = treeSizeAt(level);
+  final toGlobe = _smooth((log(h) - log(0.3 * worldRadius)) /
+      (log(2.5 * worldRadius) - log(0.3 * worldRadius)));
+  final top = worldRadius + h * 1.34;
+  // Close up the ground sits a fifth of the way up; far out the whole world
+  // is in the frame. Between them the camera moves continuously, which is
+  // what makes the horizon bend a little at a time rather than all at once.
+  final near = worldRadius - h * 0.36;
+  final far = -worldRadius * 1.14;
+  final bottom = near + (far - near) * toGlobe;
+  final span = top - bottom;
+  final altitude = _smooth((log(span) - log(2)) / (log(620) - log(2)));
+  return TreeView(size: h, top: top, bottom: bottom, toGlobe: toGlobe, altitude: altitude);
+}
 
 class TreeShape {
   /// Questions answered at least once. The height and girth of the trunk, and
@@ -179,7 +243,6 @@ class TreeShape {
 
   int get flowers => branches.fold(0, (a, b) => a + b.flowers);
   int get fruit => branches.fold(0, (a, b) => a + b.fruit);
-  int get stage => treeStage(scenes);
 
   /// One bough per field. The ground covered, which is the third thing the
   /// tree shows.
@@ -191,43 +254,6 @@ class TreeShape {
     this.situations = 0,
     required this.branches,
   });
-}
-
-/// How tall the trunk stands: the questions answered, and nothing else.
-double trunkGrowth(int scenes) => treeGrown(scenes);
-
-/// How thick it is. The questions answered again, and the ground covered with
-/// them: a tree holding up six fields carries a stouter bole than one holding
-/// up a single field, at the same number of questions.
-///
-/// Unlike the height this has no ceiling. Once the crown is at the top of the
-/// panel the bole is the thing that still says a question was answered.
-double trunkGirth(int scenes, int fields) {
-  if (scenes <= 0) return 0;
-  final spread = 0.88 + 0.04 * fields.clamp(0, 6);
-  return pow(treeGrown(scenes), 0.8).toDouble() * 1.6 * spread *
-      (1 + 0.55 * treeBeyond(scenes));
-}
-
-double branchGrowth(int answers, int busiest) {
-  if (answers <= 0) return 0;
-  final top = max(busiest, 1);
-  return (0.45 + 0.55 * (log(answers + 1) / log(top + 1))).clamp(0.0, 1.0);
-}
-
-/// How far the boughs reach for the work that has gone into the tree, apart
-/// from how they compare with one another.
-///
-/// [branchGrowth] only says which bough is longer than which: four fields
-/// worked equally all came out at full reach, whether that was fifteen
-/// answers each or five hundred. So a tree with sixty answers behind it wore
-/// the crown of a tree with a thousand, and the rule the growing screen
-/// states — that answering lengthens the boughs — was not true of the
-/// drawing. This is the part that is true of it.
-double branchReach(int answers) {
-  if (answers <= 0) return 0;
-  final log1k = (log(answers + 1) / log(1001)).clamp(0.0, 1.0);
-  return pow(log1k, 1.4).toDouble();
 }
 
 /// Reads the tree off the record. [fieldLabels] names the fields in the

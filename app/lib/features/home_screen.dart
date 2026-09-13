@@ -66,7 +66,6 @@ class HomeScreen extends ConsumerWidget {
     // data alive for as long as home is, and the wide cache keeps the panel
     // itself mounted, so scrolling up is only scrolling up.
     final tree = ref.watch(treeDataProvider);
-    ref.watch(treeArtProvider);
 
     return ListView(
       scrollCacheExtent: const ScrollCacheExtent.pixels(2000),
