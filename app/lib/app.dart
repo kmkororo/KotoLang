@@ -142,7 +142,14 @@ final allScenesProvider = FutureProvider.autoDispose<List<Scene>>((ref) async {
   final own = await ref.watch(repositoryProvider).scenes();
   final lang = ref.watch(languageProvider) ?? fallbackLanguage;
   final interests = ref.watch(settingsProvider).interests;
-  return [...own, ...builtinScenes(lang, interests: interests)];
+  // Only what can be played. A conversation kept from before the sets is
+  // not offered anywhere: counted as there, it made home believe the
+  // learner had questions of their own when none of them could be taken.
+  return [
+    for (final s in own)
+      if (s.set != null) s,
+    ...builtinScenes(lang, interests: interests),
+  ];
 });
 
 
