@@ -156,6 +156,42 @@ class _SceneScreenState extends ConsumerState<SceneScreen>
   final _optionKeys = [for (var i = 0; i < repliesPerTurn; i++) GlobalKey()];
   final _chat = ScrollController();
 
+  /// The first question ever taken explains each step once, over the step
+  /// itself. [_coaching] is whether this is that question; [_coached] the
+  /// steps already explained.
+  bool _coaching = false;
+  final _coached = <String>{};
+
+  /// The note for the step on screen, if one is still owed.
+  String? get _coach {
+    if (!_coaching) return null;
+    final k = switch (_step) {
+      _Step.ready => 'Listen',
+      _Step.replying => 'Reply',
+      _Step.replied => 'Result',
+      _Step.predicting => 'Predict',
+      _ => null,
+    };
+    return k == null || _coached.contains(k) ? null : k;
+  }
+
+  void _coachDone() {
+    final k = _coach;
+    if (k == null) return;
+    setState(() => _coached.add(k));
+    // The window was held while the reply was being explained.
+    if (k == 'Reply' && _step == _Step.replying) _window.forward(from: 0);
+    if (_coached.length == 4) _coachSeen();
+  }
+
+  /// The notes are shown once: all four read, they are done. Left part-way,
+  /// the next question starts them again.
+  void _coachSeen() {
+    if (!_coaching) return;
+    _coaching = false;
+    updateSettings(ref, ref.read(settingsProvider).copyWith(coachSeen: true));
+  }
+
   SetCard get _card => widget.queue[_index];
   ReplyPredict get _set => _card.set;
 
@@ -183,6 +219,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen>
     _speech = ref.read(speechProvider);
     final settings = ref.read(settingsProvider);
     _feel = Feel(enabled: settings.haptics);
+    _coaching = !settings.coachSeen;
     _guard = ref.read(audioGuardProvider);
     _cuts = _guard.cuts.listen((_) => _cut());
     _voices = _speech.pair(partner: settings.partnerVoice, you: settings.yourVoice);
@@ -279,9 +316,10 @@ class _SceneScreenState extends ConsumerState<SceneScreen>
 
   void _openWindow() {
     setState(() => _step = _Step.replying);
-    _window
-      ..duration = Duration(milliseconds: _windowMs)
-      ..forward(from: 0);
+    _window.duration = Duration(milliseconds: _windowMs);
+    _window.value = 0;
+    // Held while the reply is explained, the first time.
+    if (_coach == null) _window.forward(from: 0);
   }
 
   /// The window closed with nothing chosen: the second hearing, if there is
@@ -553,10 +591,48 @@ class _SceneScreenState extends ConsumerState<SceneScreen>
                   builder: (context, box) => Column(
                     children: [
                       _top(s, theme),
-                      Expanded(child: _conversation(s, theme)),
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            _conversation(s, theme),
+                            // The note for this step, over the conversation
+                            // and pointing down at the part it is about.
+                            if (_coach != null) ...[
+                              Positioned.fill(
+                                child: GestureDetector(
+                                  onTap: () {},
+                                  child: const ColoredBox(color: Color(0x47000000)),
+                                ),
+                              ),
+                              Positioned(
+                                left: 12,
+                                right: 12,
+                                bottom: 10,
+                                child: _Coach(
+                                  title: s.t(switch (_coach) {
+                                    'Listen' => 'setCoachListenTitle',
+                                    'Reply' => 'setCoachReplyTitle',
+                                    'Result' => 'setCoachResultTitle',
+                                    _ => 'setCoachPredictTitle',
+                                  }),
+                                  body: s.t(switch (_coach) {
+                                    'Listen' => 'setCoachListenBody',
+                                    'Reply' => 'setCoachReplyBody',
+                                    'Result' => 'setCoachResultBody',
+                                    _ => 'setCoachPredictBody',
+                                  }),
+                                  ok: s.t('setCoachOk'),
+                                  onOk: _coachDone,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                       ConstrainedBox(
                         constraints: BoxConstraints(maxHeight: box.maxHeight * 0.64),
-                        child: _sheet(s, theme),
+                        // Seen, not yet touched, while its note is up.
+                        child: AbsorbPointer(absorbing: _coach != null, child: _sheet(s, theme)),
                       ),
                     ],
                   ),
@@ -647,6 +723,9 @@ class _SceneScreenState extends ConsumerState<SceneScreen>
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.onInverseSurface)),
           ),
+        // Their next line, not yet said: the blank the guess goes into.
+        if (_step == _Step.predicting)
+          _NextLine(name: _set.partnerName, label: s.t('setNextLine')),
         if (showSecond)
           _Bubble(
             name: _set.partnerName,
@@ -702,18 +781,10 @@ class _SceneScreenState extends ConsumerState<SceneScreen>
           _right ? s.t('setRightSub') : s.t('setWrongSub'),
         ),
       _Step.saying => ('', s.t('setSayingTitle'), ''),
-      _Step.predicting => (
-          s.t('setStepPredict'),
-          s.t('setPredictTitle', {'name': name}),
-          s.t('setPredictSub'),
-        ),
-      _Step.responding => (
-          s.t('setStepResponse'),
-          s.t('setRespondingTitle', {'name': name}),
-          '',
-        ),
+      _Step.predicting => ('', s.t('setPredictTitle'), ''),
+      _Step.responding => ('', s.t('setRespondingTitle', {'name': name}), ''),
       _Step.predicted => (
-          s.t('setStepPredictResult'),
+          '',
           _hit ? s.t('setPredictHit') : s.t('setPredictMiss'),
           _hit ? '' : s.t('setPredictMissSub'),
         ),
@@ -806,6 +877,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen>
                 number: i + 1,
                 text: c.options[i],
                 native: true,
+                speaker: s.t('setSpeaker', {'name': _set.partnerName}),
                 tentative: !open && i == _tent,
                 tentLabel: s.t('setTentTag'),
                 dim: _step == _Step.responding,
@@ -872,7 +944,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen>
       case _Step.replied:
         return main(s.t('setSayButton'), _say);
       case _Step.predicting:
-        return main(s.t('setListenButton'), _tent == null ? null : _respond);
+        return main(s.t('setCheckButton'), _tent == null ? null : _respond);
       case _Step.predicted:
         return main(last ? s.t('setToSummary') : s.t('setNext'), _next);
       default:
@@ -1256,6 +1328,10 @@ class _SetOption extends StatelessWidget {
   final int number;
   final String text;
   final bool native;
+
+  /// "同僚：" in front, when the option is something they would say. Such an
+  /// option is shaped like their bubble, so it reads as their line.
+  final String speaker;
   final bool tentative;
   final String tentLabel;
   final bool dim;
@@ -1271,6 +1347,7 @@ class _SetOption extends StatelessWidget {
     required this.number,
     required this.text,
     this.native = false,
+    this.speaker = '',
     this.tentative = false,
     this.tentLabel = '',
     this.dim = false,
@@ -1284,6 +1361,14 @@ class _SetOption extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final shape = speaker.isEmpty
+        ? BorderRadius.circular(13)
+        : const BorderRadius.only(
+            topLeft: Radius.circular(14),
+            topRight: Radius.circular(14),
+            bottomRight: Radius.circular(14),
+            bottomLeft: Radius.circular(4),
+          );
     final edge = right
         ? _okColour
         : wrong
@@ -1298,6 +1383,7 @@ class _SetOption extends StatelessWidget {
             : tentative
                 ? _tentColour.withValues(alpha: 0.10)
                 : scheme.surface;
+    final muted = theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
     final body = Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: Column(
@@ -1306,12 +1392,13 @@ class _SetOption extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 20,
-                child: Text('$number',
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: scheme.onSurfaceVariant)),
-              ),
+              if (speaker.isEmpty)
+                SizedBox(width: 20, child: Text('$number', style: muted))
+              else
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, right: 2),
+                  child: Text(speaker, style: muted),
+                ),
               Expanded(
                 child: Text(text,
                     style: native ? theme.textTheme.bodyLarge : theme.textTheme.bodyMedium),
@@ -1335,19 +1422,19 @@ class _SetOption extends StatelessWidget {
         children: [
           Material(
             color: fill,
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: shape,
             child: InkWell(
               onTap: onTap,
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: shape,
               child: tentative
                   ? CustomPaint(
-                      painter: _DashedEdge(colour: edge, radius: 13),
+                      painter: _DashedEdge(colour: edge, shape: shape),
                       child: body,
                     )
                   : DecoratedBox(
                       decoration: BoxDecoration(
                         border: Border.all(color: edge, width: right || wrong ? 2 : 1.4),
-                        borderRadius: BorderRadius.circular(13),
+                        borderRadius: shape,
                       ),
                       child: body,
                     ),
@@ -1371,11 +1458,12 @@ class _SetOption extends StatelessWidget {
   }
 }
 
-/// A dotted edge, for the guess that is only put down, not given.
+/// A dotted edge, for what is only put down, not given, and for the line not
+/// yet said.
 class _DashedEdge extends CustomPainter {
   final Color colour;
-  final double radius;
-  const _DashedEdge({required this.colour, required this.radius});
+  final BorderRadius shape;
+  const _DashedEdge({required this.colour, required this.shape});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1383,9 +1471,7 @@ class _DashedEdge extends CustomPainter {
       ..color = colour
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
-    final path = Path()
-      ..addRRect(RRect.fromRectAndRadius(
-          (Offset.zero & size).deflate(1), Radius.circular(radius)));
+    final path = Path()..addRRect(shape.toRRect((Offset.zero & size).deflate(1)));
     for (final metric in path.computeMetrics()) {
       var d = 0.0;
       while (d < metric.length) {
@@ -1396,7 +1482,95 @@ class _DashedEdge extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_DashedEdge old) => old.colour != colour || old.radius != radius;
+  bool shouldRepaint(_DashedEdge old) => old.colour != colour || old.shape != shape;
+}
+
+/// Their next line, as a blank in the conversation: the guess goes into it,
+/// and their answer takes its place.
+class _NextLine extends StatelessWidget {
+  final String name;
+  final String label;
+  const _NextLine({required this.name, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    const shape = BorderRadius.only(
+      topLeft: Radius.circular(16),
+      topRight: Radius.circular(16),
+      bottomRight: Radius.circular(16),
+      bottomLeft: Radius.circular(4),
+    );
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: _tentColour.withValues(alpha: 0.07),
+          borderRadius: shape,
+        ),
+        child: CustomPaint(
+          painter: const _DashedEdge(colour: _tentColour, shape: shape),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 16, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: theme.textTheme.labelSmall?.copyWith(color: _tentColour)),
+                const SizedBox(height: 2),
+                Text(label,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: _tentColour, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What a step is for, said once in the first question ever taken, over the
+/// screen it is about, with the part to look at left in view below it.
+class _Coach extends StatelessWidget {
+  final String title;
+  final String body;
+  final String ok;
+  final VoidCallback onOk;
+  const _Coach({required this.title, required this.body, required this.ok, required this.onOk});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 8),
+      decoration: BoxDecoration(
+        color: scheme.inverseSurface,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [BoxShadow(blurRadius: 16, color: Color(0x40000000), offset: Offset(0, 6))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(title,
+              style: theme.textTheme.titleSmall?.copyWith(
+                  color: scheme.onInverseSurface, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text(body,
+              style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onInverseSurface)),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: onOk,
+              child: Text(ok, style: TextStyle(color: scheme.inversePrimary, fontWeight: FontWeight.w800)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------- launcher

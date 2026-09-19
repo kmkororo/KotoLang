@@ -219,6 +219,7 @@ class Repository {
           offeredWindowScale(((j['windowScale'] ?? 1.0) as num).toDouble()),
       partnerVoice: (j['partnerVoice'] ?? '') as String,
       yourVoice: (j['yourVoice'] ?? '') as String,
+      coachSeen: (j['coachSeen'] ?? false) as bool,
     );
   }
 
@@ -235,6 +236,7 @@ class Repository {
         'sessionSize': s.sessionSize,
         'partnerVoice': s.partnerVoice,
         'yourVoice': s.yourVoice,
+        'coachSeen': s.coachSeen,
         'haptics': s.haptics,
         'ageBand': s.ageBand,
         'interests': s.interests,

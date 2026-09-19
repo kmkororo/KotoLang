@@ -110,6 +110,10 @@ class AppSettings {
   final String partnerVoice;
   final String yourVoice;
 
+  /// The notes that explain each step have been shown, in the first question
+  /// taken. They are shown once and not again.
+  final bool coachSeen;
+
   const AppSettings({
     this.voiceName,
     this.speechRate,
@@ -127,6 +131,7 @@ class AppSettings {
     this.windowScale = 1.0,
     this.partnerVoice = '',
     this.yourVoice = '',
+    this.coachSeen = false,
   });
 
   Difficulty get level => difficulties[difficulty] ?? difficulties['normal']!;
@@ -152,8 +157,10 @@ class AppSettings {
     double? windowScale,
     String? partnerVoice,
     String? yourVoice,
+    bool? coachSeen,
   }) =>
       AppSettings(
+        coachSeen: coachSeen ?? this.coachSeen,
         partnerVoice: partnerVoice ?? this.partnerVoice,
         yourVoice: yourVoice ?? this.yourVoice,
         voicePerScene: voicePerScene ?? this.voicePerScene,

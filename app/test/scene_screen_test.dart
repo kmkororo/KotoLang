@@ -40,7 +40,7 @@ void main() {
     addTearDown(tester.view.reset);
   }
 
-  Future<(Repository, Scene)> open(WidgetTester tester) async {
+  Future<(Repository, Scene)> open(WidgetTester tester, {bool coach = false}) async {
     final db = AppDatabase(NativeDatabase.memory());
     final repo = Repository(db, rng: Random(7));
     addTearDown(db.close);
@@ -53,6 +53,8 @@ void main() {
         overrides: [
           databaseProvider.overrideWithValue(db),
           repositoryProvider.overrideWithValue(repo),
+          // The notes for a first question are tested on their own below.
+          settingsProvider.overrideWith((ref) => AppSettings(coachSeen: !coach)),
         ],
         child: MaterialApp(home: SceneScreen(queue: [SetCard(s)])),
       ),
@@ -138,9 +140,9 @@ void main() {
     await reply(tester, s, set.reply.answer);
     await sayIt(tester);
 
-    expect(find.text(ja.t('setPredictTitle', {'name': set.partnerName})), findsOneWidget);
+    expect(find.text(ja.t('setPredictTitle')), findsOneWidget);
     // Nothing to hear until a guess is down.
-    final button = find.widgetWithText(FilledButton, ja.t('setListenButton'));
+    final button = find.widgetWithText(FilledButton, ja.t('setCheckButton'));
     expect(tester.widget<FilledButton>(button).onPressed, isNull);
 
     await tester.tap(find.text(set.predict.options[set.predict.answer]));
@@ -226,7 +228,7 @@ void main() {
     await sayIt(tester);
     await tester.tap(find.text(set.predict.options[(set.predict.answer + 1) % 3]));
     await tester.pump();
-    await tester.tap(find.widgetWithText(FilledButton, ja.t('setListenButton')));
+    await tester.tap(find.widgetWithText(FilledButton, ja.t('setCheckButton')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.text(ja.t('setPredictMiss')), findsOneWidget);
@@ -238,5 +240,44 @@ void main() {
     expect(find.text('1／0（0）'), findsOneWidget);
     expect(find.text('0／1'), findsOneWidget);
     expect(find.text(ja.t('setAgain')), findsOneWidget);
+  });
+  testWidgets('the first question explains each step once, and holds the clock',
+      (tester) async {
+    tall(tester);
+    final (repo, s) = await open(tester, coach: true);
+    final set = s.set!;
+
+    expect(find.text(ja.t('setCoachListenTitle')), findsOneWidget);
+    await tester.tap(find.text(ja.t('setListenButton')));
+    await tester.pump();
+    expect(find.text(ja.t('setCoachListenTitle')), findsOneWidget,
+        reason: 'nothing under the note can be pressed until it is read');
+    await tester.tap(find.text(ja.t('setCoachOk')));
+    await tester.pump();
+
+    await tester.tap(find.text(ja.t('setListenButton')));
+    await tester.pump();
+    expect(find.text(ja.t('setCoachReplyTitle')), findsOneWidget);
+    // The window does not run while the reply is being explained.
+    await tester.pump(const Duration(milliseconds: answerWindowMs + 500));
+    expect(await repo.turnResults(), isEmpty);
+    await tester.tap(find.text(ja.t('setCoachOk')));
+    await tester.pump();
+
+    await tester.tap(find.text(set.reply.options[set.reply.answer]));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text(ja.t('setCoachResultTitle')), findsOneWidget);
+    await tester.tap(find.text(ja.t('setCoachOk')));
+    await tester.pump();
+
+    await tester.tap(find.text(ja.t('setSayButton')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(find.text(ja.t('setCoachPredictTitle')), findsOneWidget);
+    expect(find.text(ja.t('setNextLine')), findsOneWidget, reason: 'the blank for their line');
+    await tester.tap(find.text(ja.t('setCoachOk')));
+    await tester.pump();
+    expect((await repo.loadSettings()).coachSeen, isTrue, reason: 'shown once, not again');
   });
 }
