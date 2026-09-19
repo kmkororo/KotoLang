@@ -168,8 +168,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: answerWindowMs + 100));
     await tester.pump();
 
-    expect(find.text(ja.t('setRestateSub')), findsNothing,
-        reason: 'no voice, so it goes straight back to the window');
+    // No voice, so it goes straight back to the window, with the other words
+    // on screen.
     expect(find.text(s.set!.paraphrase), findsOneWidget);
     expect(find.text(ja.t('setHearAgain')), findsNothing, reason: 'only once');
 

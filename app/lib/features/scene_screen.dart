@@ -689,19 +689,13 @@ class _SceneScreenState extends ConsumerState<SceneScreen>
     final name = _set.partnerName;
     final (phase, title, sub) = switch (_step) {
       _Step.ready => ('', s.t('setReadyTitle'), ''),
-      _Step.listening || _Step.gap => (
-          s.t('setStepListen'),
-          s.t('setSpeakingTitle', {'name': name}),
-          _restated ? s.t('setRestateSub') : s.t('setListenSub'),
-        ),
-      _Step.replying => (
-          s.t('setStepReply'),
-          s.t('setReplyTitle'),
-          s.t('setReplySub', {'n': (_windowMs / 1000).round()}),
-        ),
+      // Hearing and replying carry one line each and nothing more: the
+      // screen is there to be listened past, not read.
+      _Step.listening || _Step.gap => ('', s.t('setSpeakingTitle', {'name': name}), ''),
+      _Step.replying => ('', s.t('setReplyTitle'), ''),
       _Step.paused => (s.t('setPausedPhase'), s.t('setPausedTitle'), s.t('setPausedSub')),
       _Step.replied => (
-          s.t('setStepReplyResult'),
+          '',
           _right
               ? s.t('setRight')
               : (_picked == null ? s.t('setTimeUp') : s.t('setWrong')),

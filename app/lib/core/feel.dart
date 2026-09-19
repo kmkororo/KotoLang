@@ -1,8 +1,7 @@
 /// What the phone does under the voice, and when an answer lands.
 ///
-/// The vibration motor, in milliseconds: a short buzz for each word as it is
-/// said and a longer one for a stressed word, one short for a right answer and
-/// one long for a wrong one, and short runs for the moments between. The
+/// The vibration motor, in milliseconds: a buzz on each stressed word as it
+/// is said, one short for a right answer and one long for a wrong one, and short runs for the moments between. The
 /// screen's own haptics were tried first and needed no permission, but they
 /// go silent wherever touch feedback is switched off — which on the phone
 /// this was built on, it was — so the app asks for VIBRATE, its one
@@ -16,7 +15,6 @@ import 'package:flutter/services.dart';
 
 /// The patterns, on and off in milliseconds, as `navigator.vibrate` takes
 /// them.
-const feelWord = [20];
 const feelStress = [70];
 const feelRight = [45];
 const feelWrong = [420];
@@ -49,8 +47,13 @@ class Feel {
     } catch (_) {}
   }
 
-  /// One word as it is said.
-  void word({required bool stressed}) => _buzz(stressed ? feelStress : feelWord);
+  /// One word as it is said. Only the stressed ones are felt: a buzz on
+  /// every word and a longer one on the stressed was tried on a phone, and the
+  /// two could not be told apart — the phone evens short buzzes out to one
+  /// length of its own. The rhythm of the stresses alone is what comes through.
+  void word({required bool stressed}) {
+    if (stressed) _buzz(feelStress);
+  }
 
   void right() => _buzz(feelRight);
   void wrong() => _buzz(feelWrong);
