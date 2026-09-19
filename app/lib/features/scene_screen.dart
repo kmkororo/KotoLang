@@ -369,7 +369,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen>
     unawaited(_guard.release());
     final card = _card;
     final right = i != null && i == _set.reply.answer;
-    right ? _feel.right() : _feel.wrong();
+    if (right) _feel.right();
     if (right) {
       _replyRight++;
     } else {
@@ -460,7 +460,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen>
     }
     if (!mounted || _step != _Step.responding) return;
     final hit = _tent == _set.predict.answer;
-    hit ? _feel.right() : _feel.wrong();
+    if (hit) _feel.right();
     if (hit) {
       _predictHit++;
     } else {

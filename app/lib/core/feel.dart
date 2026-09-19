@@ -1,7 +1,8 @@
 /// What the phone does under the voice, and when an answer lands.
 ///
 /// The vibration motor, in milliseconds: a buzz on each stressed word as it
-/// is said, one short for a right answer and one long for a wrong one, and short runs for the moments between. The
+/// is said, and a double buzz for a right answer. A wrong answer is not felt:
+/// it is said on the screen, and a buzz for it read as a telling-off, and short runs for the moments between. The
 /// screen's own haptics were tried first and needed no permission, but they
 /// go silent wherever touch feedback is switched off — which on the phone
 /// this was built on, it was — so the app asks for VIBRATE, its one
@@ -16,8 +17,9 @@ import 'package:flutter/services.dart';
 /// The patterns, on and off in milliseconds, as `navigator.vibrate` takes
 /// them.
 const feelStress = [70];
-const feelRight = [45];
-const feelWrong = [420];
+/// Two buzzes, the second longer. A single short one was evened out by the
+/// phone into something too faint to notice.
+const feelRight = [60, 70, 110];
 const feelRestate = [60, 60, 60];
 const feelFinished = [40, 60, 40, 60, 40];
 
@@ -56,7 +58,6 @@ class Feel {
   }
 
   void right() => _buzz(feelRight);
-  void wrong() => _buzz(feelWrong);
 
   /// The line is coming again, in other words.
   Future<void> restate() => _buzz(feelRestate);
