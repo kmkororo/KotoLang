@@ -15,7 +15,8 @@ import '../domain/models.dart';
 import '../domain/prompts.dart' as pr;
 import '../domain/scene.dart';
 import '../domain/ladder.dart';
-import '../domain/scene_import.dart';
+import '../domain/set_import.dart';
+import '../domain/set_prompts.dart' as sp;
 import '../domain/skills.dart';
 import '../domain/progress_service.dart';
 import 'database.dart';
@@ -134,6 +135,9 @@ class SceneOutcome {
   /// nothing to do about it but earn.
   final int shortOf;
 
+  /// Taken, but worth a word — the summaries came back in English.
+  final List<String> warnings;
+
   const SceneOutcome({
     required this.ok,
     this.errors = const [],
@@ -142,6 +146,7 @@ class SceneOutcome {
     this.partial = false,
     this.spent = 0,
     this.shortOf = 0,
+    this.warnings = const [],
   });
 
   const SceneOutcome.failure(this.errors)
@@ -150,7 +155,8 @@ class SceneOutcome {
         rejected = const [],
         partial = false,
         spent = 0,
-        shortOf = 0;
+        shortOf = 0,
+        warnings = const [];
 
   /// Nothing wrong with the reply; there is just nothing to pay with.
   const SceneOutcome.tooDear(this.shortOf)
@@ -159,7 +165,8 @@ class SceneOutcome {
         scenes = 0,
         rejected = const [],
         partial = false,
-        spent = 0;
+        spent = 0,
+        warnings = const [];
 }
 
 class Repository {
@@ -210,6 +217,8 @@ class Repository {
       voicePerScene: (j['voicePerScene'] ?? true) as bool,
       windowScale:
           offeredWindowScale(((j['windowScale'] ?? 1.0) as num).toDouble()),
+      partnerVoice: (j['partnerVoice'] ?? '') as String,
+      yourVoice: (j['yourVoice'] ?? '') as String,
     );
   }
 
@@ -224,6 +233,8 @@ class Repository {
         'theme': s.theme,
         'batchSize': s.batchSize,
         'sessionSize': s.sessionSize,
+        'partnerVoice': s.partnerVoice,
+        'yourVoice': s.yourVoice,
         'haptics': s.haptics,
         'ageBand': s.ageBand,
         'interests': s.interests,
@@ -464,53 +475,159 @@ class Repository {
     final ex = imp.extractJson(raw);
     if (!ex.ok) return SceneOutcome.failure([ex.failure == 'empty' ? 'empty' : 'parse']);
 
-    final v = imp.validate(ex.data!);
-    if (!v.ok) return SceneOutcome.failure(v.errors);
-    if (v.type != 'scenes') return const SceneOutcome.failure(['not a scenes reply']);
+    // Sets are the only questions there are now. A reply in the conversation
+    // shape of before is told apart from one that is not a reply at all, so
+    // the learner knows the prompt they used is out of date.
+    if (!isSetsReply(ex.data!)) {
+      final v = imp.validate(ex.data!);
+      return SceneOutcome.failure([v.type == 'scenes' ? 'old format' : 'not a scenes reply']);
+    }
 
-    final norm = normaliseScenes(ex.data!);
-    if (norm.scenes.isEmpty) {
+    final norm = normaliseSets(ex.data!, uiLanguage: uiLanguage);
+    final batch = clean(ex.data!['batch']);
+    final rejected = [
+      for (final r in norm.rejected) (title: r.title, reason: r.reasons.join('; '))
+    ];
+
+    // What was refused is kept, with why, so it can be handed back to the AI
+    // to be mended. A reply that is all sound clears it.
+    if (norm.rejected.isEmpty) {
+      await _delMeta('pendingFix');
+    } else {
+      await _setMeta(
+          'pendingFix',
+          jsonEncode({
+            'field': field,
+            'batch': batch,
+            'items': [
+              for (final r in norm.rejected) {'raw': r.raw, 'reasons': r.reasons}
+            ],
+          }));
+    }
+
+    if (norm.sets.isEmpty) {
       return SceneOutcome(
         ok: false,
         errors: const ['no usable scene'],
-        rejected: norm.rejected,
+        rejected: rejected,
         partial: ex.repaired,
+        warnings: norm.warnings,
       );
     }
 
-    // Paid for here rather than on the screen that asks for it, so that a
-    // reply arriving through the share sheet is charged the same as one
-    // pasted in. The first batch in a field is free: a field with nothing in
-    // it is not yet a field.
-    final cost = await sceneAddCostFor(field);
+    // Paid for once per batch, here rather than on the screen that asks for
+    // it, so a reply arriving through the share sheet is charged the same as
+    // one pasted in. The rest of a batch — after "continue", or mended — is
+    // the same batch and costs nothing more. The first batch in a field is
+    // free: a field with nothing in it is not yet a field.
+    final paid = await _paidBatches();
+    final again = batch.isNotEmpty && paid.contains(batch);
+    final cost = again ? 0 : await sceneAddCostFor(field);
     if (cost > 0 && !await spendSeeds(cost)) {
       return SceneOutcome.tooDear(cost - (await loadProgress()).seeds);
     }
+    if (batch.isNotEmpty && !again) {
+      await _setMeta('paidBatches', jsonEncode([...paid.take(49), batch]));
+    }
 
     await db.transaction(() async {
-      for (final s in norm.scenes) {
+      for (final s in norm.sets) {
         await db.into(db.scenes).insertOnConflictUpdate(sceneToRow(
-              s.copyWith(
-                realmId: field,
-                situation: situation ?? (s.situation.isEmpty ? null : s.situation),
-              ),
+              s.copyWith(realmId: field, situation: situation),
             ));
       }
     });
 
     return SceneOutcome(
       ok: true,
-      scenes: norm.scenes.length,
-      rejected: norm.rejected,
+      scenes: norm.sets.length,
+      rejected: rejected,
       partial: ex.repaired,
       spent: cost,
+      warnings: norm.warnings,
     );
   }
 
+  Future<List<String>> _paidBatches() async {
+    final raw = await _meta('paidBatches');
+    if (raw == null) return const [];
+    final list = jsonDecode(raw);
+    return list is List ? [for (final b in list) '$b'] : const [];
+  }
+
+  /// The batch a prompt for [field] belongs to: the same one until a reply to
+  /// it has been paid for, so the prompt copied and the prompt shown beside
+  /// the paste box agree, and a new one after.
+  Future<String> _batchFor(String? field) async {
+    final key = 'batch:${field ?? ''}';
+    final current = await _meta(key);
+    if (current != null && !(await _paidBatches()).contains(current)) return current;
+    final id = uid('b');
+    await _setMeta(key, id);
+    return id;
+  }
+
+  /// The sets last refused, if any are waiting to be mended.
+  Future<({String? field, int count})> pendingFix() async {
+    final raw = await _meta('pendingFix');
+    if (raw == null) return (field: null, count: 0);
+    final j = jsonDecode(raw) as Map;
+    return (field: j['field'] as String?, count: (j['items'] as List? ?? const []).length);
+  }
+
+  /// The prompt that asks the AI to mend what was refused.
+  Future<String?> fixPromptText({required String uiLanguage}) async {
+    final raw = await _meta('pendingFix');
+    if (raw == null) return null;
+    final j = jsonDecode(raw) as Map;
+    final items = [
+      for (final i in (j['items'] as List? ?? const []))
+        if (i is Map)
+          (
+            raw: Map<String, dynamic>.from(i['raw'] as Map),
+            reasons: [for (final r in (i['reasons'] as List? ?? const [])) '$r'],
+          )
+    ];
+    if (items.isEmpty) return null;
+    return sp.setsFixPrompt(
+        uiLanguage: uiLanguage, batch: '${j['batch'] ?? ''}', rejected: items);
+  }
+
   Future<List<TurnResult>> turnResults() async {
-    final rows =
-        await (db.select(db.sceneResults)..orderBy([(t) => OrderingTerm.asc(t.at)])).get();
+    final rows = await (db.select(db.sceneResults)
+          ..where((t) => t.turn.isBiggerOrEqualValue(0))
+          ..orderBy([(t) => OrderingTerm.asc(t.at)]))
+        .get();
     return [for (final r in rows) r.toDomain()];
+  }
+
+  /// Every prediction made, oldest first. Kept beside the replies but never
+  /// among them: a guess about what comes next is not an answer, and the
+  /// ladder, the combo and the record of replies do not count it.
+  Future<List<TurnResult>> predictResults() async {
+    final rows = await (db.select(db.sceneResults)
+          ..where((t) => t.turn.equals(predictTurn))
+          ..orderBy([(t) => OrderingTerm.asc(t.at)]))
+        .get();
+    return [for (final r in rows) r.toDomain()];
+  }
+
+  /// A prediction settled: written down, and paid for when it came true. A
+  /// review pays nothing, as a reply on review does not.
+  Future<int> recordPrediction(
+      {required String sceneId, required bool hit, bool review = false}) async {
+    await db.into(db.sceneResults).insert(turnResultToRow(TurnResult(
+          sceneId: sceneId,
+          turn: predictTurn,
+          correct: hit,
+          review: review,
+          day: today(),
+          at: DateTime.now().millisecondsSinceEpoch,
+        )));
+    if (!hit || review) return 0;
+    final p = await loadProgress();
+    await saveProgress(p.copyWith(seeds: p.seeds + predictSeeds));
+    return predictSeeds;
   }
 
   /// One turn answered. Written down as it was, and a miss books its reviews:
@@ -711,7 +828,7 @@ class Repository {
   Future<int> sceneAddCostFor(String? fieldId) async {
     if (fieldId == null) return 0;
     final own = await scenes(includeDisabled: true);
-    return splitField(own, fieldId).own.isEmpty ? 0 : sceneAddCost;
+    return splitField(own, fieldId).own.any((s) => s.set != null) ? sceneAddCost : 0;
   }
 
   /// How a field is described to the AI, in English: the built-in four by
@@ -754,14 +871,13 @@ class Repository {
     required String uiLanguage,
     List<String> extraTopics = const [],
     Map<String, Scene> lookup = const {},
-    int scenes = 5,
     String? field,
   }) async {
     final profile = await loadProfile();
     final settings = await loadSettings();
     final results = await turnResults();
     final stats = skillStats(results, today: today());
-    final own = await this.scenes(includeDisabled: true);
+    final own = await scenes(includeDisabled: true);
     final all = {for (final s in own) s.id: s, ...lookup};
     // The most recent misses, described by the line that was misheard, so the
     // next set can aim at that kind of line.
@@ -780,8 +896,9 @@ class Repository {
 
     final areas = [for (final r in await realms()) if (r.unlocked) r.label];
     final week = stats.week;
-    return pr.scenesPrompt(
+    return sp.setsPrompt(
       uiLanguage: uiLanguage,
+      batch: await _batchFor(field),
       level: profile?.englishLevel ?? 'A2',
       ageBand: ageBandDescription(settings.ageBand),
       roles: profile?.roles ?? const [],
@@ -804,7 +921,6 @@ class Repository {
               turns: week.right.of,
             ),
       tendencies: tendencies,
-      scenes: scenes,
     );
   }
 

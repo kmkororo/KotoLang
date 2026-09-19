@@ -134,3 +134,20 @@ SkillStats skillStats(List<TurnResult> results, {required String today}) {
     missedSlots: missed,
   );
 }
+
+/// How the guesses about what comes next have gone: over everything, and
+/// over the last seven days. Kept apart from the replies, because reading
+/// where a conversation is going is a different thing from catching what was
+/// said.
+({Rate all, Rate week}) predictStats(List<TurnResult> predictions, {required String today}) {
+  final weekStart = addDays(today, -6);
+  Rate of(Iterable<TurnResult> rs) {
+    final all = rs.toList();
+    return Rate(all.where((r) => r.correct).length, all.length);
+  }
+
+  return (
+    all: of(predictions),
+    week: of(predictions.where((r) => r.day.compareTo(weekStart) >= 0)),
+  );
+}

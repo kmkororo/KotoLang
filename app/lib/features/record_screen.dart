@@ -24,6 +24,8 @@ class RecordScreen extends ConsumerWidget {
     final scheme = theme.colorScheme;
     final progress = ref.watch(progressProvider);
     final stats = ref.watch(skillStatsProvider).value ?? SkillStats.empty;
+    final predict = ref.watch(predictStatsProvider).value ??
+        (all: const Rate(0, 0), week: const Rate(0, 0));
     final scenes = ref.watch(allScenesProvider).value ?? const <Scene>[];
     final results = ref.watch(sceneResultsProvider).value ?? const <TurnResult>[];
     final realms = ref.watch(realmsProvider).value ?? const <Realm>[];
@@ -72,6 +74,15 @@ class RecordScreen extends ConsumerWidget {
             all: pct(stats.all.kept),
             week: pct(stats.week.kept),
             sub: s.t('byEarLabel'),
+          ),
+          const SizedBox(height: 10),
+          // The guesses about what comes next: a different thing from
+          // catching what was said, so a row of its own, and never mixed in.
+          _SkillRow(
+            label: s.t('predictRateLabel'),
+            all: pct(predict.all),
+            week: pct(predict.week),
+            sub: s.t('predictRateSub'),
           ),
           const SizedBox(height: 8),
           Text('${s.t('allTimeLabel')} · ${s.t('last7Label')}',

@@ -110,26 +110,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.error))
           else ...[
-            DropdownButtonFormField<String>(
-              initialValue: speech.chosen?.name,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: s.t('voiceLabel'), isDense: true),
-              items: [
-                for (final v in speech.voices)
-                  DropdownMenuItem(
-                      value: v.name,
-                      child: Text('${v.name} (${v.locale})',
-                          overflow: TextOverflow.ellipsis)),
-              ],
-              onChanged: (v) async {
-                if (v == null) return;
-                await speech.setVoice(v);
-                await updateSettings(ref, settings.copyWith(voiceName: v));
-                setState(() {});
-                speech.speak(_sample, rate: settings.rate);
-              },
-            ),
-            const SizedBox(height: 12),
+            // The two voices of a set. Two different ones where the phone has
+            // them, so who is speaking is heard as well as seen; with one, it
+            // is pitched up for them and down for the learner.
+            for (final (label, current, you) in [
+              (s.t('partnerVoiceLabel'), settings.partnerVoice, false),
+              (s.t('yourVoiceLabel'), settings.yourVoice, true),
+            ]) ...[
+              DropdownButtonFormField<String>(
+                initialValue: current,
+                isExpanded: true,
+                decoration: InputDecoration(labelText: label, isDense: true),
+                items: [
+                  DropdownMenuItem(value: '', child: Text(s.t('voiceAuto'))),
+                  for (final v in speech.voices)
+                    DropdownMenuItem(
+                        value: v.name,
+                        child: Text('${v.name} (${v.locale})',
+                            overflow: TextOverflow.ellipsis)),
+                ],
+                onChanged: (v) async {
+                  if (v == null) return;
+                  final next = you
+                      ? settings.copyWith(yourVoice: v)
+                      : settings.copyWith(partnerVoice: v);
+                  await updateSettings(ref, next);
+                  final pair = speech.pair(partner: next.partnerVoice, you: next.yourVoice);
+                  speech.say(_sample,
+                      voice: you ? pair.you : pair.partner,
+                      pitch: you ? pair.youPitch : pair.partnerPitch);
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(children: [
               Text(s.t('speedLabel'), style: theme.textTheme.bodySmall),
               Expanded(
@@ -147,13 +160,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               icon: const Icon(Icons.volume_up),
               onPressed: () => speech.speak(_sample, rate: settings.rate),
               label: Text(s.t('testVoice')),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: settings.voicePerScene,
-              title: Text(s.t('voicePerSceneLabel')),
-              subtitle: Text(s.t('voicePerSceneHint'), style: theme.textTheme.bodySmall),
-              onChanged: (v) => updateSettings(ref, settings.copyWith(voicePerScene: v)),
             ),
             const SizedBox(height: 4),
             Text(s.t('voiceHelp'),

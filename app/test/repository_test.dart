@@ -19,7 +19,9 @@ import 'package:kotolang/domain/field.dart';
 import 'package:kotolang/domain/ladder.dart';
 import 'package:kotolang/domain/progress_service.dart';
 
-import 'fixtures.dart' show pack, scene, turn;
+import 'package:kotolang/domain/scene.dart' show predictSeeds;
+
+import 'fixtures.dart' show pack, scene;
 
 /// A profile reply naming [realms] as the learner's areas. Exported because
 /// three other suites start from the same place.
@@ -114,18 +116,58 @@ void main() {
 
     test('one the importer cannot make sound is named, not silently dropped',
         () async {
-      final broken = scene('Broken', turns: [
-        turn(replies: [
-          {'text': 'a', 'correct': false},
-          {'text': 'b', 'correct': false},
-          {'text': 'c', 'correct': false},
-        ])
-      ]);
+      // A wrong reply with no reason is a second right answer.
+      final broken = scene('Broken', replyWhy: const ['', '', 'スライドは正午まで']);
       final out = await repo.importScenes(pack([scene('Good'), broken]),
           uiLanguage: 'en', field: 'work');
       expect(out.scenes, 1);
       expect(out.rejected.single.title, 'Broken');
-      expect(out.rejected.single.reason, contains('no right reply'));
+      expect(out.rejected.single.reason, contains('reply.why is empty'));
+    });
+
+    test('what was refused can be handed back to be mended, and costs nothing',
+        () async {
+      final broken = scene('Broken', replyWhy: const ['', '', 'スライドは正午まで']);
+      await repo.importScenes(pack([scene('Good'), broken], batch: 'b1'),
+          uiLanguage: 'ja', field: 'work');
+      expect((await repo.pendingFix()).count, 1);
+      final prompt = await repo.fixPromptText(uiLanguage: 'ja');
+      expect(prompt, contains('Broken'));
+      expect(prompt, contains('reply.why is empty'));
+      expect(prompt, contains('"batch": "b1"'));
+
+      // The mended one comes back in the same batch: taken, and not charged,
+      // though the field already has something in it.
+      await repo.saveProgress((await repo.loadProgress()).copyWith(seeds: 0));
+      final out = await repo.importScenes(pack([scene('Broken')], batch: 'b1'),
+          uiLanguage: 'ja', field: 'work');
+      expect(out.ok, isTrue);
+      expect(out.spent, 0);
+      expect((await repo.pendingFix()).count, 0);
+    });
+
+    test('the rest of a batch after "continue" is not charged again', () async {
+      await repo.importScenes(pack([scene('One')], batch: 'b2'),
+          uiLanguage: 'en', field: 'work');
+      await repo.saveProgress((await repo.loadProgress()).copyWith(seeds: 0));
+      final more = await repo.importScenes(pack([scene('Two')], batch: 'b2'),
+          uiLanguage: 'en', field: 'work');
+      expect(more.ok, isTrue);
+      final fresh = await repo.importScenes(pack([scene('Three')], batch: 'b3'),
+          uiLanguage: 'en', field: 'work');
+      expect(fresh.shortOf, sceneAddCost, reason: 'a new batch is paid for');
+    });
+
+    test('a reply in the shape of before is told apart', () async {
+      final old = jsonEncode({
+        'schema_version': '4.0',
+        'type': 'scenes',
+        'scenes': [
+          {'title': 'Old', 'turns': []}
+        ],
+      });
+      final out = await repo.importScenes(old, uiLanguage: 'en', field: 'work');
+      expect(out.errors, contains('old format'));
     });
 
     test('a reply that is not conversations says which reply it is', () async {
@@ -134,20 +176,34 @@ void main() {
       expect(out.errors, contains('not a scenes reply'));
     });
 
-    test('a conversation survives the trip through the database', () async {
-      await repo.importScenes(
-          pack([
-            scene('Talk', windowMs: 2400, turns: [turn(type: 'polarity')])
-          ]),
-          uiLanguage: 'en',
-          field: 'work');
+    test('a set survives the trip through the database', () async {
+      await repo.importScenes(pack([scene('Talk')]), uiLanguage: 'en', field: 'work');
       final s = (await repo.scenes()).single;
-      final t = s.turns.single;
-      expect(s.windowMs, 2400);
-      expect(t.keyWord, 'Thursday');
-      expect(t.replies, hasLength(3));
-      expect(t.replies[t.answer].native, isNotEmpty,
-          reason: 'the translation followed its own reply through the shuffle');
+      final set = s.set!;
+      expect(s.playable, isTrue);
+      expect(set.partner.text, startsWith('Talk.'));
+      expect(set.reply.options, hasLength(3));
+      expect(set.reply.why[set.reply.answer], isEmpty,
+          reason: 'the reasons followed their options through the shuffle');
+      expect(set.reply.options[set.reply.answer], startsWith('Thursday at three on'));
+      expect(set.predict.options[set.predict.answer], startsWith('お礼を言って'));
+      expect(s.turns.single.line, set.partner.text,
+          reason: 'everything that reads turns reads the set as one');
+    });
+  });
+
+  group('predicting', () {
+    test('a prediction is kept apart from the replies, and a right one pays',
+        () async {
+      await repo.importScenes(pack([scene('Talk')]), uiLanguage: 'en', field: 'work');
+      final id = (await repo.scenes()).single.id;
+      final before = (await repo.loadProgress()).seeds;
+      expect(await repo.recordPrediction(sceneId: id, hit: true), predictSeeds);
+      expect(await repo.recordPrediction(sceneId: id, hit: false), 0);
+      expect(await repo.recordPrediction(sceneId: id, hit: true, review: true), 0);
+      expect((await repo.loadProgress()).seeds, before + predictSeeds);
+      expect(await repo.turnResults(), isEmpty, reason: 'not a reply');
+      expect(await repo.predictResults(), hasLength(3));
     });
   });
 

@@ -193,6 +193,10 @@ class Scene {
   final int createdAt;
   final bool disabled;
 
+  /// The question itself, in the one shape questions now have. Null only for
+  /// a conversation kept from before, which is counted but no longer played.
+  final ReplyPredict? set;
+
   const Scene({
     required this.id,
     required this.title,
@@ -205,7 +209,33 @@ class Scene {
     this.realmId,
     required this.createdAt,
     this.disabled = false,
+    this.set,
   });
+
+  /// A set, as a scene: the reply is its one turn.
+  factory Scene.ofSet({
+    required String id,
+    required String label,
+    required ReplyPredict set,
+    SceneSource source = SceneSource.ai,
+    String? realmId,
+    required int createdAt,
+    bool disabled = false,
+  }) =>
+      Scene(
+        id: id,
+        title: label,
+        titleNative: label,
+        turns: [set.asTurn],
+        source: source,
+        realmId: realmId,
+        createdAt: createdAt,
+        disabled: disabled,
+        set: set,
+      );
+
+  /// Whether this can be played: only sets are, now.
+  bool get playable => set != null && !disabled;
 
   /// The label shown to the learner: their language first.
   String get label => titleNative.isNotEmpty ? titleNative : title;
@@ -224,6 +254,7 @@ class Scene {
         realmId: realmId ?? this.realmId,
         createdAt: createdAt,
         disabled: disabled ?? this.disabled,
+        set: set,
       );
 
   Map<String, dynamic> toJson() => {
@@ -238,24 +269,33 @@ class Scene {
         'realm_id': realmId,
         'created_at': createdAt,
         'disabled': disabled,
+        if (set != null) 'set': set!.toJson(),
       };
 
-  factory Scene.fromJson(Map<String, dynamic> j) => Scene(
-        id: (j['id'] ?? sceneId('${j['title']}')) as String,
-        title: '${j['title'] ?? ''}',
-        titleNative: '${j['title_native'] ?? ''}',
-        situation: '${j['situation'] ?? ''}',
-        settingNative: '${j['setting_native'] ?? ''}',
-        windowMs: (j['window_ms'] as num?)?.toInt() ?? defaultWindowMs,
-        turns: [
-          for (final t in (j['turns'] as List? ?? const []))
-            Turn.fromJson(Map<String, dynamic>.from(t as Map))
-        ],
-        source: SceneSource.parse(j['source']),
-        realmId: j['realm_id'] as String?,
-        createdAt: (j['created_at'] as num?)?.toInt() ?? 0,
-        disabled: (j['disabled'] as bool?) ?? false,
-      );
+  factory Scene.fromJson(Map<String, dynamic> j) {
+    final set = j['set'] is Map
+        ? ReplyPredict.fromJson(Map<String, dynamic>.from(j['set'] as Map))
+        : null;
+    return Scene(
+      id: (j['id'] ?? sceneId('${j['title']}')) as String,
+      title: '${j['title'] ?? ''}',
+      titleNative: '${j['title_native'] ?? ''}',
+      situation: '${j['situation'] ?? ''}',
+      settingNative: '${j['setting_native'] ?? ''}',
+      windowMs: (j['window_ms'] as num?)?.toInt() ?? defaultWindowMs,
+      turns: set != null
+          ? [set.asTurn]
+          : [
+              for (final t in (j['turns'] as List? ?? const []))
+                Turn.fromJson(Map<String, dynamic>.from(t as Map))
+            ],
+      source: SceneSource.parse(j['source']),
+      realmId: j['realm_id'] as String?,
+      createdAt: (j['created_at'] as num?)?.toInt() ?? 0,
+      disabled: (j['disabled'] as bool?) ?? false,
+      set: set,
+    );
+  }
 }
 
 /// Content-derived id, so the same conversation pasted twice lands on itself
@@ -338,3 +378,172 @@ class ReviewItem {
 }
 
 const reviewGaps = [1, 3];
+
+// ------------------------------------------------------------------ one set
+//
+// The question as it is now: one set, not a conversation of turns. The other
+// person says something long enough to hold four or five facts, and nothing
+// of it is on screen. When they have finished, three things the learner could
+// say back appear, and exactly one of them agrees with every fact. Then the
+// learner guesses what comes back, from three summaries in their own
+// language, and hears it.
+//
+// Every wrong option carries the line that says why it is wrong — which fact
+// it contradicts, or what it asks that was already answered. An option with
+// no such line is not a wrong option, it is a second right one, and the
+// importer refuses it.
+
+/// Where the prediction is kept among the results. The reply is turn 0; the
+/// prediction is not a turn and is kept apart from them, so nothing that reads
+/// the turns counts it.
+const predictTurn = -1;
+
+/// Seeds for a prediction that came true. One flat amount: there is no clock
+/// on the guess, so there is nothing for speed to pay.
+const predictSeeds = 20;
+
+/// Something one of the two says, with what is needed to play it.
+class Spoken {
+  final String text;
+
+  /// The same in the learner's language, shown after answering for as long
+  /// as the ladder still gives it.
+  final String native;
+
+  /// The words that carry the stress. The phone taps harder on these.
+  final List<String> stress;
+
+  const Spoken({required this.text, this.native = '', this.stress = const []});
+
+  Map<String, dynamic> toJson() => {'text': text, 'native': native, 'stress': stress};
+
+  factory Spoken.fromJson(Map<String, dynamic> j) => Spoken(
+        text: '${j['text'] ?? ''}',
+        native: '${j['native'] ?? ''}',
+        stress: [for (final w in (j['stress'] as List? ?? const [])) '$w'],
+      );
+}
+
+/// Three options and the one that fits, each wrong one with its reason.
+class SetChoice {
+  final List<String> options;
+  final int answer;
+
+  /// One line per option, in the learner's language. Empty at [answer].
+  final List<String> why;
+
+  const SetChoice({required this.options, required this.answer, required this.why});
+
+  Map<String, dynamic> toJson() => {'options': options, 'answer': answer, 'why': why};
+
+  factory SetChoice.fromJson(Map<String, dynamic> j) => SetChoice(
+        options: [for (final o in (j['options'] as List? ?? const [])) '$o'],
+        answer: (j['answer'] as num?)?.toInt() ?? 0,
+        why: [for (final w in (j['why'] as List? ?? const [])) '$w'],
+      );
+
+  /// The same choice with the options moved into [order], the reasons and
+  /// the answer going with them.
+  SetChoice arranged(List<int> order) => SetChoice(
+        options: arrangeBy(order, options),
+        answer: order.indexOf(answer),
+        why: arrangeBy(order, why),
+      );
+}
+
+class ReplyPredict {
+  /// Who they are, in the learner's language: "受付". A label on the screen.
+  final String partnerName;
+
+  /// What they say first. Never on screen until it has been answered.
+  final Spoken partner;
+
+  /// The same facts in other words, for the one second hearing.
+  final String paraphrase;
+
+  /// What the learner could say back. English.
+  final SetChoice reply;
+
+  /// Which kind of catch the wrong replies are built on. Not shown; kept so
+  /// the misses can be told apart.
+  final TurnType trap;
+
+  /// What comes back next, summarised in the learner's language.
+  final SetChoice predict;
+
+  /// What they actually say next.
+  final Spoken response;
+
+  const ReplyPredict({
+    required this.partnerName,
+    required this.partner,
+    required this.paraphrase,
+    required this.reply,
+    this.trap = TurnType.keyword,
+    required this.predict,
+    required this.response,
+  });
+
+  /// The reply as a turn, so everything that reads turns — the tree, the
+  /// listening feed, the coaching prompt — reads a set as one turn.
+  Turn get asTurn => Turn(
+        type: trap,
+        line: partner.text,
+        lineNative: partner.native,
+        replies: [
+          for (var i = 0; i < reply.options.length; i++)
+            Reply(text: reply.options[i], correct: i == reply.answer)
+        ],
+      );
+
+  Map<String, dynamic> toJson() => {
+        'type': 'replyPredict',
+        'partnerName': partnerName,
+        'partner': {...partner.toJson(), 'paraphrase': paraphrase},
+        'reply': {...reply.toJson(), 'trap': trap.name},
+        'predict': predict.toJson(),
+        'response': response.toJson(),
+      };
+
+  factory ReplyPredict.fromJson(Map<String, dynamic> j) {
+    Map<String, dynamic> part(String k) =>
+        j[k] is Map ? Map<String, dynamic>.from(j[k] as Map) : const <String, dynamic>{};
+    final partner = part('partner');
+    final reply = part('reply');
+    return ReplyPredict(
+      partnerName: '${j['partnerName'] ?? ''}',
+      partner: Spoken.fromJson(partner),
+      paraphrase: '${partner['paraphrase'] ?? ''}',
+      reply: SetChoice.fromJson(reply),
+      trap: TurnType.parse(reply['trap']),
+      predict: SetChoice.fromJson(part('predict')),
+      response: Spoken.fromJson(part('response')),
+    );
+  }
+}
+
+/// A word as it is compared with the stress list: letters and apostrophes
+/// only, lower case.
+String stressKey(String word) =>
+    word.toLowerCase().replaceAll('’', "'").replaceAll(RegExp(r"[^a-z0-9'\-]"), '');
+
+/// Whether [word] as spoken is one of [stress]: a hyphenated word counts if
+/// any part of it is listed.
+bool isStressed(Set<String> stress, String word) {
+  final k = stressKey(word);
+  if (k.isEmpty) return false;
+  if (stress.contains(k)) return true;
+  return k.split('-').any((p) => p.isNotEmpty && stress.contains(p));
+}
+
+/// Every word in [text], as the stress list is checked against it.
+Set<String> wordsOf(String text) {
+  final out = <String>{};
+  for (final w in text.split(RegExp(r'\s+'))) {
+    final k = stressKey(w);
+    if (k.isEmpty) continue;
+    out.add(k);
+    out.addAll(k.split('-').where((p) => p.isNotEmpty));
+  }
+  return out;
+}

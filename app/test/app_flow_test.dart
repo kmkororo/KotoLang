@@ -179,11 +179,9 @@ void main() {
 
     await tester.tap(find.text(s.t('startSample')));
     await tester.pumpAndSettle();
-    // The sample scene, with the guide on it — and the guide's first word is
-    // to read the replies, because that is what comes first. Leaving it early
-    // still leads on.
+    // The sample set, ready to be heard. Leaving it early still leads on.
     expect(find.byType(SceneScreen), findsOneWidget);
-    expect(find.text(s.t('tutRead')), findsOneWidget);
+    expect(find.text(s.t('setReadyTitle')), findsOneWidget);
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
 
@@ -209,9 +207,9 @@ void main() {
     await tester.tap(find.text(s.t('todayScene')));
     await tester.pumpAndSettle();
     expect(find.byType(SceneScreen), findsOneWidget);
-    // The replies are on screen before a word is said; the line is not.
-    expect(find.text(s.t('sceneQ2')), findsOneWidget);
-    expect(find.text(s.t('scenePlay')), findsOneWidget);
+    // Nothing to read yet: the line comes first.
+    expect(find.text(s.t('setReadyTitle')), findsOneWidget);
+    expect(find.text(s.t('setListenButton')), findsOneWidget);
 
     // Leaving before anything was answered needs no confirmation.
     await tester.tap(find.byIcon(Icons.close));
@@ -276,9 +274,9 @@ void main() {
     expect(find.text(s.t('skillUnderstand')), findsOneWidget);
     expect(find.text(s.t('sceneListTitle')), findsOneWidget);
     // Their own conversation is listed by the name their AI gave it.
-    await tester.scrollUntilVisible(find.text('Stay late（日本語）'), 200,
+    await tester.scrollUntilVisible(find.text('Stay late'), 200,
         scrollable: find.byType(Scrollable).first);
-    expect(find.text('Stay late（日本語）'), findsOneWidget);
+    expect(find.text('Stay late'), findsOneWidget);
 
     await tester.tap(find.text(s.t('settingsTitle')).last);
     await tester.pumpAndSettle();

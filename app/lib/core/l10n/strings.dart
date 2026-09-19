@@ -10,6 +10,7 @@ library;
 
 import 'languages.dart';
 import 'strings_extra.dart';
+import 'strings_sets.dart';
 
 class S {
   final String code;
@@ -235,14 +236,15 @@ class S {
     'unlockRealmCost', 'lockedFieldBody',
     'capStepClimb', 'fieldLadderSteps', 'fieldLadderLocked',
     'fieldAddLadder',
+    ...setKeys,
   ];
 }
 
 /// English and Japanese live here; the remaining locales are in
 /// `strings_extra.dart` purely to keep each file reviewable.
-const _catalogue = <String, Map<String, String>>{
-  ...catalogueExtra,
-  ..._catalogueCore,
+final _catalogue = <String, Map<String, String>>{
+  for (final e in {...catalogueExtra, ..._catalogueCore}.entries)
+    e.key: {...e.value, ...?catalogueSets[e.key]},
 };
 
 /// English is the fallback and must stay complete.

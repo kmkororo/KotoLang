@@ -243,6 +243,25 @@ RealmsCompanion realmToRow(m.Realm r) => RealmsCompanion.insert(
 extension SceneRowX on SceneRow {
   sc.Scene toDomain() {
     final decoded = jsonDecode(turns);
+    // A set is kept in the same column, as an object rather than a list of
+    // turns: the column held the question before, and it holds it now.
+    if (decoded is Map && decoded['set'] is Map) {
+      final set = sc.ReplyPredict.fromJson(Map<String, dynamic>.from(decoded['set'] as Map));
+      return sc.Scene(
+        id: id,
+        title: title,
+        titleNative: titleNative,
+        situation: situation,
+        settingNative: settingNative,
+        windowMs: windowMs,
+        turns: [set.asTurn],
+        source: sc.SceneSource.parse(source),
+        realmId: realmId,
+        createdAt: createdAt,
+        disabled: disabled,
+        set: set,
+      );
+    }
     return sc.Scene(
       id: id,
       title: title,
@@ -270,7 +289,9 @@ ScenesCompanion sceneToRow(sc.Scene s) => ScenesCompanion.insert(
       situation: Value(s.situation),
       settingNative: Value(s.settingNative),
       windowMs: Value(s.windowMs),
-      turns: jsonEncode([for (final t in s.turns) t.toJson()]),
+      turns: s.set != null
+          ? jsonEncode({'set': s.set!.toJson()})
+          : jsonEncode([for (final t in s.turns) t.toJson()]),
       source: Value(s.source.name),
       realmId: Value(s.realmId),
       createdAt: s.createdAt,

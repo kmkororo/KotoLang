@@ -1,29 +1,29 @@
-/// The conversation: read, listen, answer — on one screen that never scrolls.
+/// One set at a time: hear it, reply, guess what comes back, hear that.
 ///
-/// A turn is three replies read first, then the line once, then a window to
-/// answer in. Reading comes before the sound so that reading is not part of
-/// the listening; the window closes so that answering is not something the
-/// learner can take all evening over. Miss it and the same line comes again,
-/// once, until the ladder takes that away too.
+/// The other person speaks first, at length, and nothing of what they say is
+/// on screen. The three replies only appear once they have finished, so the
+/// hearing is over before any reading starts; then there is a window to
+/// answer in. Once answered, what they said is opened, and every wrong reply
+/// shows the fact it got wrong — so a miss is explained by the line itself,
+/// not by a verdict.
 ///
-/// Answering is one tap, and then the screen waits. What it holds while it
-/// waits is the only account of what went wrong the learner will get — the
-/// line revealed, the word or the fact that went by them, and their own
-/// language for as long as the ladder still gives it — so nothing moves on
-/// until they press for the next one.
+/// The right reply is then said, in the learner's own voice. Before the other
+/// person answers it, the learner puts down a guess about what they will say,
+/// from three summaries in their own language, and the answer settles it.
 ///
-/// Nothing here needs a voice from the learner or a keyboard, and nothing
-/// here judges: every turn carries one right index.
+/// A line cut short — headphones pulled out, the sound taken by a call — is
+/// not a line missed. The set stops, and starts that line again from the top
+/// when asked; the clock, the ladder and the seeds never see it.
 library;
 
 import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
+import '../core/feel.dart';
 import '../core/l10n/strings.dart';
 import '../core/speech.dart';
 import '../domain/ladder.dart';
@@ -32,25 +32,13 @@ import '../domain/scene.dart';
 import '../domain/tree.dart' show treeLevel;
 import 'tree_view.dart' show rankName, treeDataProvider;
 
-/// A turn that has been answered, kept so it can stay in the conversation
-/// above the one being taken. [picked] is null when the window closed on it.
-class _Answered {
-  final SceneCard card;
-  final int? picked;
-  final bool right;
-  const _Answered(this.card, this.picked, this.right);
-}
-
-/// One turn to answer, with the conversation it belongs to.
-class SceneCard {
+/// One set to take, and whether it is owed from an earlier miss.
+class SetCard {
   final Scene scene;
-  final int index;
-
-  /// Owed from an earlier miss rather than part of today's conversation.
   final bool review;
-  const SceneCard(this.scene, this.index, {this.review = false});
+  const SetCard(this.scene, {this.review = false});
 
-  Turn get turn => scene.turns[index];
+  ReplyPredict get set => scene.set!;
 }
 
 /// What one run of the screen came to.
@@ -67,144 +55,143 @@ class SceneRunResult {
   });
 }
 
-/// Where a turn is. The replies are on screen from [reading] onward — only
-/// what may be done with them changes.
-enum _Phase {
-  /// The replies are there to be read. Nothing has been said yet.
-  reading,
+enum _Step {
+  /// Nothing said yet; one press starts it.
+  ready,
 
-  /// The line is being said. Too late to be reading, too early to answer.
-  playing,
+  /// They are speaking. Nothing to read and nothing to press.
+  listening,
+
+  /// They have finished; a breath before the replies appear.
+  gap,
 
   /// The window is open.
-  open,
+  replying,
 
-  /// The window closed and nothing was chosen. The clock is stopped: the
-  /// replies are still there to be taken, and one press hears the line again.
-  waiting,
+  /// The sound was cut off. Waiting to start the line again.
+  paused,
 
-  /// The line is coming again, once.
-  restating,
+  /// Answered. What they said is open, and why each wrong reply was wrong.
+  replied,
 
-  /// Answered, or the window closed on it.
-  done,
+  /// The right reply, said in the learner's voice.
+  saying,
 
-  /// The conversation is over.
-  result,
+  /// A guess is being put down.
+  predicting,
+
+  /// Their answer is being said.
+  responding,
+
+  /// Their answer is open and the guess settled.
+  predicted,
+
+  /// The run is over.
+  summary,
 }
 
+/// The breath between their last word and the replies appearing.
+const _gapAfterLine = Duration(milliseconds: 600);
+
 class SceneScreen extends ConsumerStatefulWidget {
-  final Scene scene;
+  /// The sets to take, owed ones first.
+  final List<SetCard> queue;
 
-  /// Turns owed from earlier misses, taken before this conversation.
-  final List<SceneCard> reviews;
-
-  /// The walkthrough, which says what to do at each step the first time.
-  final bool tutorial;
-
-  const SceneScreen({
-    super.key,
-    required this.scene,
-    this.reviews = const [],
-    this.tutorial = false,
-  });
+  const SceneScreen({super.key, required this.queue});
 
   @override
   ConsumerState<SceneScreen> createState() => _SceneScreenState();
 }
 
-class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderStateMixin {
+class _SceneScreenState extends ConsumerState<SceneScreen>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late final SpeechService _speech;
-  late final List<SceneCard> _cards;
+  late final Feel _feel;
+  late final AudioGuard _guard;
+  StreamSubscription<String>? _cuts;
   late Ladder _ladder;
+  late ({Voice? partner, Voice? you, double partnerPitch, double youPitch}) _voices;
 
   int _index = 0;
-  _Phase _phase = _Phase.reading;
+  _Step _step = _Step.ready;
 
-  /// Which reply was taken, once one was.
-  int? _picked;
-
-  /// True while the answer given is the right one.
-  bool _right = false;
-
-  /// The line was heard a second time before this was answered.
+  /// The one second hearing, in other words, has been used on this set.
   bool _restated = false;
 
-  /// The first window closed with nothing chosen. Kept apart from
-  /// [_restated]: a learner can let the window go and then answer without
-  /// asking to hear it again, and that is still not an answer inside the
-  /// window.
-  bool _windowGone = false;
+  int? _picked;
+  bool _right = false;
 
-  int _rightCount = 0;
-  bool _saving = false;
+  /// The guess put down, before it is settled.
+  int? _tent;
+  bool _hit = false;
 
-  /// Right answers in a row, carried in from earlier conversations.
-  int _combo = 0;
-  int _bestComboHere = 0;
+  /// The words being said, and which of them is being said now.
+  List<({String word, bool stressed})> _beats = const [];
+  int _beat = -1;
 
-  /// Steps of the ladder that went up during this run.
-  final _promoted = <LadderAxis>[];
-
-  /// The turns already answered, oldest first. They stay on screen above the
-  /// one being taken, so what has been said so far reads as one conversation
-  /// rather than as a row of questions that happen to follow each other.
-  final _thread = <_Answered>[];
-
-  /// The thread is the only part that scrolls, and it is kept at the bottom:
-  /// the line being answered is the one that has to be in front of them.
-  final _scroll = ScrollController();
-
-  /// What the turn just answered paid, and what the whole run has paid. The
-  /// first drives the seed that flies to the counter; the second is what the
-  /// counter reads while the screen is open.
+  /// What the last answer paid, and the whole run.
   int _paid = 0;
   int _seedRun = 0;
 
-  /// The window, drained as a bar so the time left is felt rather than read.
-  late final AnimationController _window;
+  int _replyRight = 0;
+  int _replyWrong = 0;
+  int _replyRestated = 0;
+  int _predictHit = 0;
+  int _predictMiss = 0;
+  final _promoted = <LadderAxis>[];
 
-  /// The flight of the seeds from the reply that was taken to the counter.
-  late final AnimationController _seedFlight;
-
-  /// One grain per seed paid, up to [seedGrainCap]. Worked out at the moment
-  /// of the answer, in the coordinates of the whole screen, because the reply
-  /// they scatter from is whichever one was tapped.
-  List<_Grain> _grains = const [];
-
-  /// Where they all land.
-  Offset? _seedTo;
-
-  /// Questions answered before this one was opened, and whether this one is
-  /// among them. The tree is read from the count of questions, so whether it
-  /// has just been renamed is a question about that number and not about the
-  /// ladder — which used to be asked of the ladder, back when the ladder was
-  /// what made the tree grow.
+  /// Questions answered before the run, and how many of the run's are new —
+  /// the tree grows by those.
   int _scenesBefore = 0;
-  bool _firstTimeHere = false;
+  Set<String> _doneBefore = const {};
+  int _firstTimes = 0;
+
+  late final AnimationController _window;
+  late final AnimationController _seedFlight;
+  List<_Grain> _grains = const [];
+  Offset? _seedTo;
 
   final _bodyKey = GlobalKey();
   final _counterKey = GlobalKey();
-  final _replyKeys = [for (var i = 0; i < repliesPerTurn; i++) GlobalKey()];
-  Timer? _beat;
+  final _optionKeys = [for (var i = 0; i < repliesPerTurn; i++) GlobalKey()];
+  final _chat = ScrollController();
 
-  SceneCard get _card => _cards[_index];
-  Turn get _turn => _card.turn;
+  SetCard get _card => widget.queue[_index];
+  ReplyPredict get _set => _card.set;
+
+  int get _windowMs => (answerWindowMs * ref.read(settingsProvider).windowScale).round();
+  double get _rate => speedAt(_ladder.currentOf(LadderAxis.speed));
+
+  /// Whether a missed window gets the second hearing. The hardest steps of
+  /// the replay axis take it away.
+  bool get _replayAllowed => _ladder.currentOf(LadderAxis.replay) < 2;
+
+  /// How long the translation waits after an answer; null at the top of the
+  /// axis, where it never comes.
+  Duration? get _translationAfter {
+    final step = _ladder.currentOf(LadderAxis.translation);
+    if (step >= axisTop[LadderAxis.translation]!) return null;
+    return Duration(milliseconds: step * 400);
+  }
+
+  String get _line => _restated ? _set.paraphrase : _set.partner.text;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _speech = ref.read(speechProvider);
+    final settings = ref.read(settingsProvider);
+    _feel = Feel(enabled: settings.haptics);
+    _guard = ref.read(audioGuardProvider);
+    _cuts = _guard.cuts.listen((_) => _cut());
+    _voices = _speech.pair(partner: settings.partnerVoice, you: settings.yourVoice);
     _ladder = ref.read(ladderProvider).value ?? Ladder.empty;
-    _cards = [
-      ...widget.reviews,
-      for (var i = 0; i < widget.scene.turns.length; i++) SceneCard(widget.scene, i),
-    ];
-    final stats = ref.read(skillStatsProvider).value;
-    _combo = stats?.runs.combo ?? 0;
     _scenesBefore = ref.read(treeDataProvider).value?.shape.scenes ?? 0;
-    _firstTimeHere = !(ref.read(sceneResultsProvider).value ?? const [])
-        .any((r) => r.sceneId == widget.scene.id);
+    _doneBefore = {
+      for (final r in ref.read(sceneResultsProvider).value ?? const <TurnResult>[])
+        r.sceneId
+    };
     _window = AnimationController(vsync: this, duration: Duration(milliseconds: _windowMs))
       ..addStatusListener((st) {
         if (st == AnimationStatus.completed && mounted) _windowClosed();
@@ -215,272 +202,282 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
 
   @override
   void dispose() {
-    _beat?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _cuts?.cancel();
+    _guard.release();
     _window.dispose();
     _seedFlight.dispose();
-    _scroll.dispose();
+    _chat.dispose();
     _speech.stop();
     super.dispose();
   }
 
-  /// Works out where the seeds fly from and to.
-  ///
-  /// From the reply that was actually tapped, because that is the thing the
-  /// learner just did; to the counter, because that is where they land. Both
-  /// are read off the widgets rather than guessed, so the flight still points
-  /// at the right row when the replies are different lengths or the list has
-  /// been scrolled.
-  ///
-  /// One grain per seed, so twenty seeds is a handful and two is two â the
-  /// size of what was earned is in the sight of it, not only in the number.
-  /// Past [seedGrainCap] the handful stops growing and the number carries the
-  /// rest; a hundred grains is a cloud, not a payment.
-  void _aimSeeds(int? picked, int paid) {
-    final body = _bodyKey.currentContext?.findRenderObject();
-    final counter = _counterKey.currentContext?.findRenderObject();
-    final reply = picked == null
-        ? null
-        : _replyKeys[picked].currentContext?.findRenderObject();
-    if (body is! RenderBox || counter is! RenderBox || reply is! RenderBox) {
-      _grains = const [];
-      _seedTo = null;
-      return;
-    }
-    Offset centreIn(RenderBox b) =>
-        body.globalToLocal(b.localToGlobal(b.size.center(Offset.zero)));
-    final start = centreIn(reply);
-    _seedTo = centreIn(counter);
-
-    // Seeded off the answer so a grain keeps its own path for the whole
-    // flight rather than being rescattered on every frame.
-    final rnd = Random(_index * 31 + (picked ?? 0) * 7 + paid);
-    final n = min(paid, seedGrainCap);
-    final w = reply.size.width * 0.38;
-    final h = reply.size.height * 0.30;
-    _grains = [
-      for (var i = 0; i < n; i++)
-        _Grain(
-          // Scattered across the reply rather than stacked on its middle, so
-          // they leave as a handful and not as one thing seen many times.
-          from: start +
-              Offset((rnd.nextDouble() * 2 - 1) * w, (rnd.nextDouble() * 2 - 1) * h),
-          // Spread out along the way: the last to leave goes while the first
-          // is already landing, which is what makes it a stream.
-          delay: n == 1 ? 0 : (i / (n - 1)) * 0.42 + rnd.nextDouble() * 0.05,
-          lift: 0.22 + rnd.nextDouble() * 0.30,
-          sway: (rnd.nextDouble() * 2 - 1) * 40,
-          size: 15 + rnd.nextDouble() * 9,
-        ),
-    ];
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Put away mid-line is a line not heard, the same as headphones out.
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) _cut();
   }
-
-  /// Keeps the newest turn in view. Called after the thread grows and after a
-  /// line is revealed, both of which make it taller.
 
   void _toBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scroll.hasClients) return;
-      _scroll.animateTo(
-        _scroll.position.maxScrollExtent,
+      if (!_chat.hasClients) return;
+      _chat.animateTo(
+        _chat.position.maxScrollExtent,
         duration: const Duration(milliseconds: 280),
         curve: Curves.easeOut,
       );
     });
   }
 
-  // ------------------------------------------------------------- the ladder
+  // ------------------------------------------------------------ hearing
 
-  /// How long there is to answer, stretched or shortened by the learner's
-  /// own setting. One length for every turn: the gauge is marked in seed
-  /// bands, and a mark that meant a different number of seconds from one turn
-  /// to the next would be a mark nobody could learn.
-  int get _windowMs =>
-      (answerWindowMs * ref.read(settingsProvider).windowScale).round();
-  double get _rate => speedAt(_ladder.currentOf(LadderAxis.speed));
-
-  /// Whether a missed window is given a second hearing. The hardest steps of
-  /// the replay axis take it away.
-  bool get _replayAllowed => _ladder.currentOf(LadderAxis.replay) < 2;
-
-  /// How long the translation waits after an answer. The axis runs from at
-  /// once to never, cut fine so no single step takes it all away.
-  Duration? get _translationAfter {
-    final step = _ladder.currentOf(LadderAxis.translation);
-    if (step >= axisTop[LadderAxis.translation]!) return null;
-    return Duration(milliseconds: step * 400);
+  List<({String word, bool stressed})> _beatsOf(String text, List<String> stress) {
+    final keys = {for (final w in stress) stressKey(w)};
+    return [
+      for (final t in SpeechService.tokens(text)) (word: t.word, stressed: isStressed(keys, t.word)),
+    ];
   }
 
-  // ------------------------------------------------------------- the run
-
-  void _buzz(Future<void> Function() f) {
-    if (ref.read(settingsProvider).haptics) f();
+  void _onWord(int i) {
+    if (!mounted || i >= _beats.length) return;
+    setState(() => _beat = i);
+    _feel.word(stressed: _beats[i].stressed);
   }
 
-  Future<void> _play() async {
-    if (!mounted) return;
-    setState(() => _phase = _Phase.playing);
+  /// Their line, from the top. The replies appear only when the engine says
+  /// it has finished — never on a guess of how long the line takes.
+  Future<void> _listen() async {
+    setState(() {
+      _step = _Step.listening;
+      _beats = _beatsOf(_line, _set.partner.stress);
+      _beat = -1;
+    });
+    _toBottom();
+    unawaited(_guard.hold());
     if (!_speech.available) {
       // No voice on this phone: the line is shown instead, and the window
       // opens straight away so the screen is still usable.
       _openWindow();
       return;
     }
-    await _speech.speak(
-      _turn.line,
+    final said = await _speech.say(
+      _line,
       rate: _rate,
-      voice: ref.read(settingsProvider).voicePerScene
-          ? _speech.voiceFor(_card.scene.id.hashCode)
-          : null,
+      voice: _voices.partner,
+      pitch: _voices.partnerPitch,
+      onWord: _onWord,
     );
-    if (!mounted || _phase != _Phase.playing) return;
+    if (!mounted || _step != _Step.listening || !said) return;
+    setState(() {
+      _step = _Step.gap;
+      _beat = -1;
+    });
+    await Future<void>.delayed(_gapAfterLine);
+    if (!mounted || _step != _Step.gap) return;
     _openWindow();
   }
 
   void _openWindow() {
-    setState(() => _phase = _Phase.open);
+    setState(() => _step = _Step.replying);
     _window
       ..duration = Duration(milliseconds: _windowMs)
       ..forward(from: 0);
   }
 
-  /// The window closed with nothing chosen.
-  ///
-  /// Nothing is spoken here. A voice that started on its own, saying a
-  /// sentence the learner had just failed to catch, arrived while they were
-  /// still working out what had happened — so the clock stops instead, and
-  /// the second hearing waits for them to ask for it.
-  Future<void> _windowClosed() async {
-    if (_phase != _Phase.open) return;
-    _windowGone = true;
+  /// The window closed with nothing chosen: the second hearing, if there is
+  /// one to give; otherwise the reply is missed.
+  void _windowClosed() {
+    if (_step != _Step.replying) return;
     if (_replayAllowed && !_restated) {
-      _buzz(HapticFeedback.selectionClick);
-      setState(() => _phase = _Phase.waiting);
-      return;
+      _restate();
+    } else {
+      _answer(null);
     }
-    // No second hearing at this rung of the ladder. Counted as missed.
-    await _answer(null);
   }
 
-  /// The same line again, once, because they asked for it.
-  Future<void> _replay() async {
-    if (_phase != _Phase.waiting || _restated) return;
+  /// The line again, once, in other words — asked for, or because the window
+  /// closed. A right reply after it pays the floor and no more.
+  void _restate() {
+    if (_restated || _step != _Step.replying) return;
+    _window.stop();
     _restated = true;
-    setState(() => _phase = _Phase.restating);
-    if (_speech.available) {
-      await _speech.speak(_turn.line, rate: _rate);
-    } else {
-      await Future<void>.delayed(const Duration(milliseconds: 900));
-    }
-    if (!mounted || _phase != _Phase.restating) return;
-    _openWindow();
+    _replyRestated++;
+    _feel.restate();
+    _listen();
   }
+
+  /// The sound was cut off while the line was being heard or answered. The
+  /// clock stops and nothing is recorded; the line starts again from the top
+  /// when they ask.
+  void _cut() {
+    if (_step != _Step.listening && _step != _Step.gap && _step != _Step.replying) return;
+    _speech.stop();
+    _window.stop();
+    _guard.release();
+    setState(() {
+      _step = _Step.paused;
+      _beat = -1;
+    });
+  }
+
+  // ------------------------------------------------------------ answering
 
   Future<void> _answer(int? i) async {
-    if (_phase != _Phase.open &&
-        _phase != _Phase.reading &&
-        _phase != _Phase.waiting) {
-      return;
-    }
-    // How much of the window was left, read before it is stopped. Speed is
-    // what the seeds are for, so this is the number they are worked out from.
-    final left = _phase == _Phase.open ? (1 - _window.value) : 0.0;
-    // And whether the moment was caught at all, read here for the same
-    // reason: by the time the answer is recorded the phase has moved on.
-    final caught = _phase == _Phase.open && !_windowGone;
+    if (_step != _Step.replying) return;
+    // Read before the window is stopped: speed is what the seeds are for.
+    final left = 1 - _window.value;
+    final clean = !_restated;
     _window.stop();
-    _speech.stop();
-    final right = i != null && i == _turn.answer;
-    _combo = right ? _combo + 1 : 0;
-    if (_combo > _bestComboHere) _bestComboHere = _combo;
-    if (right) _rightCount++;
-    _buzz(right
-        ? (_combo >= 5 ? HapticFeedback.heavyImpact : HapticFeedback.mediumImpact)
-        : HapticFeedback.heavyImpact);
-
+    unawaited(_guard.release());
+    final card = _card;
+    final right = i != null && i == _set.reply.answer;
+    right ? _feel.right() : _feel.wrong();
+    if (right) {
+      _replyRight++;
+    } else {
+      _replyWrong++;
+    }
+    if (!card.review && !_doneBefore.contains(card.scene.id)) {
+      _doneBefore = {..._doneBefore, card.scene.id};
+      _firstTimes++;
+    }
     setState(() {
       _picked = i;
       _right = right;
-      _phase = _Phase.done;
+      _step = _Step.replied;
+      _paid = 0;
     });
-    // The line has just been revealed, so the bubble grew.
     _toBottom();
 
     final repo = ref.read(repositoryProvider);
     final out = await repo.recordTurn(
-          sceneId: _card.scene.id,
-          turn: _card.index,
-          correct: right,
-          missedSlot: i == null ? null : _turn.replies[i].missedSlot,
-          // A fact about the clock, not about the answer. A wrong reply given
-          // inside the window is exactly what the ladder's pass rate is there
-          // to weigh; left out of the record, the buffer filled with nothing
-          // but right answers and every window passed.
-          inWindow: caught,
-          review: _card.review,
-          windowLeft: left,
-        );
+      sceneId: card.scene.id,
+      turn: 0,
+      correct: right,
+      inWindow: clean,
+      review: card.review,
+      windowLeft: left,
+    );
     if (!mounted) return;
-    // All of this arrives after the await, so it needs its own setState: the
-    // one above ran before the answer had been recorded. Without it the
-    // counter kept its old total, the seed never flew, and a step of the
-    // ladder went unmentioned — the screen was simply never told.
     setState(() {
       _ladder = out.ladder;
       _promoted.addAll(out.promoted);
       _paid = out.seeds;
       _seedRun += out.seeds;
     });
-    if (out.seeds > 0) {
-      ref.read(progressProvider.notifier).state = await repo.loadProgress();
-      if (mounted) {
-        _aimSeeds(i, out.seeds);
-        _seedFlight.forward(from: 0);
-      }
-    }
-
-    // Nothing moves on by itself. What is on screen now is the only
-    // explanation of what went wrong that the learner will get, and reading
-    // it takes as long as it takes.
+    if (out.seeds > 0) await _pay(i, out.seeds);
   }
 
-  void _advance() {
-    _beat?.cancel();
-    _paid = 0;
-    // The turn just answered joins the conversation above, whether or not
-    // there is another one after it: the result is read over the top of the
-    // thread, and leaving early should not rub out what was said.
-    _thread.add(_Answered(_card, _picked, _right));
-    if (_index + 1 >= _cards.length) {
-      _finish();
-      return;
-    }
+  Future<void> _pay(int? from, int paid) async {
+    ref.read(progressProvider.notifier).state =
+        await ref.read(repositoryProvider).loadProgress();
+    if (!mounted) return;
+    _aimSeeds(from, paid);
+    _seedFlight.forward(from: 0);
+  }
+
+  /// The right reply, said back in the learner's own voice.
+  Future<void> _say() async {
+    if (_step != _Step.replied) return;
     setState(() {
-      _index++;
-      _picked = null;
-      _restated = false;
-      _windowGone = false;
-      _phase = _Phase.reading;
+      _step = _Step.saying;
+      _paid = 0;
+    });
+    _toBottom();
+    if (_speech.available) {
+      await _speech.say(
+        _set.reply.options[_set.reply.answer],
+        voice: _voices.you,
+        pitch: _voices.youPitch,
+      );
+    } else {
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+    }
+    if (!mounted || _step != _Step.saying) return;
+    setState(() {
+      _step = _Step.predicting;
+      _tent = null;
     });
     _toBottom();
   }
 
-  Future<void> _finish() async {
-    if (_saving) return;
-    setState(() => _saving = true);
-    await ref.read(repositoryProvider).completeScene();
-    if (!mounted) return;
-    ref.invalidate(ladderProvider);
+  /// Their answer, which settles the guess.
+  Future<void> _respond() async {
+    if (_step != _Step.predicting || _tent == null) return;
     setState(() {
-      _phase = _Phase.result;
-      _saving = false;
+      _step = _Step.responding;
+      _beats = _beatsOf(_set.response.text, _set.response.stress);
+      _beat = -1;
+    });
+    _toBottom();
+    if (_speech.available) {
+      final said = await _speech.say(
+        _set.response.text,
+        rate: _rate,
+        voice: _voices.partner,
+        pitch: _voices.partnerPitch,
+        onWord: _onWord,
+      );
+      if (!said) return;
+    }
+    if (!mounted || _step != _Step.responding) return;
+    final hit = _tent == _set.predict.answer;
+    hit ? _feel.right() : _feel.wrong();
+    if (hit) {
+      _predictHit++;
+    } else {
+      _predictMiss++;
+    }
+    setState(() {
+      _hit = hit;
+      _step = _Step.predicted;
+      _beat = -1;
+      _paid = 0;
+    });
+    _toBottom();
+    final repo = ref.read(repositoryProvider);
+    final paid = await repo.recordPrediction(
+        sceneId: _card.scene.id, hit: hit, review: _card.review);
+    // A set finished is a day studied, however it went.
+    await repo.completeScene();
+    if (!mounted) return;
+    if (paid > 0) {
+      setState(() {
+        _paid = paid;
+        _seedRun += paid;
+      });
+      await _pay(_tent, paid);
+    } else {
+      ref.read(progressProvider.notifier).state = await repo.loadProgress();
+    }
+  }
+
+  void _next() {
+    if (_index + 1 >= widget.queue.length) {
+      _feel.finished();
+      ref.invalidate(ladderProvider);
+      setState(() => _step = _Step.summary);
+      return;
+    }
+    setState(() {
+      _index++;
+      _step = _Step.ready;
+      _restated = false;
+      _picked = null;
+      _right = false;
+      _tent = null;
+      _hit = false;
+      _beats = const [];
+      _beat = -1;
+      _paid = 0;
     });
   }
 
   void _leave({required bool again}) => Navigator.pop(
         context,
         SceneRunResult(
-          right: _rightCount,
-          answered: _cards.length,
+          right: _replyRight,
+          answered: _replyRight + _replyWrong,
           promoted: _promoted,
           again: again,
         ),
@@ -488,7 +485,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
 
   Future<void> _quit() async {
     final s = ref.read(stringsProvider);
-    if (_index == 0 && _phase == _Phase.reading) {
+    if (_step == _Step.summary || (_index == 0 && _step == _Step.ready)) {
       _leave(again: false);
       return;
     }
@@ -502,19 +499,43 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     if (ok && mounted) _leave(again: false);
   }
 
+  /// Where the seeds fly from — the option that earned them — and to.
+  void _aimSeeds(int? from, int paid) {
+    final body = _bodyKey.currentContext?.findRenderObject();
+    final counter = _counterKey.currentContext?.findRenderObject();
+    final option = from == null ? null : _optionKeys[from].currentContext?.findRenderObject();
+    if (body is! RenderBox || counter is! RenderBox || option is! RenderBox) {
+      _grains = const [];
+      _seedTo = null;
+      return;
+    }
+    Offset centreIn(RenderBox b) =>
+        body.globalToLocal(b.localToGlobal(b.size.center(Offset.zero)));
+    final start = centreIn(option);
+    _seedTo = centreIn(counter);
+    final rnd = Random(_index * 31 + (from ?? 0) * 7 + paid);
+    final n = min(paid, seedGrainCap);
+    final w = option.size.width * 0.38;
+    final h = option.size.height * 0.30;
+    _grains = [
+      for (var i = 0; i < n; i++)
+        _Grain(
+          from: start +
+              Offset((rnd.nextDouble() * 2 - 1) * w, (rnd.nextDouble() * 2 - 1) * h),
+          delay: n == 1 ? 0 : (i / (n - 1)) * 0.42 + rnd.nextDouble() * 0.05,
+          lift: 0.22 + rnd.nextDouble() * 0.30,
+          sway: (rnd.nextDouble() * 2 - 1) * 40,
+          size: 15 + rnd.nextDouble() * 9,
+        ),
+    ];
+  }
+
   // ----------------------------------------------------------------- build
 
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
-    // What is said in the conversation stays English — the replies, the
-    // verdict, the button — so the head is not switched mid-turn. What is
-    // said *about* it keeps the interface language: the guide, the result,
-    // and the two names beside the figures, which are labels on the screen
-    // rather than anybody's words.
-    final e = S('en');
     final theme = Theme.of(context);
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -525,73 +546,21 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
           child: Stack(
             key: _bodyKey,
             children: [
-              _phase == _Phase.result
-              ? _result(s, theme)
-              : Column(
-                  children: [
-                    _topBar(e, theme),
-                    // The conversation so far, and the line being answered at
-                    // the foot of it. This is the only part that scrolls; the
-                    // replies below must not be pushed off a small screen by
-                    // a conversation that has been going a while.
-                    //
-                    // It grows upward from the bottom: the line being
-                    // answered stays next to the replies it is answered
-                    // with, rather than drifting to the top of an empty
-                    // space on the first turn.
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, box) => SingleChildScrollView(
-                          controller: _scroll,
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                          child: ConstrainedBox(
-                            // Clamped: on a short screen with a long verdict
-                            // there is nothing left over, and a negative
-                            // minimum is not a constraint Flutter accepts.
-                            constraints: BoxConstraints(
-                                minHeight: (box.maxHeight - 12).clamp(0.0, double.infinity)),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                for (final past in _thread) ...[
-                                  _pastTurn(s, theme, past),
-                                  const SizedBox(height: 10),
-                                ],
-                                if (_card.review) _reviewTag(s, theme),
-                                if (_windowGone && _phase != _Phase.done)
-                                  _restateNote(s, theme),
-                                _them(s, theme),
-                              ],
-                            ),
-                          ),
-                        ),
+              if (_step == _Step.summary)
+                _summary(s, theme)
+              else
+                LayoutBuilder(
+                  builder: (context, box) => Column(
+                    children: [
+                      _top(s, theme),
+                      Expanded(child: _conversation(s, theme)),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: box.maxHeight * 0.64),
+                        child: _sheet(s, theme),
                       ),
-                    ),
-                    // The replies give way before the verdict does. On a small
-                    // screen with three long replies and a verdict that names
-                    // what went wrong, something has to; the replies are the
-                    // part that can be scrolled without losing anything.
-                    Flexible(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (widget.tutorial) _guide(s, theme),
-                            _replies(s, e, theme),
-                          ],
-                        ),
-                      ),
-                    ),
-                    _bottom(s, e, theme),
-                  ],
+                    ],
+                  ),
                 ),
-
-              // The seeds, crossing the screen. They need a layer of their
-              // own: they leave a reply near the bottom and land on a counter
-              // in the corner, and nothing both of those sit inside is big
-              // enough to fly them across.
               if (_seedTo != null && _grains.isNotEmpty)
                 _SeedShower(grains: _grains, to: _seedTo!, flight: _seedFlight),
             ],
@@ -601,17 +570,26 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
     );
   }
 
-  Widget _topBar(S s, ThemeData theme) {
+  Widget _top(S s, ThemeData theme) {
     final scheme = theme.colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
       child: Row(
         children: [
           IconButton(onPressed: _quit, icon: const Icon(Icons.close)),
-          const Spacer(),
-          // What this run has earned. It sits here because it is where the
-          // seeds fly to, and a number that is flown at has to be somewhere
-          // the eye can find without leaving the conversation.
+          if (_card.review) ...[
+            Icon(Icons.history, size: 16, color: scheme.tertiary),
+            const SizedBox(width: 4),
+          ],
+          Expanded(
+            child: Text(
+              '${_card.scene.label} · ${_index + 1}/${widget.queue.length}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ),
+          const SizedBox(width: 8),
           _SeedCounter(
             key: _counterKey,
             balance: ref.watch(progressProvider).seeds,
@@ -619,579 +597,344 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
             grains: _grains,
             flight: _seedFlight,
           ),
-          const SizedBox(width: 10),
-          // The run: shown from two, and it grows on the spot.
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            transitionBuilder: (child, anim) =>
-                ScaleTransition(scale: Tween(begin: 1.4, end: 1.0).animate(anim), child: child),
-            child: _combo >= 2
-                ? _Chip(
-                    key: ValueKey('c$_combo'),
-                    text: '✦ ${s.t('comboLabel', {'n': _combo})}',
-                    color: scheme.primary)
-                : const SizedBox.shrink(key: ValueKey('c0')),
-          ),
         ],
       ),
     );
   }
 
-  /// A turn already answered, as the two things that were said: their line,
-  /// and the reply that went back. Dimmed, because it is over.
-  ///
-  /// There were dots here once, one per turn. The thread says where they are
-  /// better than a row of dots could, and says it with the conversation
-  /// rather than beside it.
-  Widget _pastTurn(S s, ThemeData theme, _Answered past) {
-    final turn = past.card.turn;
-    final chosen = past.picked;
-    return Opacity(
-      // Dimmed, because it is over — there, but not competing with the line
-      // being answered for the eye.
-      opacity: 0.62,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _speakerLabel(s, theme, other: true),
-          _bubble(
-            theme,
+  // --------------------------------------------------------- conversation
+
+  Widget _conversation(S s, ThemeData theme) {
+    final heard = _step.index >= _Step.replied.index;
+    final hidden = !heard && _speech.available;
+    final showFirst = _step != _Step.ready;
+    final showYours = _step.index >= _Step.saying.index;
+    final showSecond = _step == _Step.responding || _step == _Step.predicted;
+    return ListView(
+      controller: _chat,
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
+      children: [
+        if (showFirst)
+          _Bubble(
+            name: _set.partnerName,
             other: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(turn.line, style: theme.textTheme.bodyMedium),
-                // What they said, in the learner's own language. The band is
-                // the "so this is what I heard" that the next line answers.
-                // It follows the same rung as the translation itself: at the
-                // top of that axis nobody gets it back by scrolling up.
-                if (turn.lineNative.isNotEmpty && _translationAfter != null) ...[
-                  const SizedBox(height: 6),
-                  _heardBand(s, theme, turn.lineNative),
-                ],
-              ],
-            ),
+            child: hidden
+                ? _Hidden(
+                    speaking: _step == _Step.listening && _speech.available,
+                    label: _restated ? s.t('setRestatedMark') : '…',
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Without a voice the line is read instead, and what is
+                      // read is what would have been said.
+                      Text(heard ? _set.partner.text : _line,
+                          style: theme.textTheme.bodyMedium),
+                      if (heard && _set.partner.native.isNotEmpty)
+                        _Delayed(
+                          key: ValueKey('pn$_index'),
+                          wait: _translationAfter,
+                          child: _NativeBand(text: _set.partner.native),
+                        ),
+                    ],
+                  ),
           ),
-          const SizedBox(height: 6),
-          _speakerLabel(s, theme, other: false),
-          _bubble(
-            theme,
+        if (showYours)
+          _Bubble(
+            name: s.t('speakerYou'),
             other: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // What they actually chose, when they chose anything.
-                if (chosen != null)
-                  _saidLine(theme, turn.replies[chosen].text, right: past.right),
-                if (chosen == null)
-                  _saidLine(theme, s.t('sceneWindowGone'), missed: true),
-                // And the one that fitted, whenever that was not it, so the
-                // conversation above still reads as English that works.
-                if (!past.right) ...[
-                  const SizedBox(height: 4),
-                  _saidLine(theme, turn.replies[turn.answer].text, right: true),
-                ],
-              ],
-            ),
+            child: Text(_set.reply.options[_set.reply.answer],
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.onInverseSurface)),
           ),
-        ],
-      ),
-    );
-  }
-
-  /// One line inside a bubble, marked by how it went.
-  Widget _saidLine(ThemeData theme, String text,
-      {bool right = false, bool missed = false}) {
-    final scheme = theme.colorScheme;
-    final color = missed
-        ? scheme.onSurfaceVariant
-        : (right ? scheme.primary : scheme.error);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          missed
-              ? Icons.timer_off_outlined
-              : (right ? Icons.check : Icons.close),
-          size: 14,
-          color: color,
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            text,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: missed ? color : null,
-              fontStyle: missed ? FontStyle.italic : null,
-            ),
+        if (showSecond)
+          _Bubble(
+            name: _set.partnerName,
+            other: true,
+            child: _step == _Step.responding && _speech.available
+                ? const _Hidden(speaking: true, label: '…')
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_set.response.text, style: theme.textTheme.bodyMedium),
+                      if (_step == _Step.predicted && _tent != null) ...[
+                        const SizedBox(height: 6),
+                        _Gist(
+                          hit: _hit,
+                          text: s.t('setGist', {
+                            'text': _set.predict.options[_tent!],
+                            'verdict': _hit
+                                ? s.t('setGistHit', {'n': predictSeeds})
+                                : s.t('setGistMiss'),
+                          }),
+                        ),
+                      ],
+                      if (_step == _Step.predicted && _set.response.native.isNotEmpty)
+                        _Delayed(
+                          key: ValueKey('rn$_index'),
+                          wait: _translationAfter,
+                          child: _NativeBand(text: _set.response.native),
+                        ),
+                    ],
+                  ),
           ),
-        ),
       ],
     );
   }
 
-  /// "You heard: …" — their own language, on the green.
-  Widget _heardBand(S s, ThemeData theme, String text) {
+  // ----------------------------------------------------------------- sheet
+
+  Widget _sheet(S s, ThemeData theme) {
     final scheme = theme.colorScheme;
+    final name = _set.partnerName;
+    final (phase, title, sub) = switch (_step) {
+      _Step.ready => ('', s.t('setReadyTitle'), ''),
+      _Step.listening || _Step.gap => (
+          s.t('setStepListen'),
+          s.t('setSpeakingTitle', {'name': name}),
+          _restated ? s.t('setRestateSub') : s.t('setListenSub'),
+        ),
+      _Step.replying => (
+          s.t('setStepReply'),
+          s.t('setReplyTitle'),
+          s.t('setReplySub', {'n': (_windowMs / 1000).round()}),
+        ),
+      _Step.paused => (s.t('setPausedPhase'), s.t('setPausedTitle'), s.t('setPausedSub')),
+      _Step.replied => (
+          s.t('setStepReplyResult'),
+          _right
+              ? s.t('setRight')
+              : (_picked == null ? s.t('setTimeUp') : s.t('setWrong')),
+          _right ? s.t('setRightSub') : s.t('setWrongSub'),
+        ),
+      _Step.saying => ('', s.t('setSayingTitle'), ''),
+      _Step.predicting => (
+          s.t('setStepPredict'),
+          s.t('setPredictTitle', {'name': name}),
+          s.t('setPredictSub'),
+        ),
+      _Step.responding => (
+          s.t('setStepResponse'),
+          s.t('setRespondingTitle', {'name': name}),
+          '',
+        ),
+      _Step.predicted => (
+          s.t('setStepPredictResult'),
+          _hit ? s.t('setPredictHit') : s.t('setPredictMiss'),
+          _hit ? '' : s.t('setPredictMissSub'),
+        ),
+      _Step.summary => ('', '', ''),
+    };
+
+    final speaking = _step == _Step.listening || _step == _Step.responding;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(8, 5, 8, 6),
       decoration: BoxDecoration(
-        color: scheme.primaryContainer.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(8),
+        color: scheme.surfaceContainerLowest,
+        border: Border(top: BorderSide(color: scheme.outlineVariant)),
       ),
-      child: Text(
-        s.t('heardBand', {'text': text}),
-        style: theme.textTheme.bodySmall?.copyWith(color: scheme.onPrimaryContainer),
-      ),
-    );
-  }
-
-  /// The name over a bubble. In the interface language: it names a figure on
-  /// the screen, not something anybody said.
-  Widget _speakerLabel(S s, ThemeData theme, {required bool other}) => Padding(
-        padding: EdgeInsets.only(left: other ? 4 : 0, bottom: 2),
-        child: Row(
-          mainAxisAlignment:
-              other ? MainAxisAlignment.start : MainAxisAlignment.end,
-          children: [
-            Text(
-              s.t(other ? 'speakerOther' : 'speakerYou'),
-              style: theme.textTheme.labelSmall?.copyWith(
-                  color: other
-                      ? theme.colorScheme.tertiary
-                      : theme.colorScheme.primary),
-            ),
-          ],
-        ),
-      );
-
-  /// A bubble, with the figure beside it on the side it belongs to.
-  Widget _bubble(ThemeData theme, {required bool other, required Widget child}) {
-    final scheme = theme.colorScheme;
-    final body = Flexible(
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 9, 12, 11),
-        decoration: BoxDecoration(
-          color: other ? scheme.surfaceContainerHigh : scheme.primaryContainer
-              .withValues(alpha: 0.28),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(other ? 4 : 16),
-            topRight: Radius.circular(other ? 16 : 4),
-            bottomLeft: const Radius.circular(16),
-            bottomRight: const Radius.circular(16),
-          ),
-        ),
-        child: child,
-      ),
-    );
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: other
-          ? [_Figure.small(other: true), const SizedBox(width: 8), body]
-          : [body, const SizedBox(width: 8), _Figure.small(other: false)],
-    );
-  }
-
-  Widget _guide(S s, ThemeData theme) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(
-          switch (_phase) {
-            _Phase.reading => s.t('tutRead'),
-            _Phase.playing || _Phase.restating => s.t('tutListen'),
-            _Phase.open => s.t('tutReply'),
-            _ => s.t('tutResult'),
-          },
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
-        ),
-      );
-
-  /// Said when the window has closed on a turn and the line is about to come
-  /// back in other words.
-  ///
-  /// It has to be said. What plays next is a *different* sentence, on purpose
-  /// — repeating the first one would be a second listen, and a second listen
-  /// is exactly what this practice does not give. But without a word of
-  /// warning the learner hears an unfamiliar sentence and takes it for a new
-  /// line they have already fallen behind on. It stays up through the second
-  /// window, so it is still there to be read while they choose.
-  Widget _restateNote(S s, ThemeData theme) {
-    final scheme = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
-        decoration: BoxDecoration(
-          color: scheme.tertiaryContainer.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.replay, size: 14, color: scheme.onTertiaryContainer),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                s.t('sceneRestateNote'),
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: scheme.onTertiaryContainer),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _reviewTag(S s, ThemeData theme) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.history, size: 14, color: theme.colorScheme.tertiary),
-            const SizedBox(width: 6),
-            Text(s.t('sceneReviewTag'),
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: theme.colorScheme.tertiary)),
-          ],
-        ),
-      );
-
-  /// The line being answered: the setting while nothing has been said, then
-  /// the line itself once it has been answered. What was actually said is
-  /// never shown before the answer — that is the whole exercise.
-  ///
-  /// Only the first turn carries the setting. After that the conversation
-  /// above is the setting, and the line says instead that it is picking up
-  /// what the learner just replied.
-  Widget _them(S s, ThemeData theme) {
-    final scheme = theme.colorScheme;
-    final said = _phase == _Phase.done;
-    final showing = said || !_speech.available;
-    final opening = _thread.isEmpty;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _speakerLabel(s, theme, other: true),
-        _bubble(
-          theme,
-          other: true,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (!said && (!opening || _card.scene.settingNative.isNotEmpty)) ...[
-                Text(
-                  opening ? _card.scene.settingNative : s.t('afterYourReply'),
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: scheme.onSurfaceVariant),
-                ),
-                const SizedBox(height: 6),
-              ],
-              if (showing)
-                Text(_turn.line, style: theme.textTheme.titleSmall)
-              else
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(
-                    _phase == _Phase.playing || _phase == _Phase.restating
-                        ? '· · · · · ·'
-                        : '',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(color: scheme.onSurfaceVariant),
-                  ),
-                ),
-              if (said) _native(s, theme),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// The line in the learner's own language, once the ladder still allows it.
-  /// At the top of that axis it never comes.
-  ///
-  /// It arrives as the band it will keep: what appears the moment they answer
-  /// is the same thing that stays above the next line, so nothing is
-  /// re-styled under them as the conversation moves on.
-  Widget _native(S s, ThemeData theme) {
-    final wait = _translationAfter;
-    if (wait == null || _turn.lineNative.isEmpty) return const SizedBox.shrink();
-    return FutureBuilder<void>(
-      future: Future<void>.delayed(wait),
-      builder: (context, snap) => AnimatedOpacity(
-        duration: const Duration(milliseconds: 250),
-        opacity: snap.connectionState == ConnectionState.done ? 1 : 0,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: _heardBand(s, theme, _turn.lineNative),
-        ),
-      ),
-    );
-  }
-
-  /// The three replies, fixed below the conversation. [s] names the figure,
-  /// [e] asks the question — the label is about the screen, the question is
-  /// part of the conversation.
-  Widget _replies(S s, S e, ThemeData theme) {
-    final scheme = theme.colorScheme;
-    // Answerable while the window is open, and while it has closed and the
-    // clock is stopped: letting the moment go is not the same as giving up.
-    final live = _phase == _Phase.open || _phase == _Phase.waiting;
-    final ticking = _phase == _Phase.open;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            _Figure.small(other: false),
-            const SizedBox(width: 8),
-            Text(e.t('sceneQ2'), style: theme.textTheme.titleSmall),
-            const Spacer(),
-            Text(s.t('speakerYou'),
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: scheme.onSurfaceVariant)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        // The window, draining, marked off in the bands it pays in. Above the
-        // replies rather than below them: the replies scroll on a short
-        // screen, and a gauge that scrolls off is a gauge nobody uses. Only
-        // while the window is open — a bar that is always there would be one
-        // more thing to watch instead of listen to.
-        SizedBox(
-          height: 18,
-          child: ticking
-              ? AnimatedBuilder(
-                  animation: _window,
-                  builder: (context, _) => _WindowGauge(
-                    left: 1 - _window.value,
-                    dark: theme.brightness == Brightness.dark,
-                    ground: scheme.surfaceContainerHighest,
-                    ink: scheme.onSurfaceVariant,
-                  ),
-                )
-              : null,
-        ),
-        const SizedBox(height: 6),
-        for (var i = 0; i < _turn.replies.length; i++) ...[
-          _Option(
-            key: _replyKeys[i],
-            text: _turn.replies[i].text,
-            sub: _phase == _Phase.done && _translationAfter != null
-                ? _turn.replies[i].native
-                : '',
-            // Dimmed while the line is being said: reading is over by then.
-            dim: _phase == _Phase.playing || _phase == _Phase.restating,
-            right: _phase == _Phase.done && i == _turn.answer,
-            wrong: _phase == _Phase.done && i == _picked && !_right,
-            onTap: live ? () => _answer(i) : null,
-          ),
-          const SizedBox(height: 8),
-        ],
-      ],
-    );
-  }
-
-  /// [s] is the interface language, [e] English. The verdict is part of the
-  /// conversation and stays English; the account of what went wrong is about
-  /// it, and is read in the learner's own language.
-  Widget _bottom(S s, S e, ThemeData theme) {
-    final scheme = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
-      child: switch (_phase) {
-        _Phase.reading => FilledButton.icon(
-            onPressed: _play,
-            icon: const Icon(Icons.volume_up),
-            label: Text(e.t('scenePlay')),
-          ),
-        _Phase.playing || _Phase.restating => Center(
-            child: Text(
-              e.t(_phase == _Phase.restating ? 'sceneAgain' : 'sceneListening'),
-              style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-          ),
-        _Phase.open => Center(
-            child: Text(e.t('sceneYourTurn'),
-                style: theme.textTheme.bodyMedium?.copyWith(color: scheme.primary)),
-          ),
-        // The clock is stopped. Nothing happens until they ask for it.
-        _Phase.waiting => FilledButton.icon(
-            onPressed: _replay,
-            icon: const Icon(Icons.replay),
-            label: Text(s.t('sceneHearAgain')),
-          ),
-        _ => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _verdict(s, e, theme),
-              const SizedBox(height: 8),
-              // Nothing moves on by itself any more. What is above is the
-              // only account of what went wrong that the learner gets, and
-              // reading it takes as long as it takes.
-              FilledButton(
-                onPressed: _advance,
-                child: Text(s.t('sceneNextButton')),
-              ),
-            ],
-          ),
-      },
-    );
-  }
-
-  Widget _verdict(S s, S e, ThemeData theme) {
-    final scheme = theme.colorScheme;
-    final missed = _picked == null;
-    final bg = _right ? scheme.primaryContainer : scheme.errorContainer;
-    final fg = _right ? scheme.onPrimaryContainer : scheme.onErrorContainer;
-    final slip = _whatWentWrong(s);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Icon(missed ? Icons.timer_off_outlined : (_right ? Icons.check : Icons.close),
-                  size: 18, color: fg),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  missed
-                      ? e.t('sceneWindowGone')
-                      : (_right ? e.t('sceneCorrect') : e.t('sceneWrong')),
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: fg, fontWeight: FontWeight.w700),
-                ),
-              ),
-              if (_paid > 0)
-                Text('+$_paid',
-                    style: theme.textTheme.labelMedium
-                        ?.copyWith(color: fg, fontWeight: FontWeight.w800)),
-              if (_promoted.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                Text(s.t('ladderUp'),
-                    style: theme.textTheme.labelSmall?.copyWith(color: fg)),
-              ],
-
-            ],
-          ),
-          // Which word, or which fact, went by them. Without this a learner
-          // is told they were wrong and left to find where, in a line they
-          // heard once.
-          if (slip != null) ...[
-            const SizedBox(height: 6),
-            Text(slip, style: theme.textTheme.bodySmall?.copyWith(color: fg)),
+          if (phase.isNotEmpty)
+            Text(phase,
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: scheme.onSurfaceVariant, letterSpacing: 0.6)),
+          Text(title,
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          if (sub.isNotEmpty)
+            Text(sub,
+                style:
+                    theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+          if (speaking && _beats.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _Beats(beats: _beats, now: _beat),
           ],
+          if (_step == _Step.replying) ...[
+            const SizedBox(height: 8),
+            AnimatedBuilder(
+              animation: _window,
+              builder: (context, _) => _BandGauge(left: 1 - _window.value),
+            ),
+          ],
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(top: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ..._options(s, theme),
+                  if (_step == _Step.replied) _replyResult(s, theme),
+                ],
+              ),
+            ),
+          ),
+          _buttons(s),
         ],
       ),
     );
   }
 
-  /// What went by them, in their own language, said as plainly as the turn
-  /// allows.
-  ///
-  /// Everything here was already known and never shown: a `keyword` turn
-  /// carries the pair it turns on, a `polarity` turn the word that reverses
-  /// it, and a wrong reply on a `multiFact` turn names the fact it dropped.
-  String? _whatWentWrong(S s) {
-    if (_right) return null;
-    final t = _turn;
-    switch (t.type) {
-      case TurnType.keyword:
-        if (t.keyWord.isEmpty || t.confusable.isEmpty) return null;
-        return s.t('slipKeyword', {'heard': t.confusable, 'said': t.keyWord});
-      case TurnType.polarity:
-        if (t.keyWord.isEmpty) return null;
-        return s.t('slipPolarity', {'word': t.keyWord});
-      case TurnType.multiFact:
-        final picked = _picked;
-        final slot = picked == null ? null : t.replies[picked].missedSlot;
-        final fact = slot == null
-            ? null
-            : t.facts.where((f) => f.slot == slot).firstOrNull;
-        if (fact == null) return null;
-        return s.t('slipFact', {'slot': fact.slot, 'said': fact.value});
+  List<Widget> _options(S s, ThemeData theme) {
+    switch (_step) {
+      case _Step.replying:
+      case _Step.replied:
+        final c = _set.reply;
+        final open = _step == _Step.replied;
+        return [
+          for (var i = 0; i < c.options.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _SetOption(
+                key: _optionKeys[i],
+                number: i + 1,
+                text: c.options[i],
+                right: open && i == c.answer,
+                wrong: open && i == _picked && !_right,
+                why: open && i != c.answer ? c.why[i] : '',
+                onTap: _step == _Step.replying ? () => _answer(i) : null,
+              ),
+            ),
+        ];
+      case _Step.predicting:
+      case _Step.responding:
+      case _Step.predicted:
+        final c = _set.predict;
+        final open = _step == _Step.predicted;
+        return [
+          for (var i = 0; i < c.options.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _SetOption(
+                key: _optionKeys[i],
+                number: i + 1,
+                text: c.options[i],
+                native: true,
+                tentative: !open && i == _tent,
+                tentLabel: s.t('setTentTag'),
+                dim: _step == _Step.responding,
+                right: open && i == c.answer,
+                wrong: open && i == _tent && !_hit,
+                why: open && i != c.answer ? c.why[i] : '',
+                onTap: _step == _Step.predicting ? () => setState(() => _tent = i) : null,
+              ),
+            ),
+        ];
+      default:
+        return const [];
     }
   }
 
-  /// The end of a conversation.
-  ///
-  /// It used to be a score and two buttons on an empty screen, which is a
-  /// strange thing to be handed after a conversation. What is here now is
-  /// what was just done: the whole exchange, readable from the top — it was
-  /// on screen a moment ago and there is no reason to take it away — with the
-  /// score, what it earned, and anything the ladder did above it.
-  Widget _result(S s, ThemeData theme) {
+  Widget _replyResult(S s, ThemeData theme) {
     final scheme = theme.colorScheme;
-    // Only a question never answered before adds to the count, so only one of
-    // those can move the tree along. A level is worth saying as much as a
-    // name: the levels are what make the first fortnight worth turning up
-    // for, and they arrive every question or two at the start.
-    final grownTo = _scenesBefore + (_firstTimeHere ? 1 : 0);
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 4),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          if (_right && _paid > 0)
+            Text.rich(TextSpan(children: [
+              TextSpan(
+                  text: '+$_paid ',
+                  style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+              TextSpan(text: 'Seeds', style: theme.textTheme.bodySmall),
+            ])),
+          if (_right && _restated)
+            _Pill(text: s.t('setFloorPill'), color: const Color(0xFFB06B0A)),
+          if (!_right) _Pill(text: s.t('setReplyMissPill'), color: scheme.error),
+          if (_promoted.isNotEmpty)
+            Text(s.t('ladderUp'),
+                style: theme.textTheme.labelMedium?.copyWith(color: scheme.primary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buttons(S s) {
+    final last = _index + 1 >= widget.queue.length;
+    Widget main(String label, VoidCallback? onPressed) => Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: FilledButton(onPressed: onPressed, child: Text(label)),
+        );
+    switch (_step) {
+      case _Step.ready:
+        return main(s.t('setListenButton'), _listen);
+      case _Step.paused:
+        return main(s.t('setResume'), _listen);
+      case _Step.replying:
+        if (!_replayAllowed || _restated) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: OutlinedButton.icon(
+            onPressed: _restate,
+            icon: const Icon(Icons.replay, size: 18),
+            label: Text(s.t('setHearAgain')),
+          ),
+        );
+      case _Step.replied:
+        return main(s.t('setSayButton'), _say);
+      case _Step.predicting:
+        return main(s.t('setListenButton'), _tent == null ? null : _respond);
+      case _Step.predicted:
+        return main(last ? s.t('setToSummary') : s.t('setNext'), _next);
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  // --------------------------------------------------------------- summary
+
+  Widget _summary(S s, ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final grownTo = _scenesBefore + _firstTimes;
     final stageUp = treeLevel(grownTo) > treeLevel(_scenesBefore);
+    Widget row(String label, String value) => Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: scheme.outlineVariant))),
+          child: Row(
+            children: [
+              Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
+              Text(value,
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+            ],
+          ),
+        );
     return Column(
       children: [
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
             children: [
-              Row(
-                children: [
-                  Text('$_rightCount / ${_cards.length}',
-                      style: theme.textTheme.displaySmall),
-                  const Spacer(),
-                  if (_seedRun > 0)
-                    Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: scheme.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text('🌱 +$_seedRun',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                              color: scheme.primary, fontWeight: FontWeight.w800)),
-                    ),
-                ],
-              ),
-              if (_bestComboHere >= 3) ...[
-                const SizedBox(height: 6),
-                Text('✦ ${s.t('comboLabel', {'n': _bestComboHere})}',
-                    style: theme.textTheme.titleSmall?.copyWith(color: scheme.primary)),
-              ],
+              Text(s.t('setSummaryPhase'),
+                  style: theme.textTheme.labelSmall
+                      ?.copyWith(color: scheme.onSurfaceVariant, letterSpacing: 0.6)),
+              Text(s.t('setSummaryTitle'),
+                  style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 10),
+              row(s.t('setSumReply'), '$_replyRight／$_replyWrong（$_replyRestated）'),
+              row(s.t('setSumPredict'), '$_predictHit／$_predictMiss'),
+              row('Seeds', '+$_seedRun'),
+              const SizedBox(height: 10),
+              Text(s.t('setSumNote'),
+                  style:
+                      theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
               if (_promoted.isNotEmpty) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 Text(s.t('ladderUp'),
                     style: theme.textTheme.titleMedium
                         ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 2),
                 Text([for (final a in _promoted) s.t('axis_${a.name}')].join(' · '),
                     style: theme.textTheme.bodyMedium),
               ],
               if (stageUp) ...[
-                const SizedBox(height: 10),
-                Text(
-                    s.t('treeStageUp', {'name': rankName(s, grownTo)}),
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-              ],
-              const SizedBox(height: 18),
-              Text(s.t('sceneReadBack'),
-                  style: theme.textTheme.labelMedium
-                      ?.copyWith(color: scheme.onSurfaceVariant)),
-              const SizedBox(height: 8),
-              // The conversation itself, from the top: every turn, with what
-              // was said, what went back, and what would have fitted.
-              for (final past in _thread) ...[
-                _pastTurn(s, theme, past),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
+                Text(s.t('treeStageUp', {'name': rankName(s, grownTo)}),
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
               ],
             ],
           ),
@@ -1203,7 +946,7 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
             children: [
               FilledButton(
                 onPressed: () => _leave(again: true),
-                child: Text(s.t('sceneNext')),
+                child: Text(s.t('setAgain')),
               ),
               const SizedBox(height: 8),
               OutlinedButton(
@@ -1220,109 +963,57 @@ class _SceneScreenState extends ConsumerState<SceneScreen> with TickerProviderSt
 
 // ------------------------------------------------------------------ pieces
 
-class _Chip extends StatelessWidget {
-  final String text;
-  final Color color;
-  const _Chip({super.key, required this.text, required this.color});
+/// Colours that mean the same in both themes: right, the guess put down, and
+/// the bands of the window from quick to late.
+const _okColour = Color(0xFF3F9D5A);
+const _tentColour = Color(0xFF3F7FD9);
+const _bandColours = <Color>[
+  Color(0xFF3F9D5A),
+  Color(0xFF8CBF3F),
+  Color(0xFFE3C12C),
+  Color(0xFFE39B2C),
+  Color(0xFFD9534F),
+];
 
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(text,
-            style: Theme.of(context)
-                .textTheme
-                .labelMedium
-                ?.copyWith(color: color, fontWeight: FontWeight.w700)),
-      );
-}
-
-/// Who is speaking, as a small figure. Two of them, facing each other.
-class _Figure extends StatelessWidget {
+/// One of the two speaking: them on the left, the learner on the right.
+class _Bubble extends StatelessWidget {
+  final String name;
   final bool other;
-  final double size;
-  const _Figure.small({required this.other}) : size = 24;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final color = other ? scheme.tertiary : scheme.primary;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
-        shape: BoxShape.circle,
-      ),
-      child: Icon(Icons.person, size: size * 0.62, color: color),
-    );
-  }
-}
-
-/// One reply, as a row that can be tapped.
-class _Option extends StatelessWidget {
-  final String text;
-  final String sub;
-  final bool dim;
-  final bool right;
-  final bool wrong;
-  final VoidCallback? onTap;
-  const _Option({
-    super.key,
-    required this.text,
-    this.sub = '',
-    this.dim = false,
-    this.right = false,
-    this.wrong = false,
-    this.onTap,
-  });
+  final Widget child;
+  const _Bubble({required this.name, required this.other, required this.child});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final border = right
-        ? scheme.primary
-        : wrong
-            ? scheme.error
-            : scheme.outlineVariant;
-    final fill = right
-        ? scheme.primaryContainer.withValues(alpha: 0.5)
-        : wrong
-            ? scheme.errorContainer.withValues(alpha: 0.5)
-            : Colors.transparent;
-
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 200),
-      opacity: dim ? 0.45 : 1,
-      child: Material(
-        color: fill,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            decoration: BoxDecoration(
-              border: Border.all(color: border, width: right || wrong ? 1.8 : 1),
-              borderRadius: BorderRadius.circular(14),
+    return Align(
+      alignment: other ? Alignment.centerLeft : Alignment.centerRight,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.86),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          decoration: BoxDecoration(
+            color: other ? scheme.surfaceContainerLowest : scheme.inverseSurface,
+            border: other ? Border.all(color: scheme.outlineVariant) : null,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(16),
+              topRight: const Radius.circular(16),
+              bottomLeft: Radius.circular(other ? 4 : 16),
+              bottomRight: Radius.circular(other ? 16 : 4),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(text, style: theme.textTheme.bodyLarge),
-                if (sub.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(sub,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: scheme.onSurfaceVariant)),
-                ],
-              ],
-            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                      color: other
+                          ? scheme.onSurfaceVariant
+                          : scheme.onInverseSurface.withValues(alpha: 0.7))),
+              const SizedBox(height: 2),
+              child,
+            ],
           ),
         ),
       ),
@@ -1330,29 +1021,416 @@ class _Option extends StatelessWidget {
   }
 }
 
+/// What is said, before it may be read: a moving mark while it is being said,
+/// and three dots.
+class _Hidden extends StatelessWidget {
+  final bool speaking;
+  final String label;
+  const _Hidden({required this.speaking, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (speaking) ...[const _Wave(), const SizedBox(width: 6)],
+        Text(label,
+            style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic)),
+      ],
+    );
+  }
+}
+
+class _Wave extends StatefulWidget {
+  const _Wave();
+
+  @override
+  State<_Wave> createState() => _WaveState();
+}
+
+class _WaveState extends State<_Wave> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 700))
+        ..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < 4; i++)
+              Container(
+                width: 3,
+                height: 4 + 10 * (0.5 + 0.5 * sin((_c.value - i * 0.17) * 2 * pi)),
+                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                decoration: BoxDecoration(
+                    color: _tentColour, borderRadius: BorderRadius.circular(2)),
+              ),
+          ],
+        ),
+      );
+}
+
+/// Their words in the learner's language, once the ladder still gives them.
+class _NativeBand extends StatelessWidget {
+  final String text;
+  const _NativeBand({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.fromLTRB(8, 5, 8, 6),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(text,
+          style: theme.textTheme.bodySmall?.copyWith(color: scheme.onPrimaryContainer)),
+    );
+  }
+}
+
+/// Shows [child] after [wait]; never, when [wait] is null.
+class _Delayed extends StatefulWidget {
+  final Duration? wait;
+  final Widget child;
+  const _Delayed({super.key, required this.wait, required this.child});
+
+  @override
+  State<_Delayed> createState() => _DelayedState();
+}
+
+class _DelayedState extends State<_Delayed> {
+  bool _shown = false;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    final wait = widget.wait;
+    if (wait == null) return;
+    if (wait == Duration.zero) {
+      _shown = true;
+    } else {
+      _timer = Timer(wait, () {
+        if (mounted) setState(() => _shown = true);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _shown ? widget.child : const SizedBox.shrink();
+}
+
+/// "Predicted: … → right / wrong", inside their answer.
+class _Gist extends StatelessWidget {
+  final bool hit;
+  final String text;
+  const _Gist({required this.hit, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colour = hit ? _okColour : theme.colorScheme.error;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 3, 8, 4),
+      decoration: BoxDecoration(
+        color: colour.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(text, style: theme.textTheme.labelSmall?.copyWith(color: colour)),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  final String text;
+  final Color color;
+  const _Pill({required this.text, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: Text(text,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color)),
+      );
+}
+
+/// One bar per word, the stressed ones taller; the one being said lit.
+class _Beats extends StatelessWidget {
+  final List<({String word, bool stressed})> beats;
+  final int now;
+  const _Beats({required this.beats, required this.now});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 3,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.end,
+      children: [
+        for (var i = 0; i < beats.length; i++)
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            width: i == now ? 8 : 5,
+            height: beats[i].stressed ? 20 : 8,
+            decoration: BoxDecoration(
+              color: i == now ? _tentColour : scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The window as five bands filling from quick to late, and what answering
+/// now is worth.
+class _BandGauge extends StatelessWidget {
+  /// How much of the window is left, 1 down to 0.
+  final double left;
+  const _BandGauge({required this.left});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final gone = 1 - left.clamp(0.0, 1.0);
+    final band = seedBandOf(left);
+    final worth = seedFloor + (band - 1) * seedPerBand;
+    return Row(
+      children: [
+        for (var k = 0; k < seedBands; k++) ...[
+          if (k > 0) const SizedBox(width: 3),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: SizedBox(
+                height: 7,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                        child: ColoredBox(color: theme.colorScheme.surfaceContainerHighest)),
+                    Positioned.fill(
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: (gone * seedBands - k).clamp(0.0, 1.0),
+                        child: ColoredBox(color: _bandColours[k]),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(width: 8),
+        Text('🌱$worth',
+            style: theme.textTheme.labelSmall?.copyWith(
+                color: _bandColours[seedBands - band], fontWeight: FontWeight.w800)),
+      ],
+    );
+  }
+}
+
+/// One option: a reply in English, or a guess in the learner's language.
+class _SetOption extends StatelessWidget {
+  final int number;
+  final String text;
+  final bool native;
+  final bool tentative;
+  final String tentLabel;
+  final bool dim;
+  final bool right;
+  final bool wrong;
+
+  /// Why this option does not fit. Shown once the answer is open.
+  final String why;
+  final VoidCallback? onTap;
+
+  const _SetOption({
+    super.key,
+    required this.number,
+    required this.text,
+    this.native = false,
+    this.tentative = false,
+    this.tentLabel = '',
+    this.dim = false,
+    this.right = false,
+    this.wrong = false,
+    this.why = '',
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final edge = right
+        ? _okColour
+        : wrong
+            ? scheme.error
+            : tentative
+                ? _tentColour
+                : scheme.outlineVariant;
+    final fill = right
+        ? _okColour.withValues(alpha: 0.12)
+        : wrong
+            ? scheme.error.withValues(alpha: 0.10)
+            : tentative
+                ? _tentColour.withValues(alpha: 0.10)
+                : scheme.surface;
+    final body = Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 20,
+                child: Text('$number',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: scheme.onSurfaceVariant)),
+              ),
+              Expanded(
+                child: Text(text,
+                    style: native ? theme.textTheme.bodyLarge : theme.textTheme.bodyMedium),
+              ),
+            ],
+          ),
+          if (why.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 20, top: 4),
+              child: Text(why,
+                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.error)),
+            ),
+        ],
+      ),
+    );
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 200),
+      opacity: dim ? 0.5 : 1,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Material(
+            color: fill,
+            borderRadius: BorderRadius.circular(13),
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(13),
+              child: tentative
+                  ? CustomPaint(
+                      painter: _DashedEdge(colour: edge, radius: 13),
+                      child: body,
+                    )
+                  : DecoratedBox(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: edge, width: right || wrong ? 2 : 1.4),
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                      child: body,
+                    ),
+            ),
+          ),
+          if (tentative)
+            Positioned(
+              right: 10,
+              top: -9,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                decoration: BoxDecoration(
+                    color: _tentColour, borderRadius: BorderRadius.circular(9)),
+                child: Text(tentLabel,
+                    style: theme.textTheme.labelSmall?.copyWith(color: Colors.white)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A dotted edge, for the guess that is only put down, not given.
+class _DashedEdge extends CustomPainter {
+  final Color colour;
+  final double radius;
+  const _DashedEdge({required this.colour, required this.radius});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = colour
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final path = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+          (Offset.zero & size).deflate(1), Radius.circular(radius)));
+    for (final metric in path.computeMetrics()) {
+      var d = 0.0;
+      while (d < metric.length) {
+        canvas.drawPath(metric.extractPath(d, min(d + 6, metric.length)), paint);
+        d += 10;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedEdge old) => old.colour != colour || old.radius != radius;
+}
+
 // ---------------------------------------------------------------- launcher
 
-/// Which conversation to open now: one never done, drawn at random, before
-/// any that has been; among those done, the one done longest ago. Built-ins
-/// and the learner's own are treated alike here; who wrote one decides what
-/// blooms, not when it comes up.
-Scene? pickScene(List<Scene> scenes, List<TurnResult> results, {Random? rng}) {
-  final open = scenes.where((s) => !s.disabled && s.turns.isNotEmpty).toList();
-  if (open.isEmpty) return null;
+/// Which sets to take now, up to [count]: ones never done, in a random order,
+/// before any that have been; among those done, the one done longest ago
+/// first. Only sets are played now; a conversation kept from before is not.
+List<Scene> pickScenes(List<Scene> scenes, List<TurnResult> results,
+    {int count = 1, Random? rng}) {
+  final open = scenes.where((s) => s.playable).toList();
+  if (open.isEmpty) return const [];
   final last = <String, int>{};
   for (final r in results) {
     if (r.review) continue;
-    last[r.sceneId] = r.at > (last[r.sceneId] ?? 0) ? r.at : (last[r.sceneId] ?? 0);
+    last[r.sceneId] = max(r.at, last[r.sceneId] ?? 0);
   }
-  final fresh = [for (final s in open) if (!last.containsKey(s.id)) s];
-  if (fresh.isNotEmpty) return fresh[(rng ?? Random()).nextInt(fresh.length)];
-  open.sort((a, b) => (last[a.id] ?? 0).compareTo(last[b.id] ?? 0));
-  return open.first;
+  final fresh = [for (final s in open) if (!last.containsKey(s.id)) s]..shuffle(rng ?? Random());
+  final done = [for (final s in open) if (last.containsKey(s.id)) s]
+    ..sort((a, b) => (last[a.id] ?? 0).compareTo(last[b.id] ?? 0));
+  return [...fresh, ...done].take(count).toList();
 }
 
-/// Opens today's conversation, with any turns owed in front of it, and the
-/// next one if asked. Loops rather than recurses so a run of "next" does not
-/// stack finished screens.
+/// The first of [pickScenes], for anything that wants one.
+Scene? pickScene(List<Scene> scenes, List<TurnResult> results, {Random? rng}) =>
+    pickScenes(scenes, results, rng: rng).firstOrNull;
+
+/// Opens a run: any sets owed from earlier misses, then one fresh one. Loops rather than recurses so a run of "again" does not stack
+/// finished screens.
 ///
 /// [all] is the set the caller wants to draw from — everything, one field,
 /// one half of a field — so the caller decides what counts; this only chooses
@@ -1361,7 +1439,6 @@ Future<void> startScene(
   BuildContext context,
   WidgetRef ref, {
   required List<Scene> all,
-  bool tutorial = false,
   VoidCallback? onDone,
 }) async {
   final repo = ref.read(repositoryProvider);
@@ -1371,31 +1448,33 @@ Future<void> startScene(
   if (!context.mounted) return;
   while (true) {
     final results = await repo.turnResults();
-    final scene = pickScene(all, results);
+    // One new set a run, as home promises; "again" is the next one.
+    final picks = pickScenes(all, results);
     if (!context.mounted) return;
-    if (scene == null) {
+    if (picks.isEmpty) {
       showToast(context, s.t('sceneNoneYet'));
       return;
     }
-    final reviews = [
+    final chosen = {for (final p in picks) p.id};
+    final owed = [
       for (final r in await repo.reviewsDue())
-        if (byId[r.sceneId] case final sc? when r.turn < sc.turns.length)
-          SceneCard(sc, r.turn, review: true)
+        if (byId[r.sceneId] case final sc? when sc.playable && !chosen.contains(sc.id))
+          SetCard(sc, review: true)
     ];
     if (!context.mounted) return;
     final run = await Navigator.push<SceneRunResult>(
       context,
       MaterialPageRoute(
-        builder: (_) => SceneScreen(scene: scene, reviews: reviews, tutorial: tutorial),
+        builder: (_) => SceneScreen(queue: [...owed, for (final p in picks) SetCard(p)]),
       ),
     );
     if (!context.mounted) return;
     onDone?.call();
-    tutorial = false;
     if (run?.again != true) return;
   }
 }
 
+// ------------------------------------------------------------------ seeds
 
 /// The seeds earned in this run. It swells for a moment as one lands on it.
 /// What they have, in the corner, with what the turn just paid arriving on
@@ -1567,115 +1646,3 @@ class _SeedShower extends StatelessWidget {
       );
 }
 
-/// The window, drawn as a bar marked off in the bands it pays in.
-///
-/// A bar that drains smoothly says how long is left and nothing else; the
-/// marks say what the next second costs. The band the bar is still in gives
-/// it its colour and its number, so the choice on offer — take another
-/// moment, or answer now for ten more — is on the screen rather than in the
-/// learner's head. The mark at the ladder's line is drawn heavier: above it
-/// an answer counts towards the climb, below it only towards the balance.
-class _WindowGauge extends StatelessWidget {
-  /// How much of the window is left, 1 down to 0.
-  final double left;
-  final bool dark;
-  final Color ground;
-  final Color ink;
-  const _WindowGauge({
-    required this.left,
-    required this.dark,
-    required this.ground,
-    required this.ink,
-  });
-
-  /// Fastest band first. Green while there is room, amber at the line the
-  /// ladder draws, and the last band the colour of a moment nearly gone.
-  static const _light = <Color>[
-    Color(0xFF9E9E9E),
-    Color(0xFFEF6C00),
-    Color(0xFFF9A825),
-    Color(0xFF7CB342),
-    Color(0xFF2E7D32),
-  ];
-  static const _onDark = <Color>[
-    Color(0xFF9E9E9E),
-    Color(0xFFFFA726),
-    Color(0xFFFFCA28),
-    Color(0xFF9CCC65),
-    Color(0xFF66BB6A),
-  ];
-
-  static Color colourOf(int band, bool dark) =>
-      (dark ? _onDark : _light)[(band - 1).clamp(0, seedBands - 1)];
-
-  @override
-  Widget build(BuildContext context) {
-    final band = seedBandOf(left);
-    final colour = colourOf(band, dark);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: SizedBox(
-            height: 10,
-            child: CustomPaint(
-              painter: _GaugePainter(left: left, colour: colour, ground: ground, ink: ink),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        // What answering now is worth. It steps rather than slides, because a
-        // number that changes every frame cannot be aimed at.
-        Text('🌱${seedFloor + (band - 1) * seedPerBand}',
-            style: Theme.of(context)
-                .textTheme
-                .labelSmall
-                ?.copyWith(color: colour, fontWeight: FontWeight.w800)),
-      ],
-    );
-  }
-}
-
-class _GaugePainter extends CustomPainter {
-  final double left;
-  final Color colour;
-  final Color ground;
-  final Color ink;
-  const _GaugePainter(
-      {required this.left, required this.colour, required this.ground, required this.ink});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final r = Radius.circular(size.height / 2);
-    final whole = RRect.fromRectAndRadius(Offset.zero & size, r);
-    canvas.drawRRect(whole, Paint()..color = ground);
-
-    if (left > 0) {
-      canvas.save();
-      canvas.clipRRect(whole);
-      canvas.drawRect(
-        Rect.fromLTWH(0, 0, size.width * left.clamp(0.0, 1.0), size.height),
-        Paint()..color = colour,
-      );
-      canvas.restore();
-    }
-
-    // The marks, cut through both the filled part and the empty part so the
-    // bands stay countable however much is left.
-    for (var i = 1; i < seedBands; i++) {
-      final x = size.width * i / seedBands;
-      final onLadderLine = i == ladderBand - 1;
-      canvas.drawLine(
-        Offset(x, 0),
-        Offset(x, size.height),
-        Paint()
-          ..color = ink.withValues(alpha: onLadderLine ? 0.85 : 0.35)
-          ..strokeWidth = onLadderLine ? 2.4 : 1.2,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GaugePainter old) =>
-      old.left != left || old.colour != colour || old.ground != ground || old.ink != ink;
-}

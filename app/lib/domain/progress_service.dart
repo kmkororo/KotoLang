@@ -105,6 +105,11 @@ class AppSettings {
   /// the gap between turns is a good part of what makes a conversation one.
   final double windowScale;
 
+  /// The two voices of a set: the other person's and the learner's own, by
+  /// the engine's name for them. Empty means chosen by the app.
+  final String partnerVoice;
+  final String yourVoice;
+
   const AppSettings({
     this.voiceName,
     this.speechRate,
@@ -120,6 +125,8 @@ class AppSettings {
     this.tutorialDone = false,
     this.voicePerScene = true,
     this.windowScale = 1.0,
+    this.partnerVoice = '',
+    this.yourVoice = '',
   });
 
   Difficulty get level => difficulties[difficulty] ?? difficulties['normal']!;
@@ -143,8 +150,12 @@ class AppSettings {
     bool? tutorialDone,
     bool? voicePerScene,
     double? windowScale,
+    String? partnerVoice,
+    String? yourVoice,
   }) =>
       AppSettings(
+        partnerVoice: partnerVoice ?? this.partnerVoice,
+        yourVoice: yourVoice ?? this.yourVoice,
         voicePerScene: voicePerScene ?? this.voicePerScene,
         windowScale: windowScale ?? this.windowScale,
         ageBand: ageBand ?? this.ageBand,
@@ -245,11 +256,10 @@ const seedTop = 60;
 
 /// How long there is to answer, before the learner's own multiplier.
 ///
-/// One length for every turn, rather than one the conversation asks for. Ten
-/// seconds sounds generous and is not: the line has to be heard, the three
-/// replies read, and the one that answers it picked, and the whole of that is
-/// what is being timed.
-const answerWindowMs = 10000;
+/// One length for every set. Fifteen seconds sounds generous and is not: the
+/// three replies are only shown once the line has ended, so they are read
+/// inside the window, and a reply is twelve to fifteen words.
+const answerWindowMs = 15000;
 
 /// The bands the window is cut into. They are marked on the gauge, and each
 /// one is worth ten seeds more than the one below it, so what a reply is

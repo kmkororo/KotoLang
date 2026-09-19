@@ -12,54 +12,21 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kotolang/domain/importer.dart';
-import 'package:kotolang/domain/scene_import.dart';
+import 'package:kotolang/domain/scene.dart';
+import 'package:kotolang/domain/set_import.dart';
 
-/// A scenes reply of [n] conversations, shaped exactly as the prompt asks.
-String scenesReply(int n) {
-  final scenes = [
-    for (var i = 0; i < n; i++)
-      {
-        'title': 'Moving a deadline $i',
-        'title_native': '締め切りをずらす $i',
-        'situation': 'meetings',
-        'setting_native': '午後のオフィスで、同僚から。',
-        'window_ms': 2000 + i * 100,
-        'turns': [
-          {
-            'type': 'keyword',
-            'line': 'The handover is on Thursday, so I need the file the night before $i.',
-            'keyWord': 'Thursday',
-            'confusable': 'Tuesday',
-            'replies': [
-              {'text': 'Thursday — I will have it ready the evening before.', 'correct': true},
-              {'text': 'Got it, Tuesday. I will finish over the weekend.', 'correct': false},
-              {'text': 'Any chance of another day? That week is full.', 'correct': false},
-            ],
-            'restate': 'It is the Thursday handover, so the file has to be in the night before.',
-            'translations': {
-              'line': '引き継ぎは木曜なので、前の晩までにファイルが要ります。',
-              'replies': [
-                '木曜ですね。前の晩までに用意します。',
-                '火曜ですね。週末に仕上げます。',
-                '別の日にできますか。その週は埋まっています。',
-              ],
-            },
-          },
-        ],
-      }
-  ];
-  return jsonEncode({
-    'schema_version': '4.0',
-    'type': 'scenes',
-    'native_language': 'Japanese',
-    'scenes': scenes,
-  });
-}
+import 'fixtures.dart' show pack, scene;
+
+/// A reply of [n] sets, shaped exactly as the prompt asks.
+String scenesReply(int n) => pack([for (var i = 0; i < n; i++) scene('Moving a deadline $i')]);
+
+List<Scene> normaliseScenes(Map<String, dynamic> data) =>
+    normaliseSets(data, uiLanguage: 'ja').sets;
 
 int scenesIn(String raw) {
   final ex = extractJson(raw);
   if (!ex.ok) return 0;
-  return normaliseScenes(ex.data!).scenes.length;
+  return normaliseScenes(ex.data!).length;
 }
 
 void main() {
@@ -68,7 +35,7 @@ void main() {
       final ex = extractJson(scenesReply(3));
       expect(ex.ok, isTrue);
       expect(ex.repaired, isFalse);
-      expect(normaliseScenes(ex.data!).scenes, hasLength(3));
+      expect(normaliseScenes(ex.data!), hasLength(3));
     });
 
     test('a reply cut off mid-conversation still yields the ones before it', () {
@@ -77,30 +44,27 @@ void main() {
       final ex = extractJson(cut);
       expect(ex.ok, isTrue, reason: 'what arrived is worth keeping');
       expect(ex.repaired, isTrue, reason: 'and the learner is told it was cut');
-      final kept = normaliseScenes(ex.data!).scenes.length;
+      final kept = normaliseScenes(ex.data!).length;
       expect(kept, greaterThan(0));
       expect(kept, lessThan(5));
     });
 
     test('a cut inside a string drops that conversation, not half of one', () {
       final whole = scenesReply(4);
-      final at = whole.indexOf('The handover is on Thursday') + 12;
+      final at = whole.indexOf('The handover has moved') + 12;
       final ex = extractJson(whole.substring(0, at));
       if (ex.ok) {
-        for (final s in normaliseScenes(ex.data!).scenes) {
-          expect(s.turns, isNotEmpty);
-          for (final t in s.turns) {
-            expect(t.replies, hasLength(3));
-            expect(t.line, isNotEmpty);
-          }
+        for (final s in normaliseScenes(ex.data!)) {
+          expect(s.set!.reply.options, hasLength(3));
+          expect(s.set!.partner.text, isNotEmpty);
         }
       }
     });
 
     test('a cut before any conversation arrives is reported, not accepted', () {
       final whole = scenesReply(2);
-      final ex = extractJson(whole.substring(0, whole.indexOf('"scenes"') + 12));
-      expect(ex.ok && normaliseScenes(ex.data!).scenes.isNotEmpty, isFalse);
+      final ex = extractJson(whole.substring(0, whole.indexOf('"items"') + 12));
+      expect(ex.ok && normaliseScenes(ex.data!).isNotEmpty, isFalse);
     });
 
     test('an unclosed code fence is still read', () {

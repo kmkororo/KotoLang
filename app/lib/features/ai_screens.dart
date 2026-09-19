@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app.dart';
 import '../core/l10n/languages.dart';
 import '../data/builtin_scenes.dart';
+import '../data/repository.dart' show SceneOutcome;
 import '../domain/field.dart';
 import '../domain/models.dart';
 import '../domain/prompts.dart' as prompts;
@@ -540,15 +541,24 @@ class _AiReplyScreenState extends ConsumerState<AiReplyScreen> {
       final out = await repo.importScenes(_paste.text, uiLanguage: _lang, field: field);
       if (!mounted) return;
       setState(() => _busy = false);
+      // What was refused is shown with why, and can be sent back to the AI
+      // to be mended; the mended reply is pasted right here.
+      if (out.rejected.isNotEmpty || out.warnings.isNotEmpty) await _explain(out);
+      if (!mounted) return;
       if (!out.ok) {
         setState(() {
           _showBox = true;
           _error = out.shortOf > 0
               ? s.t('sceneAddTooDear', {'n': out.shortOf})
-              : out.errors.contains('not a scenes reply')
-                  ? s.t('scenePackNotScenes')
-                  : s.t('importFailedHint');
+              : out.errors.contains('old format')
+                  ? s.t('setsOldFormat')
+                  : out.errors.contains('not a scenes reply')
+                      ? s.t('scenePackNotScenes')
+                      : out.rejected.isNotEmpty
+                          ? null
+                          : s.t('importFailedHint');
         });
+        if (out.rejected.isNotEmpty) _paste.clear();
         return;
       }
       if (out.spent > 0) {
@@ -557,15 +567,12 @@ class _AiReplyScreenState extends ConsumerState<AiReplyScreen> {
       _paste.clear();
       if (!mounted) return;
       ref.invalidate(allScenesProvider);
-      showToast(
-        context,
-        out.rejected.isEmpty
-            ? s.t('scenesImported', {'n': out.scenes})
-            : '${s.t('scenesImported', {'n': out.scenes})} · ${s.t('packRejected', {
-                    'n': out.rejected.length,
-                    'reasons': out.rejected.map((r) => r.title).join(', ')
-                  })}',
-      );
+      showToast(context, s.t('scenesImported', {'n': out.scenes}));
+      // Some were refused: stay, so the mended reply can be pasted here.
+      if (out.rejected.isNotEmpty) {
+        setState(() => _showBox = true);
+        return;
+      }
     }
     if (!mounted) return;
     if (!_shared) {
@@ -599,6 +606,61 @@ class _AiReplyScreenState extends ConsumerState<AiReplyScreen> {
     } else {
       Navigator.popUntil(context, (r) => r.isFirst);
     }
+  }
+
+  /// What the reply came to, where it was less than everything: the sets
+  /// that were refused, each with why, and a way to have them mended.
+  Future<void> _explain(SceneOutcome out) async {
+    final s = ref.read(stringsProvider);
+    final repo = ref.read(repositoryProvider);
+    final theme = Theme.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(out.rejected.isEmpty
+            ? s.t('setsWarningTitle')
+            : s.t('setsRejectedTitle', {'n': out.rejected.length})),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (out.warnings.contains('english summaries')) ...[
+                Text(s.t('setsEnglishWarning'), style: theme.textTheme.bodyMedium),
+                const SizedBox(height: 10),
+              ],
+              if (out.rejected.isNotEmpty) ...[
+                Text(s.t('setsRejectedHint'), style: theme.textTheme.bodySmall),
+                const SizedBox(height: 8),
+              ],
+              for (final r in out.rejected) ...[
+                Text(r.title, style: theme.textTheme.titleSmall),
+                Text(r.reason,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.error)),
+                const SizedBox(height: 8),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.t('setsDoneButton')),
+          ),
+          if (out.rejected.isNotEmpty)
+            FilledButton(
+              onPressed: () async {
+                final text = await repo.fixPromptText(uiLanguage: _lang);
+                if (text != null) await Clipboard.setData(ClipboardData(text: text));
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) showToast(context, s.t('setsFixCopied'));
+              },
+              child: Text(s.t('setsFixButton')),
+            ),
+        ],
+      ),
+    );
   }
 
   @override

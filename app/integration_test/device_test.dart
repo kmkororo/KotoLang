@@ -21,7 +21,7 @@ import 'package:kotolang/data/repository.dart';
 import 'package:kotolang/domain/ladder.dart';
 import 'package:kotolang/features/scene_screen.dart';
 
-import '../test/fixtures.dart' show pack, scene, turn;
+import '../test/fixtures.dart' show pack, scene;
 
 /// Pumps in real time until [f] is on screen. `pumpAndSettle` cannot be used
 /// here: the window is a running animation, so the screen never settles while
@@ -42,7 +42,7 @@ Future<void> waitFor(
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  final en = S('en');
+  final ja = S('ja');
 
   testWidgets('the device speaks English, at every rate the ladder asks for',
       (tester) async {
@@ -68,6 +68,40 @@ void main() {
     }
   });
 
+  testWidgets('the engine says where it is, word by word, and when it has finished',
+      (tester) async {
+    final speech = SpeechService();
+    await speech.init();
+    const line = "Morning. Just so you know, the big meeting room on the fourth floor is "
+        "closed today because they're fixing the air conditioning. Your two o'clock "
+        'with the design team has moved to the small room on the second floor.';
+    final words = SpeechService.tokens(line);
+    final heard = <int>[];
+    final at = <int>[];
+    final start = DateTime.now();
+    final done = await speech.say(line, onWord: (i) {
+      heard.add(i);
+      at.add(DateTime.now().difference(start).inMilliseconds);
+    });
+    final took = DateTime.now().difference(start).inMilliseconds;
+    debugPrint('WORDS ${words.length} heard ${heard.length} in ${took}ms');
+    debugPrint('WORD TIMES ${[for (var i = 0; i < heard.length; i++) '${words[heard[i]].word}@${at[i]}'].join(' ')}');
+    expect(done, isTrue, reason: 'said to the end');
+    expect(heard, isNotEmpty, reason: 'the engine reports no word boundaries');
+    expect(heard.length, greaterThan(words.length * 0.8),
+        reason: 'most words are reported');
+
+    // Stopped part-way, it says so.
+    final cut = speech.say(line);
+    await tester.pump(const Duration(milliseconds: 800));
+    await speech.stop();
+    expect(await cut, isFalse, reason: 'a line cut short is not a line heard');
+
+    final pair = speech.pair();
+    debugPrint('VOICES partner=${pair.partner?.name} you=${pair.you?.name} '
+        'pitch ${pair.partnerPitch}/${pair.youPitch}');
+  });
+
   testWidgets('the on-device database keeps a conversation and an answer',
       (tester) async {
     // The app's own file-backed database, not an in-memory one.
@@ -77,10 +111,7 @@ void main() {
     await repo.factoryReset(keepLanguage: false);
 
     final out = await repo.importScenes(
-        pack([
-          scene('Moving a deadline'),
-          scene('A visitor at three', turns: [turn(), turn(type: 'polarity')]),
-        ]),
+        pack([scene('Moving a deadline'), scene('A visitor at three')]),
         uiLanguage: 'en',
         field: 'work');
     expect(out.ok, isTrue, reason: out.errors.join(', '));
@@ -88,7 +119,7 @@ void main() {
 
     final stored = await repo.scenes();
     expect(stored, hasLength(2));
-    expect(stored.map((s) => s.turns.length).toList()..sort(), [1, 2]);
+    expect(stored.every((s) => s.playable), isTrue);
 
     final id = stored.first.id;
     await repo.recordTurn(sceneId: id, turn: 0, correct: true);
@@ -103,45 +134,52 @@ void main() {
     await repo.factoryReset(keepLanguage: false);
   });
 
-  testWidgets('a conversation played on the device records a real answer',
+  testWidgets('a set played on the device hides the line while it is said',
       (tester) async {
     final db = AppDatabase();
     final repo = Repository(db);
     addTearDown(db.close);
 
     await repo.factoryReset(keepLanguage: false);
-    await repo.saveUiLanguage('en');
+    await repo.saveUiLanguage('ja');
     await repo.importScenes(pack([scene('Moving a deadline')]),
-        uiLanguage: 'en', field: 'work');
+        uiLanguage: 'ja', field: 'work');
     final s = (await repo.scenes()).single;
-    final right = s.turns.first.replies[s.turns.first.answer].text;
+    final set = s.set!;
+    final right = set.reply.options[set.reply.answer];
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [databaseProvider.overrideWithValue(db)],
-        child: MaterialApp(home: SceneScreen(scene: s)),
+        child: MaterialApp(home: SceneScreen(queue: [SetCard(s)])),
       ),
     );
     await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text(ja.t('setListenButton')));
+    await tester.pump(const Duration(milliseconds: 1500));
 
-    // The replies are readable before anything is said — that is the point of
-    // the screen, and it has to hold on a real device too.
-    expect(find.text(right), findsOneWidget);
-    expect(find.text(s.turns.first.line), findsNothing,
-        reason: 'the line is never shown before it has been answered');
+    // While they speak: no words on screen, and nothing to choose yet.
+    expect(find.text(set.partner.text), findsNothing);
+    expect(find.text(right), findsNothing);
+    expect(find.text(ja.t('setSpeakingTitle', {'name': set.partnerName})), findsOneWidget);
 
-    await tester.tap(find.text(en.t('scenePlay')));
-
-    // Speaking takes as long as the engine takes; the window opens after it.
-    await waitFor(tester, find.text(en.t('sceneYourTurn')));
+    // The replies come only once the engine says the line is over.
+    await waitFor(tester, find.text(ja.t('setReplyTitle')));
     await tester.tap(find.text(right));
+    await waitFor(tester, find.text(ja.t('setSayButton')));
+    expect(find.text(set.partner.text), findsOneWidget, reason: 'opened once answered');
 
-    await waitFor(tester, find.text('1 / 1'));
+    await tester.tap(find.text(ja.t('setSayButton')));
+    await waitFor(tester, find.text(ja.t('setPredictTitle', {'name': set.partnerName})));
+    await tester.tap(find.text(set.predict.options[set.predict.answer]));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, ja.t('setListenButton')));
+    await waitFor(tester, find.text(ja.t('setPredictHit')));
 
     final result = (await repo.turnResults()).single;
-    expect(result.sceneId, s.id);
     expect(result.correct, isTrue);
-    expect(result.review, isFalse);
+    expect(result.inWindow, isTrue);
+    expect((await repo.predictResults()).single.correct, isTrue);
 
     await repo.factoryReset(keepLanguage: false);
   });

@@ -9,68 +9,66 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kotolang/domain/prompts.dart';
+import 'package:kotolang/domain/set_prompts.dart';
 
 void main() {
-  group('the conversations prompt', () {
+  group('the sets prompt', () {
+    String p0({String lang = 'ja'}) => setsPrompt(uiLanguage: lang, batch: 'b_test');
+
     test('carries the rule the whole exercise rests on', () {
-      final p = scenesPrompt(uiLanguage: 'ja');
-      // A reply that gives itself away turns listening practice into reading
-      // practice, and nothing in the app can tell afterwards which it was.
-      expect(p, contains('only the sound of the line may'));
-      expect(p, contains('Hide the line.'));
-      // The three tests that two trials of the prompt had to be rewritten for.
-      expect(p, contains('The pair must sound alike'));
-      expect(p, contains('The line must not contain the other word'));
-      expect(p, contains('Swapping them must still make sense'));
-      // And the two substitutions that stop invented colleagues and brands.
+      final p = p0();
+      expect(p, contains('EXACTLY ONE OPTION FITS'));
+      expect(p, contains('contradict a concrete fact'));
+      expect(p, contains('If you cannot write the reason'));
+      expect(p, contains('already answered'));
+      // The two substitutions that stop invented colleagues and brands.
       expect(p, contains('People are roles, never names'));
       expect(p, contains('Tools are kinds, never products'));
     });
 
     test('asks for the shape the importer actually reads', () {
-      final p = scenesPrompt(uiLanguage: 'ja', scenes: 5);
-      expect(p, contains('"schema_version": "4.0"'));
-      expect(p, contains('5 conversations'));
-      expect(p, contains('1 to 5 turns'));
-      for (final key in ['keyword', 'polarity', 'multiFact', 'windowMs']) {
+      final p = p0();
+      expect(p, contains('"schema_version": "$setsSchemaVersion"'));
+      expect(p, contains('"type": "replyPredict"'));
+      expect(p, contains('"batch": "b_test"'));
+      expect(p, contains('$setsPerReply sets'));
+      expect(p, contains('50 to 60 words'));
+      expect(p, contains('20 to 30 words'));
+      for (final key in ['partnerName', 'paraphrase', 'stress', 'why', 'trap', 'predict',
+        'response', 'keyword', 'polarity', 'multiFact']) {
         expect(p, contains(key), reason: key);
       }
-      expect(p, contains('missedSlot'),
-          reason: 'a wrong reply has to say which fact it dropped');
-      expect(p, contains('Every line is a question'));
-      expect(p, isNot(contains('restate')),
-          reason: 'the same line is replayed now, so there is nothing to rephrase');
+      expect(p, contains('continue'), reason: 'a long reply can be split');
     });
 
     test('names the learner’s language, and never leaves it as a placeholder', () {
-      expect(scenesPrompt(uiLanguage: 'ja'), contains('Japanese'));
-      expect(scenesPrompt(uiLanguage: 'es'), contains('Spanish'));
-      expect(scenesPrompt(uiLanguage: 'es'), isNot(contains('Japanese')));
-      expect(scenesPrompt(uiLanguage: 'zz'), contains('English'),
+      expect(p0(), contains('Japanese'));
+      expect(p0(lang: 'es'), contains('Spanish'));
+      expect(p0(lang: 'es'), isNot(contains('Japanese')));
+      expect(p0(lang: 'zz'), contains('English'),
           reason: 'an unknown code falls back rather than naming nothing');
     });
 
     test('asks for no difficulty at all', () {
-      // The ladder is what makes a turn hard. If the prompt also pitched the
-      // sentences, two things would be moving one dial and the tree would
-      // grow on a claim nothing measured.
-      final p = scenesPrompt(uiLanguage: 'ja');
+      // The ladder is what makes a set hard. If the prompt also pitched the
+      // sentences, two things would be moving one dial.
+      final p = p0();
       for (final word in ['EASY', 'harder', 'Difficulty', 'difficulty']) {
         expect(p, isNot(contains(word)), reason: word);
       }
     });
 
     test('says nothing about the learner that it was not told', () {
-      final bare = scenesPrompt(uiLanguage: 'ja');
+      final bare = p0();
       expect(bare, isNot(contains('Age group')));
       expect(bare, isNot(contains('What they do')));
-      expect(bare, isNot(contains('HOW THEY HAVE BEEN DOING')),
-          reason: 'a first set has no results to report');
-      expect(bare, isNot(contains('CONVERSATIONS THEY ALREADY HAVE')));
-      expect(bare, isNot(contains('WHAT THEY KEEP MISHEARING')));
+      expect(bare, isNot(contains('HOW THEY HAVE BEEN DOING')));
+      expect(bare, isNot(contains('SITUATIONS THEY ALREADY HAVE')));
+      expect(bare, isNot(contains('WHAT THEY RECENTLY MISHEARD')));
 
-      final full = scenesPrompt(
+      final full = setsPrompt(
         uiLanguage: 'ja',
+        batch: 'b',
         ageBand: 'in their thirties',
         roles: const ['software engineer'],
         priorities: const ['meetings'],
@@ -85,16 +83,19 @@ void main() {
       expect(full, contains('Moving a deadline'));
       expect(full, contains('the handover is on Thursday'));
       expect(full, contains('70% right'));
-      expect(full, contains('40% caught on the first hearing'));
+      expect(full, contains('40% right on the first hearing'));
     });
+  });
 
-    test('the numbers it reports are the ones the app records', () {
-      // Right, and right on one hearing inside the window. Not "gist" and
-      // "reply" — two measures this app stopped keeping.
-      final p = scenesPrompt(
-          uiLanguage: 'ja', recent: (rightPct: 55, firstTimePct: 20, turns: 44));
-      expect(p, contains('last 44 turns'));
-      expect(p, isNot(contains('gist')));
+  group('the fix prompt', () {
+    test('hands back each refused set with what is wrong, in the same batch', () {
+      final p = setsFixPrompt(uiLanguage: 'ja', batch: 'b9', rejected: [
+        (raw: {'scene': 'Broken one'}, reasons: ['reply.why is empty for wrong option 2']),
+      ]);
+      expect(p, contains('Broken one'));
+      expect(p, contains('reply.why is empty for wrong option 2'));
+      expect(p, contains('"batch": "b9"'));
+      expect(p, contains('Japanese'));
     });
   });
 

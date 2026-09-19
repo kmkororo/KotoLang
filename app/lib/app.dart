@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/feel.dart';
 import 'core/l10n/languages.dart';
 import 'core/l10n/strings.dart';
 import 'core/share_intake.dart';
@@ -42,6 +43,10 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 final repositoryProvider = Provider<Repository>((ref) => Repository(ref.watch(databaseProvider)));
 
 final speechProvider = Provider<SpeechService>((ref) => SpeechService());
+
+/// What tells a question the listening was cut short. One for the app, since
+/// the platform side is one.
+final audioGuardProvider = Provider<AudioGuard>((ref) => AudioGuard());
 
 /// Everything the shell needs before it can decide what to show.
 class Boot {
@@ -153,6 +158,15 @@ final sceneResultsProvider = FutureProvider.autoDispose<List<TurnResult>>(
 final skillStatsProvider = FutureProvider.autoDispose<SkillStats>((ref) async {
   final results = await ref.watch(sceneResultsProvider.future);
   return skillStats(results, today: today());
+});
+
+/// How the predictions have gone. Refreshed whenever the replies are, since
+/// the two are written down together.
+final predictStatsProvider =
+    FutureProvider.autoDispose<({Rate all, Rate week})>((ref) async {
+  await ref.watch(sceneResultsProvider.future);
+  final predictions = await ref.watch(repositoryProvider).predictResults();
+  return predictStats(predictions, today: today());
 });
 
 /// Strings for the current language.

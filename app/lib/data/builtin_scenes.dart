@@ -1,40 +1,28 @@
-/// The conversations that ship with the app, so there is something to do
-/// before the first trip to the learner's own AI.
+/// The sets that ship with the app, so there is something to do before the
+/// first trip to the learner's own AI.
 ///
-/// They are samples, and they are meant to be outgrown: the tree grows leaves
-/// on them but never flowers. They are not rows in the database; they are
-/// merged in at read time for the current language, so switching language
-/// switches the words while every result and review, keyed by the same ids,
-/// stays where it was.
+/// They are samples, and they are meant to be outgrown: the tree counts them
+/// but never flowers on them. They are not rows in the database; they are
+/// built at read time for the current language, so switching language
+/// switches what is read about them while every result and review, keyed by
+/// the same ids, stays where it was.
 ///
-/// A language with no overlay is not a language with no samples. The English
-/// is in `scenes/base.dart` and is the same for everyone; an overlay only
-/// adds the glosses read *after* a turn has been answered. Missing them costs
-/// a beginner something, but far less than having nothing to play — and the
-/// translation rung of the ladder takes those glosses away in the end anyway.
+/// A language with no words of its own for a sample reads the English ones.
 library;
 
 import '../domain/field.dart';
 import '../domain/scene.dart';
-import 'scenes/base.dart';
-import 'scenes/overlay.dart';
-import 'scenes/overlay_ja.dart';
+import 'sets/samples.dart';
 
-/// The languages whose samples have been translated. Everything else falls
-/// through to English.
-const _overlays = <String, Map<String, SceneText>>{
-  'ja': overlayJa,
-};
-
-/// Cached per language: the merge is pure, the sources are constants, and
+/// Cached per language: the build is pure, the sources are constants, and
 /// home asks for this on every rebuild.
 final _cache = <String, List<Scene>>{};
 
-/// Every sample, in [lang]. [interests] is accepted so a caller can ask for
-/// the fields the learner chose to come first; the rest follow in their usual
-/// order, so nothing is hidden by not having been chosen.
+/// Every sample, in [lang]. [interests] puts the fields the learner chose
+/// first; the rest follow in their usual order, so nothing is hidden by not
+/// having been chosen.
 List<Scene> builtinScenes(String lang, {List<String> interests = const []}) {
-  final all = _cache.putIfAbsent(lang, () => _merged(lang));
+  final all = _cache.putIfAbsent(lang, () => [for (final s in sampleSets) _build(s, lang)]);
   if (interests.isEmpty) return all;
   final wanted = interests.toSet();
   return [
@@ -45,82 +33,62 @@ List<Scene> builtinScenes(String lang, {List<String> interests = const []}) {
   ];
 }
 
-List<Scene> _merged(String lang) {
-  final words = _overlays[lang];
-  if (words == null) return baseScenes;
-  return [for (final s in baseScenes) _dress(s, words[s.id])];
-}
-
-/// Puts one language's words onto one conversation. A conversation the
-/// overlay does not mention, or mentions with the wrong number of turns, is
-/// left in English rather than half-translated.
-Scene _dress(Scene scene, SceneText? text) {
-  if (text == null || text.turns.length != scene.turns.length) return scene;
-  return Scene(
-    id: scene.id,
-    title: scene.title,
-    titleNative: text.title,
-    situation: scene.situation,
-    settingNative: text.setting,
-    windowMs: scene.windowMs,
-    turns: [
-      for (var i = 0; i < scene.turns.length; i++)
-        _dressTurn(scene.id, i, scene.turns[i], text.turns[i]),
-    ],
-    source: scene.source,
-    realmId: scene.realmId,
-    createdAt: scene.createdAt,
+Scene _build(SampleSet s, String lang) {
+  final t = s.text[lang] ?? s.text['en']!;
+  // The translation is of English into the learner's language. Reading in
+  // English there is nothing to translate into.
+  final translate = lang != 'en' && s.text.containsKey(lang);
+  final set = ReplyPredict(
+    partnerName: t.partnerName,
+    partner: Spoken(
+      text: s.partner,
+      native: translate ? t.partnerNative : '',
+      stress: s.partnerStress,
+    ),
+    paraphrase: s.paraphrase,
+    reply: SetChoice(
+      options: s.replies,
+      answer: 0,
+      why: ['', ...t.replyWhy],
+    ).arranged(optionOrder(s.id, 0)),
+    trap: s.trap,
+    predict: SetChoice(
+      options: t.predict,
+      answer: 0,
+      why: ['', ...t.predictWhy],
+    ).arranged(optionOrder(s.id, 1)),
+    response: Spoken(
+      text: s.response,
+      native: translate ? t.responseNative : '',
+      stress: s.responseStress,
+    ),
+  );
+  return Scene.ofSet(
+    id: s.id,
+    label: t.scene,
+    set: set,
+    source: SceneSource.builtin,
+    realmId: s.field,
+    createdAt: 0,
   );
 }
 
-Turn _dressTurn(String sceneId, int index, Turn turn, TurnText text) {
-  // The overlay is written right-first, the way the English is authored, and
-  // the replies on the turn have already been moved. Putting the translations
-  // through the same shuffle is what keeps each one on its own reply.
-  final natives = text.replies.length == turn.replies.length
-      ? arrangeBy(optionOrder(sceneId, index), text.replies)
-      : null;
-  return Turn(
-    type: turn.type,
-    line: turn.line,
-    lineNative: text.line,
-    keyWord: turn.keyWord,
-    confusable: turn.confusable,
-    facts: turn.facts,
-    replies: natives == null
-        ? turn.replies
-        : [
-            for (var i = 0; i < turn.replies.length; i++)
-              Reply(
-                text: turn.replies[i].text,
-                native: natives[i],
-                correct: turn.replies[i].correct,
-                missedSlot: turn.replies[i].missedSlot,
-              )
-          ],
-  );
-}
+/// Where every sample happens, in English, so the learner's AI is told not
+/// to write them again.
+List<String> builtinTopics() => [for (final s in sampleSets) s.text['en']!.scene];
 
-/// The titles of every sample, in English, so the learner's AI is told not to
-/// write them again.
-List<String> builtinTopics() => [for (final s in baseScenes) s.title];
-
-/// The one conversation the walkthrough uses: the shortest of the work
-/// samples. The first thing anybody plays should end before they start
-/// wondering how long it goes on for.
+/// The one set the walkthrough uses: the first of the work samples.
 Scene? tutorialScene(String lang) {
-  final work = [
-    for (final s in builtinScenes(lang))
-      if (fieldOf(s) == 'work') s
-  ];
-  if (work.isEmpty) return null;
-  return work.reduce((a, b) => b.turns.length < a.turns.length ? b : a);
+  for (final s in builtinScenes(lang)) {
+    if (fieldOf(s) == 'work') return s;
+  }
+  return null;
 }
 
-/// Which of the four sample fields a built-in conversation belongs to.
+/// Which of the four sample fields a built-in set belongs to.
 String kindOf(String sceneId) {
-  for (final s in baseScenes) {
-    if (s.id == sceneId) return fieldOf(s);
+  for (final s in sampleSets) {
+    if (s.id == sceneId) return s.field;
   }
   return defaultFieldId;
 }

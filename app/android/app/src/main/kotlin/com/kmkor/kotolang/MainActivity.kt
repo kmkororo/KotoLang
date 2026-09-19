@@ -1,7 +1,15 @@
 package com.kmkor.kotolang
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.os.Build
 import android.os.Bundle
+import android.view.HapticFeedbackConstants
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -16,10 +24,32 @@ import io.flutter.plugin.common.MethodChannel
  *
  * The text is held until Dart asks for it, because a cold start delivers the
  * intent long before any Flutter code is listening.
+ *
+ * Two more small things live here because Flutter does not reach them, and
+ * neither needs a permission:
+ *
+ * - **What cuts the listening short.** Headphones pulled out, or the sound
+ *   taken by something else (a call, another app). A line half-heard on a
+ *   train is not a line missed, so the question stops and waits.
+ * - **The taps under the voice.** View haptics, which need no VIBRATE
+ *   permission, in the few kinds the platform offers.
  */
 class MainActivity : FlutterActivity() {
     private var pendingText: String? = null
     private var channel: MethodChannel? = null
+    private var audioChannel: MethodChannel? = null
+
+    private var noisy: BroadcastReceiver? = null
+    private var focusRequest: AudioFocusRequest? = null
+    private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        // Ducking for a notification is not an interruption; losing the sound
+        // is. A call or another app playing takes it.
+        if (change == AudioManager.AUDIOFOCUS_LOSS ||
+            change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT
+        ) {
+            audioChannel?.invokeMethod("interrupted", "focus")
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,7 +58,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).also { ch ->
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
+        channel = MethodChannel(messenger, CHANNEL).also { ch ->
             ch.setMethodCallHandler { call, result ->
                 when (call.method) {
                     // Consumed rather than peeked at: the same share must not be
@@ -42,6 +73,103 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+        audioChannel = MethodChannel(messenger, AUDIO_CHANNEL).also { ch ->
+            ch.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "hold" -> {
+                        holdAudio()
+                        result.success(null)
+                    }
+                    "release" -> {
+                        releaseAudio()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
+        MethodChannel(messenger, FEEL_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "feel" -> result.success(feel(call.arguments as? String ?: ""))
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    /** Listens for the two things that end a hearing, while one is going on. */
+    private fun holdAudio() {
+        if (noisy == null) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
+                        audioChannel?.invokeMethod("interrupted", "noisy")
+                    }
+                }
+            }
+            val filter = IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+            if (Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(receiver, filter)
+            }
+            noisy = receiver
+        }
+        if (focusRequest == null && Build.VERSION.SDK_INT >= 26) {
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                .setOnAudioFocusChangeListener(focusListener)
+                .build()
+            am.requestAudioFocus(request)
+            focusRequest = request
+        }
+    }
+
+    private fun releaseAudio() {
+        noisy?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (_: IllegalArgumentException) {
+            }
+        }
+        noisy = null
+        if (Build.VERSION.SDK_INT >= 26) {
+            focusRequest?.let {
+                (getSystemService(Context.AUDIO_SERVICE) as AudioManager).abandonAudioFocusRequest(it)
+            }
+        }
+        focusRequest = null
+    }
+
+    /**
+     * One tap of the kind asked for. A word is a light tap and a stressed word
+     * a heavy one; the verdicts use the platform's own confirm and reject
+     * where the phone has them.
+     */
+    private fun feel(kind: String): Boolean {
+        val constant = when (kind) {
+            "word" -> HapticFeedbackConstants.KEYBOARD_TAP
+            "stress" -> HapticFeedbackConstants.LONG_PRESS
+            "confirm" -> if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM
+                else HapticFeedbackConstants.VIRTUAL_KEY
+            "reject" -> if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.REJECT
+                else HapticFeedbackConstants.LONG_PRESS
+            else -> HapticFeedbackConstants.VIRTUAL_KEY
+        }
+        return window?.decorView?.performHapticFeedback(
+            constant,
+            HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
+        ) ?: false
+    }
+
+    override fun onDestroy() {
+        releaseAudio()
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -63,5 +191,7 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val CHANNEL = "kotolang/share"
+        private const val AUDIO_CHANNEL = "kotolang/audio"
+        private const val FEEL_CHANNEL = "kotolang/feel"
     }
 }

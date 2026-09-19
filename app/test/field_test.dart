@@ -156,11 +156,11 @@ void main() {
   test('the prompt names the field the scenes are for', () async {
     final realm = (await repo.addField('Cooking'))!;
     final work = await repo.scenesPromptText(uiLanguage: 'en', field: 'work');
-    expect(work, contains('This set is about: English at work'));
+    expect(work, contains('Every set in this reply happens in: English at work'));
     final cooking = await repo.scenesPromptText(uiLanguage: 'en', field: realm.id);
-    expect(cooking, contains('This set is about: Cooking'));
+    expect(cooking, contains('Every set in this reply happens in: Cooking'));
     final none = await repo.scenesPromptText(uiLanguage: 'en');
-    expect(none, isNot(contains('This set is about')));
+    expect(none, isNot(contains('Every set in this reply happens in')));
   });
 
   test('the feedback prompt carries the field, the score and what was missed', () async {

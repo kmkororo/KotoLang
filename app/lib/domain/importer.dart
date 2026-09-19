@@ -10,12 +10,12 @@ import 'dart:convert';
 import 'dart:math';
 
 import '../core/util.dart';
-import 'scene_import.dart';
+import 'set_import.dart';
 import 'models.dart';
 
 /// 1.0 is profile / material / audit; 2.0 added the debate pack. Both are
 /// accepted for ever — a learner's old material must keep importing.
-const supportedSchemas = ['1.0', '4.0'];
+const supportedSchemas = ['1.0', '4.0', '5.0'];
 const _levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
 // ---------------------------------------------------------------- 1. extract
@@ -311,16 +311,23 @@ ImportPreview previewImport(String raw) {
   final ex = extractJson(raw);
   if (!ex.ok) return ImportPreview.none;
 
+  // A reply of sets is counted as sets, whatever else it carries: it is the
+  // only kind of question there is now.
+  if (isSetsReply(ex.data!)) {
+    final n = normaliseSets(ex.data!, uiLanguage: 'en');
+    return ImportPreview(
+      ok: n.sets.isNotEmpty,
+      type: 'scenes',
+      scenes: n.sets.length,
+      repaired: ex.repaired,
+    );
+  }
+
   final v = validate(ex.data!);
   switch (v.type) {
+    // A reply of conversations in the shape of before cannot be taken.
     case 'scenes':
-      final n = normaliseScenes(ex.data!);
-      return ImportPreview(
-        ok: v.ok && n.scenes.isNotEmpty,
-        type: 'scenes',
-        scenes: n.scenes.length,
-        repaired: ex.repaired,
-      );
+      return ImportPreview.none;
     case 'profile':
       final n = normaliseProfile(ex.data!);
       return ImportPreview(

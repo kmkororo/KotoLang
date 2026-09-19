@@ -1,16 +1,15 @@
-/// The conversation screen, on the real widgets.
+/// The set screen, on the real widgets.
 ///
-/// The point of this screen is that a conversation reads as one conversation:
-/// each turn answered stays above the next, so the line being heard answers
-/// something the learner themselves said. These check that what is kept above
-/// is true — the words actually said, the reply actually chosen, and the one
-/// that would have fitted.
+/// One set: hear it, reply, hear the right reply said back, guess what comes
+/// next, hear it. These check what the learner is shown at each point — the
+/// replies only after the line, the line opened only after the reply, every
+/// wrong option with its reason — and that what is written down is what
+/// happened.
 ///
-/// There is no voice on the host, so these run the same way the screen runs
-/// on a phone with no English voice installed: the line is shown rather than
-/// said, and the window opens as soon as the button is pressed. That the line
-/// stays hidden when there *is* a voice is a thing only a device can answer,
-/// and `integration_test/device_test.dart` answers it.
+/// There is no voice on the host, so these run the way the screen runs on a
+/// phone with no English voice installed: the line is shown rather than said,
+/// and the window opens as soon as the button is pressed. That the line stays
+/// hidden while it is being said is a thing only a device can answer.
 library;
 
 import 'dart:math';
@@ -28,44 +27,25 @@ import 'package:kotolang/domain/progress_service.dart';
 import 'package:kotolang/domain/scene.dart';
 import 'package:kotolang/features/scene_screen.dart';
 
-import 'fixtures.dart' show pack, scene, turn;
+import 'fixtures.dart' show pack, scene;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  final en = S('en');
   final ja = S('ja');
 
   void tall(WidgetTester tester) {
-    tester.view.physicalSize = const Size(1000, 2600);
+    tester.view.physicalSize = const Size(1000, 2800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
   }
 
-  /// A turn whose replies say which turn they belong to, so a reply kept in
-  /// the conversation above cannot be confused with one still on offer below.
-  Map<String, dynamic> numbered(int n) => turn(
-        line: 'Line number $n.',
-        replies: [
-          {'text': 'Right answer to $n.', 'correct': true},
-          {'text': 'Wrong answer to $n.', 'correct': false},
-          {'text': 'Other answer to $n.', 'correct': false},
-        ],
-        natives: ['$n への正解。', '$n への誤答。', '$n への別の答え。'],
-      );
-
-  Future<(Repository, Scene)> open(WidgetTester tester, {int turns = 2}) async {
+  Future<(Repository, Scene)> open(WidgetTester tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     final repo = Repository(db, rng: Random(7));
     addTearDown(db.close);
     await repo.saveUiLanguage('ja');
-    await repo.importScenes(
-        pack([
-          scene('Moving a deadline',
-              turns: [for (var i = 0; i < turns; i++) numbered(i)])
-        ]),
-        uiLanguage: 'ja',
-        field: 'work');
+    await repo.importScenes(pack([scene('Moving a deadline')]), uiLanguage: 'ja', field: 'work');
     final s = (await repo.scenes()).single;
 
     await tester.pumpWidget(
@@ -74,192 +54,189 @@ void main() {
           databaseProvider.overrideWithValue(db),
           repositoryProvider.overrideWithValue(repo),
         ],
-        child: MaterialApp(home: SceneScreen(scene: s)),
+        child: MaterialApp(home: SceneScreen(queue: [SetCard(s)])),
       ),
     );
     await tester.pump();
     return (repo, s);
   }
 
-  /// Presses the button, then takes the reply at [i] while the window is open.
-  Future<void> answer(WidgetTester tester, Turn t, int i) async {
-    await tester.tap(find.text(en.t('scenePlay')));
+  Future<void> listen(WidgetTester tester) async {
+    await tester.tap(find.text(ja.t('setListenButton')));
     await tester.pump();
-    await tester.tap(find.text(t.replies[i].text));
+  }
+
+  Future<void> reply(WidgetTester tester, Scene s, int i) async {
+    await tester.tap(find.text(s.set!.reply.options[i]));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
   }
 
-  /// Presses for the next turn. Nothing moves on by itself: what is on
-  /// screen is the only account of what went wrong that the learner gets.
-  Future<void> moveOn(WidgetTester tester, {bool right = true}) async {
-    expect(find.text(en.t(right ? 'sceneCorrect' : 'sceneWrong')), findsOneWidget);
-    await tester.tap(find.text(ja.t('sceneNextButton')));
+  /// From an answered reply to the guess being asked for: the right reply is
+  /// said back first.
+  Future<void> sayIt(WidgetTester tester) async {
+    await tester.tap(find.text(ja.t('setSayButton')));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 800));
   }
 
-  testWidgets('the replies are readable before anything has been answered',
-      (tester) async {
+  testWidgets('the replies appear only once the line has been said', (tester) async {
     tall(tester);
-    final (_, s) = await open(tester, turns: 1);
-
-    for (final r in s.turns.first.replies) {
-      expect(find.text(r.text), findsOneWidget);
+    final (_, s) = await open(tester);
+    for (final o in s.set!.reply.options) {
+      expect(find.text(o), findsNothing, reason: 'nothing to read before hearing');
     }
-    expect(find.text(s.settingNative), findsOneWidget,
-        reason: 'the setting says where this is before a word is said');
+    await listen(tester);
+    for (final o in s.set!.reply.options) {
+      expect(find.text(o), findsOneWidget);
+    }
+    expect(find.text(ja.t('setReplyTitle')), findsOneWidget);
   });
 
-  testWidgets('the turn answered stays above the next one', (tester) async {
-    tall(tester);
-    final (_, s) = await open(tester);
-    final first = s.turns[0];
-
-    await answer(tester, first, first.answer);
-    await moveOn(tester);
-
-    // Their line, and the reply that went back, both still on screen.
-    expect(find.text(first.line), findsOneWidget);
-    expect(find.text(first.replies[first.answer].text), findsOneWidget);
-    // The next line picks up that reply rather than opening cold.
-    expect(find.text(ja.t('afterYourReply')), findsOneWidget);
-    expect(find.text(s.settingNative), findsNothing,
-        reason: 'the conversation above is the setting now');
-    // And the next turn is the one on offer below.
-    expect(find.text(s.turns[1].replies.first.text), findsOneWidget);
-  });
-
-  testWidgets('a turn gone wrong keeps both what was said and what fitted',
-      (tester) async {
-    tall(tester);
-    final (_, s) = await open(tester);
-    final first = s.turns[0];
-    final wrong = (first.answer + 1) % first.replies.length;
-
-    await answer(tester, first, wrong);
-    await moveOn(tester, right: false);
-
-    expect(find.text(first.replies[wrong].text), findsOneWidget,
-        reason: 'what they chose is not rubbed out');
-    expect(find.text(first.replies[first.answer].text), findsOneWidget,
-        reason: 'and the conversation above still has to read as English '
-            'that works');
-  });
-
-  testWidgets('what they heard is kept in their own language, on the band',
-      (tester) async {
-    tall(tester);
-    final (_, s) = await open(tester);
-    final first = s.turns[0];
-
-    await answer(tester, first, first.answer);
-    await moveOn(tester);
-
-    expect(find.text(ja.t('heardBand', {'text': first.lineNative})),
-        findsOneWidget);
-  });
-
-  testWidgets('the figures are named in the language of the interface',
-      (tester) async {
-    tall(tester);
-    await open(tester, turns: 1);
-
-    // A name on a figure is a label on the screen, so it follows the
-    // interface; the question inside the conversation stays English.
-    expect(find.text(ja.t('speakerOther')), findsOneWidget);
-    expect(find.text(ja.t('speakerYou')), findsOneWidget);
-    expect(find.text(en.t('sceneQ2')), findsOneWidget);
-  });
-
-  testWidgets('a window that closes waits, and the second hearing is asked for',
-      (tester) async {
-    tall(tester);
-    final (_, s) = await open(tester, turns: 1);
-    final first = s.turns.first;
-
-    // Let the window run out rather than answering.
-    await tester.tap(find.text(en.t('scenePlay')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: answerWindowMs + 100));
-
-    // Nothing starts on its own. A voice arriving while the learner is still
-    // working out what happened is heard as a new line they have already
-    // fallen behind on, so the clock stops and the offer waits to be taken.
-    expect(find.text(ja.t('sceneHearAgain')), findsOneWidget);
-    expect(find.text(ja.t('sceneRestateNote')), findsOneWidget);
-    expect(find.text(en.t('sceneAgain')), findsNothing);
-
-    // Waiting is waiting: however long they take, the offer is still there.
-    await tester.pump(const Duration(seconds: 5));
-    expect(find.text(ja.t('sceneHearAgain')), findsOneWidget);
-
-    // Asked for, it plays â the same line again, not another one.
-    await tester.tap(find.text(ja.t('sceneHearAgain')));
-    await tester.pump();
-    expect(find.text(en.t('sceneAgain')), findsOneWidget);
-    await tester.pump(const Duration(seconds: 1));
-
-    await tester.tap(find.text(first.replies[first.answer].text));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(find.text(ja.t('sceneRestateNote')), findsNothing,
-        reason: 'it is about what is coming, not about what happened');
-  });
-
-  testWidgets('a right answer pays, and the counter says so on the spot',
-      (tester) async {
-    tall(tester);
-    final (repo, s) = await open(tester, turns: 1);
-    final first = s.turns.first;
-
-    // The counter is there from the start, at nothing. It is what the seeds
-    // are flown at, so it has to be somewhere to aim before the first one is
-    // earned.
-    expect(find.text('0'), findsOneWidget);
-
-    await answer(tester, first, first.answer);
-    // The grains land over the flight, and the balance counts up with them.
-    await tester.pump(const Duration(milliseconds: 1600));
-
-    // The payment arrives after an await, so it needs a rebuild of its own.
-    // Without one the counter kept its old total and the seeds never flew —
-    // the screen was simply never told.
-    final paid = (await repo.loadProgress()).seeds;
-    expect(paid, greaterThan(0));
-    expect(find.text('$paid'), findsOneWidget, reason: 'the balance');
-    expect(find.text('+$paid'), findsNWidgets(2),
-        reason: 'beside the balance, and on the verdict');
-  });
-
-  testWidgets('a wrong answer pays nothing, and nothing is shown',
-      (tester) async {
-    tall(tester);
-    final (repo, s) = await open(tester, turns: 1);
-    final first = s.turns.first;
-
-    await answer(tester, first, (first.answer + 1) % first.replies.length);
-    expect((await repo.loadProgress()).seeds, 0);
-    expect(find.textContaining('+'), findsNothing);
-  });
-
-  testWidgets('every turn answered is written down, and the run is counted',
-
-
+  testWidgets('a right reply opens the line, and says why the others were wrong',
       (tester) async {
     tall(tester);
     final (repo, s) = await open(tester);
+    final set = s.set!;
+    await listen(tester);
+    await reply(tester, s, set.reply.answer);
 
-    await answer(tester, s.turns[0], s.turns[0].answer);
-    await moveOn(tester);
-    await answer(tester, s.turns[1], s.turns[1].answer);
-    await tester.tap(find.text(ja.t('sceneNextButton')));
+    expect(find.text(ja.t('setRight')), findsOneWidget);
+    expect(find.text(set.partner.text), findsOneWidget);
+    for (var i = 0; i < 3; i++) {
+      if (i == set.reply.answer) continue;
+      expect(find.text(set.reply.why[i]), findsOneWidget, reason: 'reason for option $i');
+    }
+    final r = (await repo.turnResults()).single;
+    expect(r.correct, isTrue);
+    expect(r.inWindow, isTrue);
+    expect((await repo.loadProgress()).seeds, greaterThanOrEqualTo(seedFloor));
+  });
+
+  testWidgets('a wrong reply is marked, pays nothing, and comes back tomorrow',
+      (tester) async {
+    tall(tester);
+    final (repo, s) = await open(tester);
+    final set = s.set!;
+    final wrong = (set.reply.answer + 1) % 3;
+    final before = (await repo.loadProgress()).seeds;
+    await listen(tester);
+    await reply(tester, s, wrong);
+
+    expect(find.text(ja.t('setWrong')), findsOneWidget);
+    expect(find.text(set.reply.why[wrong]), findsOneWidget);
+    expect((await repo.loadProgress()).seeds, before);
+    expect(await repo.reviews(), hasLength(1));
+  });
+
+  testWidgets('the right reply is said back, and a guess is put down and settled',
+      (tester) async {
+    tall(tester);
+    final (repo, s) = await open(tester);
+    final set = s.set!;
+    await listen(tester);
+    await reply(tester, s, set.reply.answer);
+    await sayIt(tester);
+
+    expect(find.text(ja.t('setPredictTitle', {'name': set.partnerName})), findsOneWidget);
+    // Nothing to hear until a guess is down.
+    final button = find.widgetWithText(FilledButton, ja.t('setListenButton'));
+    expect(tester.widget<FilledButton>(button).onPressed, isNull);
+
+    await tester.tap(find.text(set.predict.options[set.predict.answer]));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text(ja.t('setTentTag')), findsOneWidget, reason: 'put down, not given');
+    expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
 
-    final out = await repo.turnResults();
-    expect(out, hasLength(2));
-    expect(out.every((r) => r.correct), isTrue);
-    expect(find.text('2 / 2'), findsOneWidget);
+    final before = (await repo.loadProgress()).seeds;
+    await tester.tap(button);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text(set.response.text), findsOneWidget);
+    expect(find.text(ja.t('setPredictHit')), findsOneWidget);
+    expect(await repo.predictResults(), hasLength(1));
+    expect(await repo.turnResults(), hasLength(1), reason: 'the guess is not a reply');
+    expect((await repo.loadProgress()).seeds, before + predictSeeds);
+  });
+
+  testWidgets('a window that closes gives the line again, once, in other words',
+      (tester) async {
+    tall(tester);
+    final (repo, s) = await open(tester);
+    await listen(tester);
+    await tester.pump(const Duration(milliseconds: answerWindowMs + 100));
+    await tester.pump();
+
+    expect(find.text(ja.t('setRestateSub')), findsNothing,
+        reason: 'no voice, so it goes straight back to the window');
+    expect(find.text(s.set!.paraphrase), findsOneWidget);
+    expect(find.text(ja.t('setHearAgain')), findsNothing, reason: 'only once');
+
+    await tester.pump(const Duration(milliseconds: answerWindowMs + 100));
+    await tester.pump();
+    expect(find.text(ja.t('setTimeUp')), findsOneWidget);
+    final r = (await repo.turnResults()).single;
+    expect(r.correct, isFalse);
+  });
+
+  testWidgets('a right reply after the second hearing pays the least', (tester) async {
+    tall(tester);
+    final (repo, s) = await open(tester);
+    await listen(tester);
+    await tester.tap(find.text(ja.t('setHearAgain')));
+    await tester.pump();
+    final before = (await repo.loadProgress()).seeds;
+    await reply(tester, s, s.set!.reply.answer);
+    expect(find.text(ja.t('setFloorPill')), findsOneWidget);
+    expect((await repo.loadProgress()).seeds, before + seedFloor);
+    expect((await repo.turnResults()).single.inWindow, isFalse);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('a line cut off starts again, and nothing is counted', (tester) async {
+    tall(tester);
+    final (repo, s) = await open(tester);
+    await listen(tester);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(find.text(ja.t('setPausedTitle')), findsOneWidget);
+    expect(await repo.turnResults(), isEmpty);
+    await tester.pump(const Duration(milliseconds: answerWindowMs + 100));
+    expect(await repo.turnResults(), isEmpty, reason: 'the clock stopped');
+
+    await tester.tap(find.text(ja.t('setResume')));
+    await tester.pump();
+    expect(find.text(ja.t('setReplyTitle')), findsOneWidget);
+    await reply(tester, s, s.set!.reply.answer);
+    expect((await repo.turnResults()).single.inWindow, isTrue,
+        reason: 'the cut was not a second hearing');
+  });
+
+  testWidgets('the run ends on what the replies and the guesses came to',
+      (tester) async {
+    tall(tester);
+    final (_, s) = await open(tester);
+    final set = s.set!;
+    await listen(tester);
+    await reply(tester, s, set.reply.answer);
+    await sayIt(tester);
+    await tester.tap(find.text(set.predict.options[(set.predict.answer + 1) % 3]));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, ja.t('setListenButton')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text(ja.t('setPredictMiss')), findsOneWidget);
+
+    await tester.tap(find.text(ja.t('setToSummary')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text(ja.t('setSumReply')), findsOneWidget);
+    expect(find.text('1／0（0）'), findsOneWidget);
+    expect(find.text('0／1'), findsOneWidget);
+    expect(find.text(ja.t('setAgain')), findsOneWidget);
   });
 }

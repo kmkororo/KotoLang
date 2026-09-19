@@ -168,6 +168,7 @@ class SpeechService {
         _applied = want;
       }
       await _tts.setSpeechRate((rate * 0.5).clamp(0.1, 1.0));
+      await _tts.setPitch(1.0);
       // The engine takes a moment to open the audio route, and whatever is
       // said in that moment is lost. On the device the first word or two of
       // every line went missing — which in this app is often the word the
@@ -199,7 +200,97 @@ class SpeechService {
     return t.replaceAll(RegExp(r'\s*,\s*'), ' ');
   }
 
+  /// Bumped by every stop and every new line, so a line that was cut short
+  /// can tell it was.
+  int _gen = 0;
+
+  /// The words of [text] as the engine is given them, each with where it
+  /// starts. What the word taps and the bars on screen are counted over.
+  static List<({int start, String word})> tokens(String text) => [
+        for (final m in RegExp(r'\S+').allMatches(forSpeech(text)))
+          if (RegExp(r'[A-Za-z0-9]').hasMatch(m.group(0)!))
+            (start: m.start, word: m.group(0)!),
+      ];
+
+  /// Says [text] and waits until it has been said. True when it was said to
+  /// the end, false when it was stopped — the caller needs to know which,
+  /// because a line cut off by headphones coming out is not a line heard.
+  ///
+  /// [onWord] is told each word as the engine reaches it, by its index in
+  /// [tokens]. The engine says when it reaches a word; nothing here guesses
+  /// from a clock.
+  Future<bool> say(
+    String text, {
+    double rate = 1.0,
+    Voice? voice,
+    double pitch = 1.0,
+    void Function(int index)? onWord,
+  }) async {
+    if (!available || text.trim().isEmpty) return true;
+    final gen = ++_gen;
+    try {
+      await _tts.stop();
+      final want = voice ?? _chosen;
+      if (want != null && want.name != _applied?.name) {
+        await _applyVoice(want);
+        _applied = want;
+      }
+      await _tts.setSpeechRate((rate * 0.5).clamp(0.1, 1.0));
+      await _tts.setPitch(pitch);
+      final words = tokens(text);
+      var last = -1;
+      _tts.setProgressHandler((_, start, end, _) {
+        if (gen != _gen || onWord == null) return;
+        final at = start - _leadIn.length;
+        final i = words.indexWhere((w) => w.start + w.word.length > at);
+        if (i < 0 || i <= last) return;
+        last = i;
+        onWord(i);
+      });
+      final r = await _tts.speak('$_leadIn${forSpeech(text)}');
+      return gen == _gen && (r == 1 || r == null);
+    } catch (e) {
+      debugPrint('[KotoLang] say failed: $e');
+      return gen == _gen;
+    }
+  }
+
+  /// The two voices of a set, from what the learner chose ([partner], [you];
+  /// empty for the app's choice). Two different voices where the phone has
+  /// them; where it has one, or both were set to the same, one voice pitched
+  /// up for them and down for the learner, so the two can still be told
+  /// apart.
+  ///
+  /// Chosen by the app, a voice is taken in its on-device form where the
+  /// phone has one. A network voice reports each word as it is made rather
+  /// than as it is heard — on a test device the reports ran seconds ahead of
+  /// the sound — and the taps under the words are only worth anything if
+  /// they land on the words.
+  ({Voice? partner, Voice? you, double partnerPitch, double youPitch}) pair(
+      {String partner = '', String you = ''}) {
+    Voice? named(String n) => n.isEmpty ? null : _voices.where((v) => v.name == n).firstOrNull;
+    Voice? local(Voice? v) =>
+        v == null ? null : named(v.name.replaceAll('-network', '-local')) ?? v;
+    final p = named(partner) ?? local(_chosen ?? _voices.firstOrNull);
+    var y = named(you);
+    if (y == null && p != null) {
+      final region = p.locale.toLowerCase().replaceAll('_', '-');
+      final rest = _voices.where((v) => v.name != p.name).toList();
+      final onDevice = rest.where((v) => !v.name.contains('-network')).toList();
+      final others = onDevice.isNotEmpty ? onDevice : rest;
+      y = others
+              .where((v) => v.locale.toLowerCase().replaceAll('_', '-') == region)
+              .firstOrNull ??
+          others.firstOrNull;
+    }
+    if (y == null || p == null || y.name == p.name) {
+      return (partner: p, you: p, partnerPitch: 1.1, youPitch: 0.8);
+    }
+    return (partner: p, you: y, partnerPitch: 1.0, youPitch: 1.0);
+  }
+
   Future<void> stop() async {
+    _gen++;
     try {
       await _tts.stop();
     } catch (_) {}

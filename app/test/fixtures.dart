@@ -1,4 +1,4 @@
-/// Conversations to test with, in the shape the AI is asked for.
+/// Sets to test with, in the shape the AI is asked for.
 ///
 /// Shared rather than repeated, because every suite that touches material
 /// needs the same thing: a reply that would pass the importer, so what is
@@ -12,58 +12,65 @@ import 'package:kotolang/domain/ladder.dart';
 import 'package:kotolang/domain/models.dart';
 import 'package:kotolang/domain/scene.dart';
 
-/// One turn. The right reply is written first, as the prompt asks; the
+/// What the other person says, long enough to pass and carrying its facts.
+String partnerLine(String title) =>
+    '$title. The handover has moved to Thursday at three, and it will be in the '
+    'small room on the second floor instead of the usual one. Please bring the '
+    'printed report, not the draft from last week, and send the slides to the '
+    'whole team by noon so everyone has time to read them first.';
+
+/// One set. The right option is written first, as the prompt asks; the
 /// importer is what moves it.
-Map<String, dynamic> turn({
-  String type = 'keyword',
-  String line = 'The handover is on Thursday, so I need the file the night before.',
-  String keyWord = 'Thursday',
-  String confusable = 'Tuesday',
-  List<Map<String, dynamic>>? replies,
-  List<Map<String, dynamic>>? facts,
-  List<String>? natives,
+Map<String, dynamic> scene(
+  String title, {
+  String? text,
+  List<String>? replies,
+  List<String>? replyWhy,
+  int replyAnswer = 0,
+  List<String>? predictWhy,
+  List<String>? stress,
 }) =>
     {
-      'type': type,
-      'line': line,
-      'keyWord': keyWord,
-      'confusable': confusable,
-      'facts': ?facts,
-      'replies': replies ??
-          [
-            {'text': 'Thursday — ready the evening before.', 'correct': true},
-            {'text': 'Got it, Tuesday. I will finish over the weekend.', 'correct': false},
-            {'text': 'Any chance of another day? That week is full.', 'correct': false},
-          ],
-      'translations': {
-        'line': '引き継ぎは木曜なので、前の晩までにファイルが要ります。',
-        'replies': natives ??
-            const ['木曜ですね。前の晩までに用意します。', '火曜ですね。週末に仕上げます。', '別の日にできますか。'],
+      'type': 'replyPredict',
+      'scene': title,
+      'partnerName': '同僚',
+      'partner': {
+        'text': text ?? partnerLine(title),
+        'paraphrase': 'In other words, $title: Thursday at three, the small room on '
+            'floor two, the printed report, and the slides to everyone before twelve.',
+        'native': '$title。引き継ぎは木曜3時、2階の小部屋に変わりました。',
+        'stress': stress ?? const ['handover', 'thursday', 'three', 'small', 'second', 'printed', 'noon'],
+      },
+      'reply': {
+        'options': replies ??
+            const [
+              'Thursday at three on the second floor, with the printed report.',
+              "Tuesday at three in the usual room, with last week's draft.",
+              'Thursday at three, and I will send the slides tonight.',
+            ],
+        'answer': replyAnswer,
+        'why': replyWhy ?? const ['', '火曜ではなく木曜。場所は2階の小部屋', 'スライドは今夜ではなく正午まで'],
+        'trap': 'keyword',
+      },
+      'predict': {
+        'options': const ['お礼を言って、2階で会おうと言う', 'いつなのかをもう一度聞く', '場所はいつもの部屋だと言い直す'],
+        'answer': 0,
+        'why': predictWhy ?? const ['', '木曜3時と、こちらがもう答えている', '2階の小部屋に変わったと言っている'],
+      },
+      'response': {
+        'text': 'Thanks. See you on the second floor at three, and bring a pen as well.',
+        'native': 'ありがとう。3時に2階で。ペンも持ってきてね。',
+        'stress': const ['thanks', 'second', 'three'],
       },
     };
 
-/// One conversation. [turns] defaults to a single keyword turn.
-Map<String, dynamic> scene(
-  String title, {
-  List<Map<String, dynamic>>? turns,
-  String situation = 'meetings',
-  int? windowMs,
-}) =>
-    {
-      'title': title,
-      'title_native': '$title（日本語）',
-      'situation': situation,
-      'setting_native': '午後のオフィスで。',
-      'window_ms': ?windowMs,
-      'turns': turns ?? [turn(line: '$title — the handover is on Thursday.')],
-    };
-
 /// A whole reply, ready to paste.
-String pack(List<Map<String, dynamic>> scenes) => jsonEncode({
-      'schema_version': '4.0',
-      'type': 'scenes',
+String pack(List<Map<String, dynamic>> scenes, {String batch = ''}) => jsonEncode({
+      'schema_version': '5.0',
+      'type': 'replyPredict',
+      if (batch.isNotEmpty) 'batch': batch,
       'native_language': 'Japanese',
-      'scenes': scenes,
+      'items': scenes,
     });
 
 /// One field of the learner's life, as the database holds it. Open and with
@@ -79,34 +86,18 @@ Realm realm(String id, {bool unlocked = true}) => Realm(
       unlocked: unlocked,
     );
 
-/// A conversation as a domain object, already past the importer. [builtin]
-/// makes it one of the samples that ship with the app, which is the only
-/// thing that tells the two kinds apart.
+/// A set as a domain object, already past the importer. [builtin] makes it
+/// one of the samples that ship with the app, which is the only thing that
+/// tells the two kinds apart.
 Scene builtScene(
   String title, {
   bool builtin = false,
   String? field,
-  int turns = 1,
 }) =>
-    Scene(
+    Scene.ofSet(
       id: sceneId(title),
-      title: title,
-      titleNative: '$title（日本語）',
-      situation: 'meetings',
-      turns: [
-        for (var i = 0; i < turns; i++)
-          Turn(
-            type: TurnType.keyword,
-            line: '$title, line $i.',
-            keyWord: 'Thursday',
-            confusable: 'Tuesday',
-            replies: const [
-              Reply(text: 'Thursday it is.', correct: true),
-              Reply(text: 'Tuesday, got it.'),
-              Reply(text: 'Could it be sooner?'),
-            ],
-          ),
-      ],
+      label: title,
+      set: ReplyPredict.fromJson(scene(title)),
       source: builtin ? SceneSource.builtin : SceneSource.ai,
       realmId: field,
       createdAt: 0,

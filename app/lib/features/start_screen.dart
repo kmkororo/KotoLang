@@ -49,7 +49,7 @@ class StartOverviewScreen extends ConsumerWidget {
     if (sample == null) return;
     await Navigator.push<SceneRunResult>(
       context,
-      MaterialPageRoute(builder: (_) => SceneScreen(scene: sample, tutorial: true)),
+      MaterialPageRoute(builder: (_) => SceneScreen(queue: [SetCard(sample)])),
     );
     if (!context.mounted) return;
     // Home from here; the way to the learner's own AI is on it.
