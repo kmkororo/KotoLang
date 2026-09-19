@@ -1,7 +1,7 @@
 # Running KotoLang on a MacBook (iOS)
 
 Everything in `app/lib` is already shared with the Android build and is covered
-by 258 tests. What has never been compiled is the iOS half, because Xcode only
+by 189 tests. What has never been compiled is the iOS half, because Xcode only
 runs on macOS. This is the sequence from a clean Mac to a running iPhone app.
 
 ---
@@ -91,7 +91,7 @@ genuinely differs per device.
 ## 5. Run the tests
 
 ```bash
-flutter test                                   # 258 host tests, no device needed
+flutter test                                   # 189 host tests, no device needed
 flutter test integration_test/device_test.dart # on the connected iPhone
 ```
 
@@ -120,6 +120,43 @@ The archive lands in `build/ios/archive/`. Upload it with Xcode's Organizer or
 Apple ID can only sideload to your own device.
 
 ---
+
+## The set format on iOS (September 2026)
+
+The questions are now one set each: a long line heard with nothing on
+screen, a reply, a guess at their next line. Three things in that format
+reach below Flutter, and each has an iOS half in `ios/Runner/AppDelegate.swift`
+written to mirror `MainActivity.kt`. **None of it has been compiled yet** —
+it was written on Windows.
+
+| What | Android | iOS | Permission on iOS |
+|---|---|---|---|
+| Taps under the voice (`kotolang/feel`) | Vibrator, `VIBRATE` | Core Haptics, played for the same lengths | none |
+| Stopping when the sound is cut (`kotolang/audio`) | `ACTION_AUDIO_BECOMING_NOISY`, audio focus | `routeChangeNotification` (`.oldDeviceUnavailable`), `interruptionNotification` | none |
+| Word-by-word timing | `onRangeStart` | `willSpeakRangeOfSpeechString`, through `flutter_tts` | none |
+
+The channels are registered through a plugin registrar
+(`pluginRegistry.registrar(forPlugin: "KotoLangNative")`), because the app
+starts through `FlutterImplicitEngineDelegate` and has no root view
+controller to hand a messenger at launch.
+
+**Check these on the iPhone, in this order:**
+
+1. **It builds.** If Xcode stops in `AppDelegate.swift`, the Swift is the
+   first suspect: it has never met a compiler.
+2. **The line stays hidden while it is said**, and the replies appear when it
+   ends — not before, not seconds after. That is the completion event from
+   AVSpeechSynthesizer.
+3. **The bars move with the words.** `flutter test integration_test/device_test.dart`
+   prints `WORD TIMES`: every word with the millisecond it was reported. On
+   Android, on-device voices tracked the sound and network voices ran ahead.
+4. **A stressed word is felt, and a right answer is two taps.** Core Haptics
+   plays whatever the system's own haptics setting says.
+5. **Pull the headphones out mid-line**, and take a phone call mid-line: both
+   should stop the set with "音が途切れました" and a Resume button.
+6. **Their voice and yours differ.** With one English voice installed, yours
+   is pitched down instead. Downloading an Enhanced or Premium voice under
+   Settings → Accessibility → Spoken Content → Voices gives two real ones.
 
 ## What was fixed before this ever reached a Mac
 

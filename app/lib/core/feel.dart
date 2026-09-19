@@ -23,6 +23,13 @@ const feelRight = [60, 70, 110];
 const feelRestate = [60, 60, 60];
 const feelFinished = [40, 60, 40, 60, 40];
 
+/// Android and iOS each carry the native side of these two channels:
+/// `MainActivity.kt` and `AppDelegate.swift`.
+bool get _native =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS);
+
 class Feel {
   static const _channel = MethodChannel('kotolang/feel');
 
@@ -32,7 +39,7 @@ class Feel {
 
   Future<void> _buzz(List<int> pattern) async {
     if (!enabled) return;
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    if (_native) {
       try {
         await _channel.invokeMethod('vibrate', pattern);
         return;
@@ -87,7 +94,7 @@ class AudioGuard {
   Future<void> release() => _call('release');
 
   Future<void> _call(String method) async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    if (!_native) return;
     try {
       await _channel.invokeMethod(method);
     } catch (_) {}

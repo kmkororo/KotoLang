@@ -112,7 +112,9 @@ class SpeechService {
     if (l.startsWith('en-gb')) s += 150;
     if (n.contains('neural') || n.contains('natural')) s += 45;
     if (n.contains('google')) s += 35;
-    if (n.contains('enhanced') || n.contains('premium')) s += 30;
+    // Apple's: premium above enhanced above the compact default.
+    if (n.contains('premium')) s += 45;
+    if (n.contains('enhanced')) s += 30;
     if (n.contains('network')) s += 20;
     return s;
   }

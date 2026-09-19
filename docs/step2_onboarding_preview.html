@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>予測ステップと初回説明</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Zen+Old+Mincho:wght@700&display=swap">
+<style>
+  :root {
+    --ground: #E9ECF3; --paper: #F7F8FC; --ink: #1A1C22; --ink2: #5A5F6B; --ink3: #8B909C;
+    --rule: #D5D9E3; --accent: #445E91; --accent-ink: #FFFFFF;
+    /* the app's own colours, fixed: these are screenshots, not page chrome */
+    --app-bg: #F9F9FF; --app-sheet: #FFFFFF; --app-ink: #1A1B20; --app-ink2: #5D5F67;
+    --app-line: #C6C8D2; --app-you: #2E3036; --app-primary: #445E91;
+    --ok: #3F9D5A; --tent: #3F7FD9; --err: #BA1A1A;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #111318; --paper: #1A1D24; --ink: #E6E8EF; --ink2: #AEB3C0; --ink3: #7E8494;
+      --rule: #2C313C; --accent: #AFC6FF; --accent-ink: #10203F;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #111318; --paper: #1A1D24; --ink: #E6E8EF; --ink2: #AEB3C0; --ink3: #7E8494;
+    --rule: #2C313C; --accent: #AFC6FF; --accent-ink: #10203F;
+  }
+  body { margin: 0;
+    background: var(--ground); color: var(--ink);
+    font-family: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+    line-height: 1.7; padding-inline: 16px; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-block: 32px 64px; }
+  h1 { font-family: "Zen Old Mincho", serif; font-size: clamp(24px, 4vw, 34px); margin: 0 0 8px; text-wrap: balance; letter-spacing: .03em; }
+  .lede { color: var(--ink2); margin: 0 0 28px; max-width: 66ch; font-size: 14.5px; }
+  h2 { font-family: "Zen Old Mincho", serif; font-size: 21px; margin: 0 0 4px; letter-spacing: .03em; }
+  .qline { color: var(--ink2); font-size: 14px; margin: 0 0 18px; max-width: 70ch; }
+  section { background: var(--paper); border: 1px solid var(--rule); border-radius: 18px; padding: 22px 20px 26px; margin-bottom: 26px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; align-items: start; }
+  .opt { display: flex; flex-direction: column; gap: 10px; }
+  .optname { display: flex; align-items: baseline; gap: 8px; }
+  .optname b { font-size: 16px; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: var(--accent); color: var(--accent-ink); font-weight: 700; letter-spacing: .04em; }
+  .notes { margin: 0; padding-left: 18px; color: var(--ink2); font-size: 13px; }
+  .notes li { margin: 2px 0; }
+
+  /* ---------- phone ---------- */
+  .phone { width: 300px; max-width: 100%; height: 600px; border-radius: 28px; background: #0B0C10; padding: 7px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+  .scr { height: 100%; border-radius: 22px; overflow: hidden; background: var(--app-bg); color: var(--app-ink); display: flex; flex-direction: column; font-size: 12.5px; line-height: 1.45; }
+  .top { display: flex; align-items: center; gap: 8px; padding: 12px 12px 6px; color: var(--app-ink2); font-size: 11px; }
+  .top .x { font-size: 16px; color: var(--app-ink); }
+  .top .sp { margin-left: auto; background: #E3E6F0; color: var(--app-primary); font-weight: 700; padding: 2px 9px; border-radius: 99px; }
+  .chat { flex: 1; padding: 4px 12px; display: flex; flex-direction: column; gap: 7px; overflow: hidden; }
+  .b { max-width: 86%; padding: 7px 10px 8px; border-radius: 14px; }
+  .b .who { display: block; font-size: 9.5px; color: var(--app-ink2); margin-bottom: 1px; }
+  .b.p { align-self: flex-start; background: #fff; border: 1px solid var(--app-line); border-bottom-left-radius: 4px; }
+  .b.u { align-self: flex-end; background: var(--app-you); color: #fff; border-bottom-right-radius: 4px; }
+  .b.u .who { color: #B9BCC6; }
+  .b.clip { max-height: 58px; overflow: hidden; -webkit-mask-image: linear-gradient(#000 55%, transparent); mask-image: linear-gradient(#000 55%, transparent); }
+  .b.next { align-self: flex-start; border: 2px dashed var(--tent); background: rgba(63,127,217,.07); color: var(--tent); border-bottom-left-radius: 4px; font-weight: 700; }
+  .b.next .who { color: var(--tent); }
+  .sheet { background: var(--app-sheet); border-top: 1px solid var(--app-line); padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .phase { font-size: 10px; color: var(--app-ink2); letter-spacing: .05em; }
+  .chip { align-self: flex-start; font-size: 10px; font-weight: 700; color: var(--tent); background: rgba(63,127,217,.12); padding: 2px 8px; border-radius: 99px; }
+  .title { font-size: 15px; font-weight: 900; }
+  .sub { font-size: 10.5px; color: var(--app-ink2); margin-top: -3px; }
+  .o { position: relative; border: 1.4px solid var(--app-line); border-radius: 11px; padding: 7px 9px; background: #fff; display: flex; gap: 6px; }
+  .o .n { color: var(--app-ink2); font-size: 10.5px; width: 12px; flex: none; }
+  .o.tent { border: 2px dashed var(--tent); background: rgba(63,127,217,.07); }
+  .o .tag { position: absolute; right: 8px; top: -8px; font-size: 9px; background: var(--tent); color: #fff; padding: 0 6px; border-radius: 8px; }
+  .o.say { border-radius: 12px 12px 12px 4px; }
+  .o .spk { color: var(--app-ink2); font-size: 10px; flex: none; }
+  .btn { margin-top: 2px; background: var(--app-primary); color: #fff; text-align: center; font-weight: 700; border-radius: 11px; padding: 9px; font-size: 13px; }
+  .btn.off { background: #E2E3EA; color: #9A9CA6; }
+
+  /* onboarding cards */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+  .card { background: var(--app-bg); color: var(--app-ink); border-radius: 18px; border: 1px solid var(--rule); padding: 14px 14px 16px; display: flex; flex-direction: column; gap: 8px; min-height: 250px; }
+  .card .k { font-size: 11px; color: var(--app-primary); font-weight: 700; letter-spacing: .06em; }
+  .card h3 { margin: 0; font-size: 16px; font-weight: 900; }
+  .card p { margin: 0; font-size: 12.5px; color: var(--app-ink2); }
+  .ill { background: #fff; border: 1px solid var(--app-line); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; min-height: 92px; justify-content: center; }
+  .wave { display: inline-flex; gap: 3px; align-items: center; vertical-align: middle; }
+  .wave i { width: 3px; border-radius: 2px; background: var(--tent); }
+  .gauge { display: flex; gap: 3px; }
+  .gauge i { flex: 1; height: 6px; border-radius: 3px; background: #E4E6EE; }
+  .gauge i:first-child { background: #3F9D5A; }
+  .mini { border: 1.2px solid var(--app-line); border-radius: 8px; padding: 3px 7px; font-size: 10.5px; }
+  .mini.ok { border-color: var(--ok); background: rgba(63,157,90,.1); }
+  .dots { display: flex; justify-content: center; gap: 5px; margin-top: auto; }
+  .dots i { width: 6px; height: 6px; border-radius: 50%; background: #C9CDD8; }
+  .dots i.on { background: var(--app-primary); width: 16px; border-radius: 4px; }
+  .sprout { display: block; margin: 0 auto; }
+
+  .coach { position: absolute; left: 14px; right: 14px; bottom: 150px; background: var(--app-you); color: #fff; border-radius: 12px; padding: 9px 11px; font-size: 11.5px; box-shadow: 0 6px 16px rgba(0,0,0,.25); }
+  .coach b { display: block; margin-bottom: 2px; }
+  .coach .ok { float: right; color: #AFC6FF; font-weight: 700; }
+  .coach::after { content: ""; position: absolute; left: 40px; bottom: -7px; border: 7px solid transparent; border-bottom: 0; border-top-color: var(--app-you); }
+  .dim { position: relative; }
+  .dim::before { content: ""; position: absolute; inset: 0; background: rgba(10,12,18,.28); border-radius: 22px; pointer-events: none; }
+
+  .ask { background: var(--paper); border: 2px solid var(--accent); border-radius: 18px; padding: 18px 20px; }
+  .ask h2 { margin-bottom: 8px; }
+  .ask ol { margin: 0; padding-left: 20px; }
+  .ask li { margin: 4px 0; }
+  .muted { color: var(--ink3); font-size: 12.5px; }
+  @media (max-width: 420px) { section { padding-inline: 14px; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>予測ステップと初回説明</h1>
+  <p class="lede">実機で「ステップ2が相手の返答（予測）だと分かりにくい」「初回起動時に説明がほしい」とのことだったので、案を並べました。画面は見本の問題（帰り際の同僚）を使っています。どれか選んでいただければ、そのまま実装します。</p>
+
+  <section>
+    <h2>3. ステップ2の見せ方</h2>
+    <p class="qline">今の画面は「ステップ2 ・ 予測／同僚はどう返してくる？」で、選択肢は普通の四角です。そのため、何を選んでいるのか（相手がこの後に言うこと）が画面から伝わりにくい状態です。</p>
+    <div class="row">
+
+      <div class="opt">
+        <div class="optname"><b>案A　会話に「次の一言」の空欄を出す</b></div>
+        <div class="phone"><div class="scr">
+          <div class="top"><span class="x">✕</span>職場：帰り際の同僚から · 1/1<span class="sp">🌱 80</span></div>
+          <div class="chat">
+            <div class="b p clip"><span class="who">同僚</span>Hey, quick one before you head out. The client moved tomorrow's kickoff from ten to two…</div>
+            <div class="b u"><span class="who">あなた</span>Got it. Two o'clock at their office, so we leave at one. I'll print last night's version.</div>
+            <div class="b next"><span class="who">同僚</span>？ 次の一言</div>
+          </div>
+          <div class="sheet">
+            <div class="title">同僚は次に何と言う？</div>
+            <div class="o"><span class="n">1</span>時間は10時のままだと言い直す</div>
+            <div class="o tent"><span class="tag">予想</span><span class="n">2</span>礼を言って、1時にロビーで待ち合わせようと言う</div>
+            <div class="o"><span class="n">3</span>スライドも印刷してほしいと頼む</div>
+            <div class="btn">答え合わせを聴く ▶</div>
+          </div>
+        </div></div>
+        <ul class="notes">
+          <li>会話の中に、相手の次の吹き出しが点線の空欄で出る。そこを埋めるのだと目で分かる</li>
+          <li>「ステップ2」の札はなくし、見出しを「同僚は次に何と言う？」にする</li>
+          <li>ボタンは「聴く」から「答え合わせを聴く」に変える</li>
+        </ul>
+      </div>
+
+      <div class="opt">
+        <div class="optname"><b>案B　選択肢を相手のセリフとして書く</b></div>
+        <div class="phone"><div class="scr">
+          <div class="top"><span class="x">✕</span>職場：帰り際の同僚から · 1/1<span class="sp">🌱 80</span></div>
+          <div class="chat">
+            <div class="b p clip"><span class="who">同僚</span>Hey, quick one before you head out. The client moved tomorrow's kickoff from ten to two…</div>
+            <div class="b u"><span class="who">あなた</span>Got it. Two o'clock at their office, so we leave at one. I'll print last night's version.</div>
+          </div>
+          <div class="sheet">
+            <span class="chip">相手の返事を予想</span>
+            <div class="title">同僚の返事はどれ？</div>
+            <div class="o say"><span class="spk">同僚：</span>時間は10時のままだと言い直す</div>
+            <div class="o say tent"><span class="tag">予想</span><span class="spk">同僚：</span>礼を言って、1時にロビーで待ち合わせようと言う</div>
+            <div class="o say"><span class="spk">同僚：</span>スライドも印刷してほしいと頼む</div>
+            <div class="btn">答え合わせを聴く ▶</div>
+          </div>
+        </div></div>
+        <ul class="notes">
+          <li>選択肢の頭に「同僚：」を付け、角を吹き出しの形にする。選んでいるのが相手の言葉だと分かる</li>
+          <li>上に「相手の返事を予想」の札を出す</li>
+          <li>会話の部分は今のまま</li>
+        </ul>
+      </div>
+
+      <div class="opt">
+        <div class="optname"><b>案C　AとBの両方</b> <span class="badge">おすすめ</span></div>
+        <div class="phone"><div class="scr">
+          <div class="top"><span class="x">✕</span>職場：帰り際の同僚から · 1/1<span class="sp">🌱 80</span></div>
+          <div class="chat">
+            <div class="b p clip"><span class="who">同僚</span>Hey, quick one before you head out. The client moved tomorrow's kickoff from ten to two…</div>
+            <div class="b u"><span class="who">あなた</span>Got it. Two o'clock at their office, so we leave at one. I'll print last night's version.</div>
+            <div class="b next"><span class="who">同僚</span>？ 次の一言</div>
+          </div>
+          <div class="sheet">
+            <div class="title">同僚は次に何と言う？</div>
+            <div class="o say"><span class="spk">同僚：</span>時間は10時のままだと言い直す</div>
+            <div class="o say tent"><span class="tag">予想</span><span class="spk">同僚：</span>礼を言って、1時にロビーで待ち合わせようと言う</div>
+            <div class="o say"><span class="spk">同僚：</span>スライドも印刷してほしいと頼む</div>
+            <div class="btn">答え合わせを聴く ▶</div>
+          </div>
+        </div></div>
+        <ul class="notes">
+          <li>会話に空欄があり、選択肢はその空欄に入る相手のセリフとして並ぶ。見出しを読まなくても意味が通る</li>
+          <li>答え合わせでは、空欄が実際の返答（英語）に置き換わる</li>
+          <li>仮置きの札は「仮」から「予想」に変える（何の仮なのかが伝わるため）</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. 初回起動時の説明</h2>
+    <p class="qline">今は、言語を選ぶとすぐ「はじめかた」（AIに問題を作らせる4ステップ）が出ます。問題そのものの遊び方の説明はありません。</p>
+    <div class="row" style="grid-template-columns: 1fr;">
+      <div class="opt">
+        <div class="optname"><b>案ア　言語選択の直後に、4枚のカードで遊び方を見せる</b> <span class="badge">おすすめ</span></div>
+        <div class="cards">
+          <div class="card">
+            <span class="k">1 / 4</span>
+            <h3>聴く</h3>
+            <div class="ill">
+              <div class="b p" style="max-width:100%"><span class="who">同僚</span><span class="wave"><i style="height:6px"></i><i style="height:12px"></i><i style="height:8px"></i><i style="height:13px"></i></span> …</div>
+            </div>
+            <p>相手が長めに話します。文字は出ません。耳だけで聴き取ります。強く発音された語では、スマホが振動します。</p>
+            <div class="dots"><i class="on"></i><i></i><i></i><i></i></div>
+          </div>
+          <div class="card">
+            <span class="k">2 / 4</span>
+            <h3>返す</h3>
+            <div class="ill">
+              <div class="gauge"><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="mini ok">Got it. Two o'clock at their office…</div>
+              <div class="mini">Okay, ten at our office…</div>
+            </div>
+            <p>話し終わると、あなたの返しが3つ出ます。聴いた内容に合うのは1つだけです。早く答えるほど Seeds が多くもらえます。</p>
+            <div class="dots"><i></i><i class="on"></i><i></i><i></i></div>
+          </div>
+          <div class="card">
+            <span class="k">3 / 4</span>
+            <h3>次の一言を予想</h3>
+            <div class="ill">
+              <div class="b next" style="max-width:100%"><span class="who">同僚</span>？ 次の一言</div>
+              <div class="mini">同僚：礼を言って、1時にロビーで…</div>
+            </div>
+            <p>相手がこの後なんと言うかを予想して、1つ選びます。相手の声で答え合わせをします。</p>
+            <div class="dots"><i></i><i></i><i class="on"></i><i></i></div>
+          </div>
+          <div class="card">
+            <span class="k">4 / 4</span>
+            <h3>木が育つ</h3>
+            <div class="ill">
+              <svg class="sprout" width="90" height="60" viewBox="0 0 90 60" role="img" aria-label="芽"><rect x="0" y="46" width="90" height="14" fill="#5C9A3E"/><path d="M45 46 L46 22" stroke="#4C8C3A" stroke-width="4" stroke-linecap="round" fill="none"/><ellipse cx="36" cy="20" rx="11" ry="5.5" transform="rotate(20 36 20)" fill="#3E7A3A"/><ellipse cx="56" cy="19" rx="11" ry="5.5" transform="rotate(-20 56 19)" fill="#66B04C"/></svg>
+            </div>
+            <p>解いた問題の数だけ木が育ちます。間違えた問題は、翌日と3日後にもう一度出ます。</p>
+            <div class="dots"><i></i><i></i><i></i><i class="on"></i></div>
+          </div>
+        </div>
+        <ul class="notes">
+          <li>左右のスワイプでめくる。最後のカードに「はじめる」を出し、そこから今の「はじめかた」へ進む。スキップも付ける</li>
+          <li>あとから設定の「遊び方」で何度でも見られる</li>
+        </ul>
+      </div>
+
+      <div class="opt" style="margin-top:14px">
+        <div class="optname"><b>案イ　最初の見本の中で、ステップごとに1回だけ吹き出しで教える</b></div>
+        <div class="row" style="grid-template-columns: repeat(auto-fit, minmax(300px, 330px));">
+          <div class="phone dim" style="position:relative"><div class="scr">
+            <div class="top"><span class="x">✕</span>職場：帰り際の同僚から · 1/1<span class="sp">🌱 60</span></div>
+            <div class="chat"><div class="b p"><span class="who">同僚</span>…</div></div>
+            <div class="sheet">
+              <div class="title">あなたは何を返す？</div>
+              <div class="gauge"><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="o"><span class="n">1</span>Got it. Two o'clock at their office, so we leave at one.</div>
+              <div class="o"><span class="n">2</span>Okay, ten at our office. I'll have the proposal ready.</div>
+              <div class="o"><span class="n">3</span>Sure. I'll print Monday's draft and bring the slides.</div>
+            </div>
+          </div>
+          <div class="coach"><span class="ok">OK</span><b>聴いた内容に合う返しを1つ</b>合うのは1つだけ。バーが減るほど、もらえる Seeds が減ります。</div>
+          </div>
+          <ul class="notes" style="align-self:center">
+            <li>最初の見本を解きながら、聴く・返す・予想の各場面で一度だけ説明が出る</li>
+            <li>実際の画面の上で教えるので分かりやすい。一方で、慣れるまで説明で手が止まる</li>
+            <li>2回目以降は出ない</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="ask">
+    <h2>選んでください</h2>
+    <ol>
+      <li>ステップ2の見せ方：<b>案A／案B／案C</b></li>
+      <li>初回の説明：<b>案ア／案イ</b>（両方でも可）</li>
+    </ol>
+    <p class="muted">文言の直しがあれば、そのまま書いてください（例：「次の一言」を「次のセリフ」に）。</p>
+  </div>
+</div>
+</body>
+</html>
