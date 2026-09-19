@@ -10,7 +10,7 @@ Google Play / App Store の審査で止まりやすい点と、KotoLang での�
 | 項目 | 状態 |
 |---|---|
 | プライバシーポリシー本文 | `PRIVACY.md`（日英）+ アプリ内「設定 → プライバシーポリシー」 |
-| Android の権限 | **ゼロ**。リリースAPKに `uses-permission` は自動生成の内部用のみ（`aapt2 dump permissions` で確認済み） |
+| Android の権限 | **`VIBRATE` のみ**（発音に合わせた振動のため。インストール時に自動で許可され、確認画面は出ない）。ほかはリリースAPKに自動生成の内部用のみで、インターネット権限もなし |
 | targetSdk | 36（Play の最低要件を満たす） |
 | iOS プライバシーマニフェスト | `ios/Runner/PrivacyInfo.xcprivacy`。収集データなし、トラッキングなし、必須理由API 3件を申告 |
 | 輸出コンプライアンス | `ITSAppUsesNonExemptEncryption = false` を Info.plist に記載。毎回の質問が不要になる |

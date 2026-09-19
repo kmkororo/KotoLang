@@ -9,7 +9,10 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
-import android.view.HapticFeedbackConstants
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -25,14 +28,14 @@ import io.flutter.plugin.common.MethodChannel
  * The text is held until Dart asks for it, because a cold start delivers the
  * intent long before any Flutter code is listening.
  *
- * Two more small things live here because Flutter does not reach them, and
- * neither needs a permission:
+ * Two more small things live here because Flutter does not reach them:
  *
  * - **What cuts the listening short.** Headphones pulled out, or the sound
  *   taken by something else (a call, another app). A line half-heard on a
  *   train is not a line missed, so the question stops and waits.
- * - **The taps under the voice.** View haptics, which need no VIBRATE
- *   permission, in the few kinds the platform offers.
+ * - **The taps under the voice.** The vibration motor, for lengths in
+ *   milliseconds. This one needs the VIBRATE permission, the app's only one;
+ *   the screen's own haptics go silent wherever touch feedback is off.
  */
 class MainActivity : FlutterActivity() {
     private var pendingText: String? = null
@@ -90,7 +93,10 @@ class MainActivity : FlutterActivity() {
         }
         MethodChannel(messenger, FEEL_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
-                "feel" -> result.success(feel(call.arguments as? String ?: ""))
+                "vibrate" -> result.success(
+                    vibrate((call.arguments as? List<*>)?.mapNotNull { (it as? Number)?.toLong() }
+                        ?: emptyList())
+                )
                 else -> result.notImplemented()
             }
         }
@@ -147,24 +153,35 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * One tap of the kind asked for. A word is a light tap and a stressed word
-     * a heavy one; the verdicts use the platform's own confirm and reject
-     * where the phone has them.
+     * Vibrates for [pattern]: on, off, on, … in milliseconds, as a web page's
+     * `navigator.vibrate` takes it. Played as media, so it follows the media
+     * vibration setting rather than the touch-feedback one.
      */
-    private fun feel(kind: String): Boolean {
-        val constant = when (kind) {
-            "word" -> HapticFeedbackConstants.KEYBOARD_TAP
-            "stress" -> HapticFeedbackConstants.LONG_PRESS
-            "confirm" -> if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM
-                else HapticFeedbackConstants.VIRTUAL_KEY
-            "reject" -> if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.REJECT
-                else HapticFeedbackConstants.LONG_PRESS
-            else -> HapticFeedbackConstants.VIRTUAL_KEY
+    private fun vibrate(pattern: List<Long>): Boolean {
+        if (pattern.isEmpty()) return false
+        val vibrator: Vibrator = if (Build.VERSION.SDK_INT >= 31) {
+            (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         }
-        return window?.decorView?.performHapticFeedback(
-            constant,
-            HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
-        ) ?: false
+        if (!vibrator.hasVibrator()) return false
+        if (Build.VERSION.SDK_INT < 26) {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(longArrayOf(0L) + pattern.toLongArray(), -1)
+            return true
+        }
+        val effect = if (pattern.size == 1) {
+            VibrationEffect.createOneShot(pattern[0], VibrationEffect.DEFAULT_AMPLITUDE)
+        } else {
+            VibrationEffect.createWaveform(longArrayOf(0L) + pattern.toLongArray(), -1)
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            vibrator.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_MEDIA))
+        } else {
+            vibrator.vibrate(effect)
+        }
+        return true
     }
 
     override fun onDestroy() {

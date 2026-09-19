@@ -99,7 +99,10 @@ KotoLang is designed so that *you* use the AI assistant you already have
 
 ### Permissions
 
-KotoLang requests no Android permissions at all, not even internet access.
+KotoLang requests one Android permission: vibration (`VIBRATE`), so the phone
+can tap along with the words as they are spoken. It is granted at install
+without a prompt and gives access to nothing but the vibration motor. KotoLang
+requests no other permission, not even internet access.
 
 ### Children
 

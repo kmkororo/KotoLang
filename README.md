@@ -332,8 +332,8 @@ The AAB carries every ABI; Play delivers roughly **20 MB** per device.
 
 - Application ID: `com.kmkor.kotolang` — **cannot be changed after publishing**
 - Version: `1.0.0` (versionCode 1)
-- Permissions: none declared beyond Flutter's defaults. No microphone (playback
-  only), no location, no camera, no contacts.
+- Permissions: `VIBRATE` only (the taps under the spoken words). No internet,
+  no microphone (playback only), no location, no camera, no contacts.
 
 ### Signing — action required
 

@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The one permission. The taps under the voice have to be felt on every
+         phone, and the screen's own haptics go silent wherever touch
+         feedback is switched off in the system settings. VIBRATE is granted
+         at install without asking, and reaches nothing but the motor. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <application
         android:label="KotoLang"
         android:name="${applicationName}"

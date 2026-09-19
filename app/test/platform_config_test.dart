@@ -45,15 +45,16 @@ void main() {
     expect(missing, isEmpty, reason: 'not declared in Info.plist: $missing');
   });
 
-  test('neither platform asks for a permission', () {
-    // The privacy policy promises no permissions at all, not even internet.
-    // Plugins arrive with README snippets that add them, so this is the guard.
+  test('Android asks for the vibration motor and nothing else', () {
+    // The privacy policy promises one permission, VIBRATE, and not even
+    // internet. Plugins arrive with README snippets that add more, so this is
+    // the guard.
     final manifest = _read('android/app/src/main/AndroidManifest.xml');
     final asked = RegExp(r'<uses-permission[^>]*android:name="([^"]+)"')
         .allMatches(manifest)
         .map((m) => m.group(1)!)
         .toList();
-    expect(asked, isEmpty, reason: 'Android now requests: $asked');
+    expect(asked, ['android.permission.VIBRATE'], reason: 'Android now requests: $asked');
 
     final plist = _read('ios/Runner/Info.plist');
     final usage = RegExp(r'<key>(NS\w*UsageDescription)</key>')

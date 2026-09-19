@@ -1,16 +1,27 @@
 /// What the phone does under the voice, and when an answer lands.
 ///
-/// View haptics only, which need no permission: a light tap for each word as
-/// it is said and a heavy one for a stressed word, the platform's own confirm
-/// and reject for a verdict, and short runs of taps for the moments between.
-/// The kinds are what the platform offers; lengths in milliseconds would need
-/// the VIBRATE permission, and this app has none.
+/// The vibration motor, in milliseconds: a short buzz for each word as it is
+/// said and a longer one for a stressed word, one short for a right answer and
+/// one long for a wrong one, and short runs for the moments between. The
+/// screen's own haptics were tried first and needed no permission, but they
+/// go silent wherever touch feedback is switched off — which on the phone
+/// this was built on, it was — so the app asks for VIBRATE, its one
+/// permission.
 library;
 
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+
+/// The patterns, on and off in milliseconds, as `navigator.vibrate` takes
+/// them.
+const feelWord = [20];
+const feelStress = [70];
+const feelRight = [45];
+const feelWrong = [420];
+const feelRestate = [60, 60, 60];
+const feelFinished = [40, 60, 40, 60, 40];
 
 class Feel {
   static const _channel = MethodChannel('kotolang/feel');
@@ -19,11 +30,11 @@ class Feel {
   bool enabled;
   Feel({this.enabled = true});
 
-  Future<void> _tap(String kind) async {
+  Future<void> _buzz(List<int> pattern) async {
     if (!enabled) return;
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       try {
-        await _channel.invokeMethod('feel', kind);
+        await _channel.invokeMethod('vibrate', pattern);
         return;
       } on MissingPluginException {
         // Under test, or a build without the channel: fall through.
@@ -31,34 +42,24 @@ class Feel {
         return;
       }
     }
+    // Elsewhere, the nearest the platform offers.
     try {
-      await switch (kind) {
-        'word' => HapticFeedback.selectionClick(),
-        'stress' || 'reject' => HapticFeedback.heavyImpact(),
-        'confirm' => HapticFeedback.mediumImpact(),
-        _ => HapticFeedback.lightImpact(),
-      };
+      final long = pattern.length == 1 && pattern.first >= 70;
+      await (long ? HapticFeedback.heavyImpact() : HapticFeedback.selectionClick());
     } catch (_) {}
   }
 
   /// One word as it is said.
-  void word({required bool stressed}) => _tap(stressed ? 'stress' : 'word');
+  void word({required bool stressed}) => _buzz(stressed ? feelStress : feelWord);
 
-  void right() => _tap('confirm');
-  void wrong() => _tap('reject');
+  void right() => _buzz(feelRight);
+  void wrong() => _buzz(feelWrong);
 
-  /// Three quick taps: the line is coming again, in other words.
-  Future<void> restate() => _run(3, const Duration(milliseconds: 120));
+  /// The line is coming again, in other words.
+  Future<void> restate() => _buzz(feelRestate);
 
-  /// Five: the question is over.
-  Future<void> finished() => _run(5, const Duration(milliseconds: 100));
-
-  Future<void> _run(int n, Duration gap) async {
-    for (var i = 0; i < n; i++) {
-      if (i > 0) await Future<void>.delayed(gap);
-      unawaited(_tap('tick'));
-    }
-  }
+  /// The question is over.
+  Future<void> finished() => _buzz(feelFinished);
 }
 
 /// Tells the question screen when the listening has been cut short:
